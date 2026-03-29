@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/obsw_sim.dir/main.c.o -o obsw_sim  ../src/libobsw.a 

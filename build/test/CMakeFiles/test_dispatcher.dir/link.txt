@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/test_dispatcher.dir/unit/test_dispatcher.c.o -o test_dispatcher  ../src/libobsw.a ../_deps/unity-build/libunity.a 
