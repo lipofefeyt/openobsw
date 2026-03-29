@@ -1,0 +1,2 @@
+/usr/bin/ar qc libobsw.a CMakeFiles/obsw.dir/ccsds/space_packet.c.o CMakeFiles/obsw.dir/tc/dispatcher.c.o CMakeFiles/obsw.dir/tm/store.c.o
+/usr/bin/ranlib libobsw.a

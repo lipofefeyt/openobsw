@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/test_space_packet.dir/unit/test_space_packet.c.o -o test_space_packet  ../src/libobsw.a ../_deps/unity-build/libunity.a 
