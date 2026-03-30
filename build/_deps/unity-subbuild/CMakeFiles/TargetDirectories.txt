@@ -1,3 +1,0 @@
-/workspaces/openobsw/build/_deps/unity-subbuild/CMakeFiles/unity-populate.dir
-/workspaces/openobsw/build/_deps/unity-subbuild/CMakeFiles/edit_cache.dir
-/workspaces/openobsw/build/_deps/unity-subbuild/CMakeFiles/rebuild_cache.dir
