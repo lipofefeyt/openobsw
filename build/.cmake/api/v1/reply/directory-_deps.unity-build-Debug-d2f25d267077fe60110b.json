@@ -1,0 +1,97 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"install"
+		],
+		"files" : 
+		[
+			"build/_deps/unity-src/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 141,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 150,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 156,
+				"parent" : 0
+			}
+		]
+	},
+	"installers" : 
+	[
+		{
+			"backtrace" : 1,
+			"component" : "Unspecified",
+			"destination" : "lib",
+			"paths" : 
+			[
+				"_deps/unity-build/libunity.a"
+			],
+			"targetId" : "unity::@e7b0562af20a4d8c3b3c",
+			"targetIndex" : 5,
+			"type" : "target"
+		},
+		{
+			"backtrace" : 1,
+			"component" : "library",
+			"destination" : "include/unity",
+			"paths" : 
+			[
+				"build/_deps/unity-src/src/unity.h",
+				"build/_deps/unity-src/src/unity_internals.h"
+			],
+			"type" : "file"
+		},
+		{
+			"backtrace" : 2,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/unity",
+			"exportName" : "unityTargets",
+			"exportTargets" : 
+			[
+				{
+					"id" : "unity::@e7b0562af20a4d8c3b3c",
+					"index" : 5
+				}
+			],
+			"paths" : 
+			[
+				"_deps/unity-build/CMakeFiles/Export/80da942aa44c821c5569bae18496db2c/unityTargets.cmake"
+			],
+			"type" : "export"
+		},
+		{
+			"backtrace" : 3,
+			"component" : "Unspecified",
+			"destination" : "lib/cmake/unity",
+			"paths" : 
+			[
+				"build/_deps/unity-src/unityConfig.cmake",
+				"build/_deps/unity-build/unityConfigVersion.cmake"
+			],
+			"type" : "file"
+		}
+	],
+	"paths" : 
+	{
+		"build" : "_deps/unity-build",
+		"source" : "build/_deps/unity-src"
+	}
+}
