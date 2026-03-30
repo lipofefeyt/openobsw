@@ -1,0 +1,50 @@
+[
+{
+  "directory": "/workspaces/openobsw/build/src",
+  "command": "/usr/bin/cc  -I/workspaces/openobsw/include -g -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wundef -Wshadow -Wcast-align -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes -o CMakeFiles/obsw.dir/ccsds/space_packet.c.o -c /workspaces/openobsw/src/ccsds/space_packet.c",
+  "file": "/workspaces/openobsw/src/ccsds/space_packet.c",
+  "output": "src/CMakeFiles/obsw.dir/ccsds/space_packet.c.o"
+},
+{
+  "directory": "/workspaces/openobsw/build/src",
+  "command": "/usr/bin/cc  -I/workspaces/openobsw/include -g -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wundef -Wshadow -Wcast-align -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes -o CMakeFiles/obsw.dir/tc/dispatcher.c.o -c /workspaces/openobsw/src/tc/dispatcher.c",
+  "file": "/workspaces/openobsw/src/tc/dispatcher.c",
+  "output": "src/CMakeFiles/obsw.dir/tc/dispatcher.c.o"
+},
+{
+  "directory": "/workspaces/openobsw/build/src",
+  "command": "/usr/bin/cc  -I/workspaces/openobsw/include -g -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wundef -Wshadow -Wcast-align -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes -o CMakeFiles/obsw.dir/tm/store.c.o -c /workspaces/openobsw/src/tm/store.c",
+  "file": "/workspaces/openobsw/src/tm/store.c",
+  "output": "src/CMakeFiles/obsw.dir/tm/store.c.o"
+},
+{
+  "directory": "/workspaces/openobsw/build/test",
+  "command": "/usr/bin/cc  -I/workspaces/openobsw/include -I/workspaces/openobsw/build/_deps/unity-src/src -I/workspaces/openobsw/build/_deps/unity-build -g -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wundef -Wshadow -Wcast-align -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes -Wno-missing-prototypes -o CMakeFiles/test_space_packet.dir/unit/test_space_packet.c.o -c /workspaces/openobsw/test/unit/test_space_packet.c",
+  "file": "/workspaces/openobsw/test/unit/test_space_packet.c",
+  "output": "test/CMakeFiles/test_space_packet.dir/unit/test_space_packet.c.o"
+},
+{
+  "directory": "/workspaces/openobsw/build/test",
+  "command": "/usr/bin/cc  -I/workspaces/openobsw/include -I/workspaces/openobsw/build/_deps/unity-src/src -I/workspaces/openobsw/build/_deps/unity-build -g -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wundef -Wshadow -Wcast-align -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes -Wno-missing-prototypes -o CMakeFiles/test_dispatcher.dir/unit/test_dispatcher.c.o -c /workspaces/openobsw/test/unit/test_dispatcher.c",
+  "file": "/workspaces/openobsw/test/unit/test_dispatcher.c",
+  "output": "test/CMakeFiles/test_dispatcher.dir/unit/test_dispatcher.c.o"
+},
+{
+  "directory": "/workspaces/openobsw/build/test",
+  "command": "/usr/bin/cc  -I/workspaces/openobsw/include -I/workspaces/openobsw/build/_deps/unity-src/src -I/workspaces/openobsw/build/_deps/unity-build -g -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wundef -Wshadow -Wcast-align -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes -Wno-missing-prototypes -o CMakeFiles/test_tm_store.dir/unit/test_tm_store.c.o -c /workspaces/openobsw/test/unit/test_tm_store.c",
+  "file": "/workspaces/openobsw/test/unit/test_tm_store.c",
+  "output": "test/CMakeFiles/test_tm_store.dir/unit/test_tm_store.c.o"
+},
+{
+  "directory": "/workspaces/openobsw/build/_deps/unity-build",
+  "command": "/usr/bin/cc  -I/workspaces/openobsw/build/_deps/unity-src/src -I/workspaces/openobsw/build/_deps/unity-build -g -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wundef -Wshadow -Wcast-align -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes -Waddress -Waggregate-return -Wformat-nonliteral -Wformat-security -Wformat -Winit-self -Wmissing-declarations -Wmissing-include-dirs -Wno-multichar -Wno-parentheses -Wno-type-limits -Wno-unused-parameter -Wunreachable-code -Wwrite-strings -Wpointer-arith -Werror -o CMakeFiles/unity.dir/src/unity.c.o -c /workspaces/openobsw/build/_deps/unity-src/src/unity.c",
+  "file": "/workspaces/openobsw/build/_deps/unity-src/src/unity.c",
+  "output": "_deps/unity-build/CMakeFiles/unity.dir/src/unity.c.o"
+},
+{
+  "directory": "/workspaces/openobsw/build/sim",
+  "command": "/usr/bin/cc  -I/workspaces/openobsw/include -g -std=c11 -Wall -Wextra -Wpedantic -Wformat=2 -Wundef -Wshadow -Wcast-align -Wcast-qual -Wmissing-prototypes -Wstrict-prototypes -o CMakeFiles/obsw_sim.dir/main.c.o -c /workspaces/openobsw/sim/main.c",
+  "file": "/workspaces/openobsw/sim/main.c",
+  "output": "sim/CMakeFiles/obsw_sim.dir/main.c.o"
+}
+]
