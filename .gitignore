@@ -56,3 +56,6 @@ dkms.conf
 
 # Docker stuff
 .devcontainer/*
+
+# Build stuff
+build/*
