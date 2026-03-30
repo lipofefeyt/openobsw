@@ -1,4 +1,5 @@
 #include "obsw/pus/s5.h"
+#include "obsw/fdir/fsm.h"
 #include <string.h>
 
 int obsw_s5_report(obsw_s5_ctx_t *ctx,
@@ -20,8 +21,25 @@ int obsw_s5_report(obsw_s5_ctx_t *ctx,
         memcpy(buf + 2U, data, data_len);
 
     uint16_t seq = ctx->msg_counter++;
-    return obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
-                             5, (uint8_t)severity, seq, 0,
-                             ctx->timestamp,
-                             buf, (uint16_t)(2U + data_len));
+    int rc = obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
+                               5, (uint8_t)severity, seq, 0,
+                               ctx->timestamp,
+                               buf, (uint16_t)(2U + data_len));
+
+    /* FDIR coupling: HIGH severity + matching event ID → safe mode */
+    if (rc == OBSW_PUS_TM_OK &&
+        severity == OBSW_S5_HIGH &&
+        ctx->fsm != NULL)
+    {
+        for (uint8_t i = 0; i < ctx->safe_trigger_count; i++)
+        {
+            if (ctx->safe_trigger_ids[i] == event_id)
+            {
+                obsw_fsm_to_safe((obsw_fsm_ctx_t *)ctx->fsm);
+                break;
+            }
+        }
+    }
+
+    return rc;
 }

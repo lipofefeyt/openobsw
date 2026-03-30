@@ -9,6 +9,8 @@ add_library(obsw STATIC
     pus/s3.c
     pus/s5.c
     pus/s17.c
+    fdir/fsm.c
+    fdir/watchdog.c
 )
 
 target_include_directories(obsw PUBLIC
