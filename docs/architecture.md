@@ -40,14 +40,19 @@ An integration test exercises the full uplink/downlink path end-to-end.
 
 ```
  ┌─────────────────────────────────────────────────────────┐
- │                   Application / PUS handlers             │
- │         (S1 verification, S3 HK, S5 events, S17 ping)   │
+ │                   FDIR                                   │
+ │    FSM (safe mode) · Watchdog · Trap handlers            │
+ └────────────────────────┬────────────────────────────────┘
+                          │  mode transitions / safe triggers
+ ┌────────────────────────▼────────────────────────────────┐
+ │              PUS-C Services                              │
+ │    S1 (verification) · S3 (HK) · S5 (events) · S17      │
  └────────────────────────┬────────────────────────────────┘
                           │  obsw_tc_t (parsed command)
  ┌────────────────────────▼────────────────────────────────┐
  │              TC Dispatcher  (tc/dispatcher.h)            │
  │   static routing table: APID / service / subservice      │
- │   → handler(tc, responder, ctx)                          │
+ │   → obsw_fsm_tc_allowed() check in SAFE mode             │
  └────────────────────────┬────────────────────────────────┘
                           │  raw space packet bytes
  ┌────────────────────────▼────────────────────────────────┐
@@ -117,7 +122,7 @@ Primary header fields decoded:
 | version | 2 | Always 0b00 |
 | bypass_flag | 1 | Type-A/B service |
 | ctrl_cmd_flag | 1 | Control command |
-| spacecraft_id | 10 | SCID — 10-bit value, unique per spacecraft. One fixed value per mission. Must match across TC frame decoder and TM frame builder. Document your mission SCID in `docs/mission-config.md`. |
+| spacecraft_id | 10 | SCID — 10-bit value, unique per spacecraft, assigned by mission authority. Must match across TC frame decoder and TM frame builder. Mission-dependent — see [docs/mission-config.md](mission-config.md). |
 | virtual_channel_id | 6 | VCID |
 | frame_len | 10 | Total frame octets - 1 |
 | frame_seq_num | 8 | Wraps at 255 |
@@ -232,6 +237,126 @@ flowchart TD
         K --> L([downlink channel])
     end
 ```
+
+---
+
+## FDIR
+
+### Safe mode FSM — `fdir/fsm.h`
+
+Two-state mode machine. All state is caller-owned; no globals.
+
+```mermaid
+stateDiagram-v2
+    [*] --> NOMINAL : obsw_fsm_init()
+
+    NOMINAL --> SAFE : obsw_fsm_to_safe()\n(watchdog expiry / trap handler\n/ S5 HIGH safe-trigger event)
+
+    SAFE --> NOMINAL : obsw_fsm_recover() TC handler\n(ground-commanded only)
+```
+
+**Entry/exit hooks** are mission-defined function pointers registered in
+`obsw_fsm_config_t`. On entry to SAFE: disable payload, switch to safe beacon.
+On exit: re-enable nominal operations. Neither hook is mandatory.
+
+**TC whitelist** controls which commands are accepted in SAFE mode. All
+others are rejected with `TM(1,2)`. The dispatcher calls
+`obsw_fsm_tc_allowed()` before routing. A typical safe-mode whitelist:
+
+```c
+static const obsw_fsm_tc_entry_t safe_whitelist[] = {
+    { .service = 17, .subservice = 1 },  /* S17 ping      */
+    { .service =  1, .subservice = 1 },  /* S1 acceptance */
+    { .service = 128, .subservice = 1 }, /* mission: recover command */
+};
+```
+
+**Recovery** is ground-commanded only. `obsw_fsm_recover()` is a TC handler
+the application registers at a mission-defined APID/svc/subsvc. It emits
+`TM(1,1)` and `TM(1,7)` via S1 and transitions the FSM back to NOMINAL.
+
+---
+
+### Watchdog — `fdir/watchdog.h`
+
+Software countdown watchdog. Zero dependencies on OS timers.
+
+```
+Control cycle:
+  obsw_wd_kick(&wd)    ← called by monitored task
+  obsw_wd_tick(&wd)    ← called once per cycle after all kicks
+
+  If kicked:  countdown reloaded to timeout_ticks
+  If not:     countdown decrements
+  At zero:    expire_cb() fired once (latched — no repeat)
+```
+
+Typical wiring to the FSM:
+
+```c
+static void on_wd_expiry(void *ctx)
+{
+    obsw_s5_report(&s5, OBSW_S5_HIGH, EVENT_WD_EXPIRY, NULL, 0);
+    obsw_fsm_to_safe((obsw_fsm_ctx_t *)ctx);
+}
+
+obsw_wd_init(&wd, 10, on_wd_expiry, &fsm);
+```
+
+---
+
+### S5 safe-trigger coupling
+
+`obsw_s5_ctx_t` carries an optional FSM pointer and a static list of
+`safe_trigger_ids`. If an `OBSW_S5_HIGH` report is emitted with a matching
+event ID, `obsw_fsm_to_safe()` is called automatically:
+
+```c
+s5.fsm                 = (struct obsw_fsm_ctx *)&fsm;
+s5.safe_trigger_ids[0] = EVENT_POWER_FAULT;
+s5.safe_trigger_ids[1] = EVENT_COMMS_LOSS;
+s5.safe_trigger_count  = 2;
+```
+
+If `fsm` is NULL, S5 behaves exactly as in v0.3 — no breaking change.
+
+---
+
+### FDIR event flow
+
+```mermaid
+flowchart TD
+    WD[Watchdog expiry\nobsw_wd_tick()]
+    TRAP[Trap handler\ndata abort / prefetch / stack overflow]
+    S5[S5 HIGH event\nmatching safe_trigger_id]
+
+    WD   --> SAFE[obsw_fsm_to_safe()]
+    TRAP --> SAFE
+    S5   --> SAFE
+
+    SAFE --> HOOK[on_enter_safe hook\ndisable payload\nswitch beacon]
+    SAFE --> TM[TM store\nS5 event report enqueued]
+
+    RECOVER[Ground TC\nobsw_fsm_recover()] --> NOM[NOMINAL\non_exit_safe hook]
+```
+
+---
+
+### Trap table stubs
+
+Platform-specific fault handlers live in `src/hal/arm/` and
+`src/hal/msp430/`. They are declared `__attribute__((weak))` — the
+application overrides them with strong definitions.
+
+Each handler must:
+1. Emit an `OBSW_S5_HIGH` event (if S5 context is available).
+2. Call `obsw_fsm_to_safe()`.
+3. Halt (`while(1)`) or trigger a hardware reset — mission policy.
+
+| Platform | File | Vectors covered |
+|---|---|---|
+| ARM Cortex-A (ZynqMP) | `src/hal/arm/trap_table.c` | Undefined instruction, data abort, prefetch abort, stack overflow |
+| MSP430 | `src/hal/msp430/trap_table.c` | WDT expiry, vacant vector, system NMI |
 
 ---
 
