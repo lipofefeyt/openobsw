@@ -1,1 +1,0 @@
-/usr/bin/cc -g CMakeFiles/test_tm_store.dir/unit/test_tm_store.c.o -o test_tm_store  ../src/libobsw.a ../_deps/unity-build/libunity.a 
