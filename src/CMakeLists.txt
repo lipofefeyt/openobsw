@@ -4,6 +4,11 @@ add_library(obsw STATIC
     ccsds/tm_frame.c
     tc/dispatcher.c
     tm/store.c
+    pus/pus_tm.c
+    pus/s1.c
+    pus/s3.c
+    pus/s5.c
+    pus/s17.c
 )
 
 target_include_directories(obsw PUBLIC
