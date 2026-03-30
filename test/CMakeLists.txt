@@ -55,6 +55,22 @@ target_link_libraries(test_s17 PRIVATE obsw unity)
 target_compile_options(test_s17 PRIVATE ${TEST_SUPPRESS})
 add_test(NAME s17 COMMAND test_s17)
 
+# v0.4 — FDIR
+add_executable(test_fsm unit/test_fsm.c)
+target_link_libraries(test_fsm PRIVATE obsw unity)
+target_compile_options(test_fsm PRIVATE ${TEST_SUPPRESS})
+add_test(NAME fsm COMMAND test_fsm)
+
+add_executable(test_watchdog unit/test_watchdog.c)
+target_link_libraries(test_watchdog PRIVATE obsw unity)
+target_compile_options(test_watchdog PRIVATE ${TEST_SUPPRESS})
+add_test(NAME watchdog COMMAND test_watchdog)
+
+add_executable(test_s5_fdir unit/test_s5_fdir.c)
+target_link_libraries(test_s5_fdir PRIVATE obsw unity)
+target_compile_options(test_s5_fdir PRIVATE ${TEST_SUPPRESS})
+add_test(NAME s5_fdir COMMAND test_s5_fdir)
+
 # Integration
 add_executable(test_tc_pipeline integration/test_tc_pipeline.c)
 target_link_libraries(test_tc_pipeline PRIVATE obsw unity)
