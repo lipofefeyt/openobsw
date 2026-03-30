@@ -117,7 +117,7 @@ Primary header fields decoded:
 | version | 2 | Always 0b00 |
 | bypass_flag | 1 | Type-A/B service |
 | ctrl_cmd_flag | 1 | Control command |
-| spacecraft_id | 10 | SCID |
+| spacecraft_id | 10 | SCID — 10-bit value, unique per spacecraft. One fixed value per mission. Must match across TC frame decoder and TM frame builder. Document your mission SCID in `docs/mission-config.md`. |
 | virtual_channel_id | 6 | VCID |
 | frame_len | 10 | Total frame octets - 1 |
 | frame_seq_num | 8 | Wraps at 255 |
@@ -213,42 +213,24 @@ typedef struct {
 
 ## Full data flow
 
-```
-Uplink (ground → satellite)
-────────────────────────────
-[CLTU bytes]
-    │
-    │  HAL io.read()
-    ▼
-[TC Transfer Frame]
-    │
-    │  obsw_tc_frame_decode()   — parse header, validate CRC
-    ▼
-[TC Frame data field = Space Packet bytes]
-    │
-    │  obsw_tc_dispatcher_feed()
-    │    └─ obsw_sp_parse()     — decode primary header
-    │    └─ PUS sec hdr extract — service / subservice
-    │    └─ route table lookup
-    ▼
-[handler(tc, responder, ctx)]
-    │
-    │  responder(ACCEPT | COMPLETE, tc, ctx)
-    ▼
-[TM ack space packet → obsw_tm_store_enqueue()]
+```mermaid
+flowchart TD
+    subgraph UPLINK ["Uplink  (ground → satellite)"]
+        A([CLTU / raw bytes]) --> B["HAL io.read()"]
+        B --> C["TC Transfer Frame\nobsw_tc_frame_decode()\nparse header · validate CRC-16"]
+        C --> D["Space Packet\nobsw_sp_parse()\ndecode primary header"]
+        D --> E["TC Dispatcher\nobsw_tc_dispatcher_feed()\nextract PUS svc/subsvc · route lookup"]
+        E --> F["Handler\nhandler(tc, responder, ctx)"]
+        F --> G["responder()\nACCEPT | COMPLETE or REJECT"]
+    end
 
-
-Downlink (satellite → ground)
-─────────────────────────────
-[obsw_tm_store_dequeue()]
-    │
-    │  obsw_tm_frame_build()    — pack packets, idle fill, append CRC
-    ▼
-[TM Transfer Frame bytes]
-    │
-    │  HAL io.write()
-    ▼
-[downlink channel]
+    subgraph DOWNLINK ["Downlink  (satellite → ground)"]
+        G --> H["TM Store\nobsw_tm_store_enqueue()"]
+        H --> I["TM Store\nobsw_tm_store_dequeue()"]
+        I --> J["TM Transfer Frame\nobsw_tm_frame_build()\npack packets · idle fill · FECF"]
+        J --> K["HAL io.write()"]
+        K --> L([downlink channel])
+    end
 ```
 
 ---
@@ -259,18 +241,16 @@ openobsw is the reference OBSW target for
 [OpenSVF](https://github.com/lipofefeyt/opensvf).
 The integration path:
 
-```
-openobsw binary
-      │  runs on
-      ▼
-Renode emulator  ◄──  Sentinel peripheral (memory-mapped, DDS lockstep)
-      │
-      │  OBCEmulatorAdapter (implements ModelAdapter)
-      ▼
-OpenSVF SimulationMaster
-      │  drives
-      ▼
-Equipment models (Reaction Wheel, Star Tracker, PCDU, S-Band)
+```mermaid
+flowchart TD
+    A([openobsw binary]) --> B[Renode emulator]
+    B <-->|DDS lockstep| C[Sentinel peripheral\nmemory-mapped]
+    C --> D[OBCEmulatorAdapter\nimplements ModelAdapter]
+    D --> E[OpenSVF SimulationMaster]
+    E --> F[Reaction Wheel model]
+    E --> G[Star Tracker model]
+    E --> H[PCDU model]
+    E --> I[S-Band Transponder model]
 ```
 
 The three deferred OpenSVF requirements that gate this integration are:
