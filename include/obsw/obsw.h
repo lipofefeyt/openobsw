@@ -16,9 +16,11 @@
 #include "obsw/pus/s3.h"
 #include "obsw/pus/s5.h"
 #include "obsw/pus/s17.h"
+#include "obsw/fdir/fsm.h"
+#include "obsw/fdir/watchdog.h"
 
 #define OBSW_VERSION_MAJOR 0
-#define OBSW_VERSION_MINOR 3
+#define OBSW_VERSION_MINOR 4
 #define OBSW_VERSION_PATCH 0
 
 #endif /* OBSW_H */
