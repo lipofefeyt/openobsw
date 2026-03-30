@@ -1,0 +1,60 @@
+# openobsw clang-format configuration
+# Style: K&R-adjacent, consistent with the existing codebase
+
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+
+# Braces — K&R: function braces on new line, control structures attached
+BreakBeforeBraces: Linux
+
+# Line length
+ColumnLimit: 100
+
+# Alignment
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 1
+
+# Pointers: uint8_t *buf  (not uint8_t* buf)
+PointerAlignment: Right
+
+# Spaces
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceAfterCStyleCast: false
+
+# Function arguments
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+BinPackArguments: false
+BinPackParameters: false
+
+# Short constructs
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+
+# Include sorting
+SortIncludes: CaseInsensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"obsw/'
+    Priority: 1
+  - Regex: "^<"
+    Priority: 2
+
+# Misc
+MaxEmptyLinesToKeep: 1
+SpaceBeforeAssignmentOperators: true
