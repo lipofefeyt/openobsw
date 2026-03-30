@@ -1,5 +1,7 @@
 add_library(obsw STATIC
     ccsds/space_packet.c
+    ccsds/tc_frame.c
+    ccsds/tm_frame.c
     tc/dispatcher.c
     tm/store.c
 )
