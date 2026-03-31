@@ -1,6 +1,9 @@
 # Prerequisites
 *.d
 
+# Python stuff
+.venv
+
 # Object files
 *.o
 *.ko
