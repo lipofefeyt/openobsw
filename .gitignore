@@ -2,7 +2,12 @@
 *.d
 
 # Python stuff
-.venv
+build/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
 
 # Object files
 *.o
@@ -59,6 +64,3 @@ dkms.conf
 
 # Docker stuff
 .devcontainer/*
-
-# Build stuff
-build/*
