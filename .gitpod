@@ -1,0 +1,4 @@
+tasks:
+  - init: |
+      pip install pydantic pyyaml setuptools
+      pip install -e srdb/

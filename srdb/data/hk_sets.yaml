@@ -1,0 +1,28 @@
+# hk_sets.yaml — S3 housekeeping set definitions
+#
+# Each HK set has:
+#   id                    Unique set ID (uint8, matches obsw_s3_set_t.set_id)
+#   name                  Snake_case identifier
+#   description           Human-readable description
+#   parameters            Ordered list of parameter names (must exist in parameters.yaml)
+#   default_interval_ticks  Default collection interval (0 = disabled at boot)
+
+hk_sets:
+  - id: 1
+    name: nominal_hk
+    description: "Nominal housekeeping — thermal, power, uptime"
+    parameters:
+      - obc_temperature
+      - obc_voltage_3v3
+      - obc_voltage_5v
+      - obc_uptime
+    default_interval_ticks: 10
+
+  - id: 2
+    name: fdir_hk
+    description: "FDIR housekeeping — safe mode and watchdog statistics"
+    parameters:
+      - safe_mode_entry_count
+      - watchdog_kick_count
+      - watchdog_ticks_remaining
+    default_interval_ticks: 60

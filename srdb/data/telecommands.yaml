@@ -1,0 +1,55 @@
+# telecommands.yaml — TC command definitions
+#
+# Each telecommand has:
+#   name        Snake_case identifier — used in code generation
+#   description Human-readable description
+#   apid        Application Process ID (hex, 11-bit)
+#   service     PUS service type
+#   subservice  PUS subservice type
+#   parameters  User data field parameters (ordered list)
+#
+# Parameter types: uint8, uint16, uint32, int8, int16, int32
+
+telecommands:
+  # ---- S17 — Test --------------------------------------------------------
+
+  - name: are_you_alive
+    description: "TC(17,1) connection test — expects TM(17,2) response"
+    apid: 0x010
+    service: 17
+    subservice: 1
+    parameters: []
+
+  # ---- S3 — Housekeeping -------------------------------------------------
+
+  - name: enable_hk_report
+    description: "TC(3,5) enable periodic HK report generation for a set"
+    apid: 0x010
+    service: 3
+    subservice: 5
+    parameters:
+      - name: set_id
+        type: uint8
+        description: "HK structure ID"
+      - name: interval_ticks
+        type: uint32
+        description: "Collection interval in control cycle ticks"
+
+  - name: disable_hk_report
+    description: "TC(3,6) disable periodic HK report generation for a set"
+    apid: 0x010
+    service: 3
+    subservice: 6
+    parameters:
+      - name: set_id
+        type: uint8
+        description: "HK structure ID"
+
+  # ---- Mission-defined — Mode management ---------------------------------
+
+  - name: recover_nominal
+    description: "Mission TC(128,1) — ground-commanded recovery to NOMINAL mode"
+    apid: 0x010
+    service: 128
+    subservice: 1
+    parameters: []

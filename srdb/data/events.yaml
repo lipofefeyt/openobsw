@@ -1,0 +1,102 @@
+# events.yaml — S5 event definitions
+#
+# Each event has:
+#   id              Unique 16-bit event ID (hex) — used in obsw_s5_report()
+#   name            Snake_case identifier — used in code generation
+#   severity        INFO | LOW | MEDIUM | HIGH  (maps to TM(5,1..4))
+#   description     Human-readable description
+#   safe_trigger    If true and severity=HIGH, triggers safe mode transition
+#   auxiliary_data  Optional list of structured aux data fields
+
+events:
+  # ---- Boot / lifecycle --------------------------------------------------
+
+  - id: 0x0001
+    name: boot_complete
+    severity: INFO
+    description: "OBC boot sequence completed successfully"
+    safe_trigger: false
+
+  - id: 0x0002
+    name: safe_mode_entry
+    severity: HIGH
+    description: "Transition to SAFE mode initiated"
+    safe_trigger: false # already transitioning — no re-trigger
+    auxiliary_data:
+      - name: trigger_source
+        type: uint8
+        description: "0=watchdog, 1=trap, 2=ground_cmd, 3=s5_event"
+
+  - id: 0x0003
+    name: safe_mode_exit
+    severity: INFO
+    description: "Recovery to NOMINAL mode completed"
+    safe_trigger: false
+
+  # ---- Watchdog ----------------------------------------------------------
+
+  - id: 0x0010
+    name: watchdog_expiry
+    severity: HIGH
+    description: "Software watchdog expired — no kick received within timeout"
+    safe_trigger: true
+
+  # ---- Power faults ------------------------------------------------------
+
+  - id: 0x0020
+    name: power_fault_3v3
+    severity: HIGH
+    description: "3.3V rail voltage outside hard limits"
+    safe_trigger: true
+    auxiliary_data:
+      - name: measured_mv
+        type: uint16
+        description: "Measured voltage in mV"
+
+  - id: 0x0021
+    name: power_fault_5v
+    severity: HIGH
+    description: "5V rail voltage outside hard limits"
+    safe_trigger: true
+    auxiliary_data:
+      - name: measured_mv
+        type: uint16
+        description: "Measured voltage in mV"
+
+  # ---- Communications ----------------------------------------------------
+
+  - id: 0x0030
+    name: comms_timeout
+    severity: MEDIUM
+    description: "No TC received within expected ground contact window"
+    safe_trigger: false
+
+  # ---- Housekeeping ------------------------------------------------------
+
+  - id: 0x0040
+    name: hk_store_full
+    severity: LOW
+    description: "TM store full — HK packet dropped"
+    safe_trigger: false
+
+  # ---- Thermal -----------------------------------------------------------
+
+  - id: 0x0050
+    name: temperature_soft_limit
+    severity: LOW
+    description: "OBC temperature exceeded soft limit"
+    safe_trigger: false
+    auxiliary_data:
+      - name: temperature_raw
+        type: int16
+        description: "Raw ADC reading"
+
+  - id: 0x0051
+    name: temperature_hard_limit
+    severity: HIGH
+    description: "OBC temperature exceeded hard limit"
+    safe_trigger: true
+    auxiliary_data:
+      - name: temperature_raw
+        type: int16
+        description: "Raw ADC reading"
