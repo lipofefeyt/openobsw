@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build-and-test:
@@ -24,7 +24,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build gcc clang
+          sudo apt-get install -y cmake ninja-build gcc clang python3-pip
+          pip install pydantic pyyaml --break-system-packages
 
       - name: Configure
         run: |
@@ -50,7 +51,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build gcc
+          sudo apt-get install -y cmake ninja-build gcc python3-pip
+          pip install pydantic pyyaml --break-system-packages
 
       - name: Configure with sanitizers
         run: |
