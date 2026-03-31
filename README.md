@@ -33,7 +33,10 @@ alias oclean='rm -rf build'
 Always required when `CMakeLists.txt` files change:
 
 ```bash
-oclean && omkdebug && omkbuild && otest
+rm -rf build
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
 ## What's in the box
