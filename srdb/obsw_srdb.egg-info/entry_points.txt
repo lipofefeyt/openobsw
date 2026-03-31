@@ -1,0 +1,2 @@
+[console_scripts]
+obsw-srdb-codegen = obsw_srdb.codegen:main

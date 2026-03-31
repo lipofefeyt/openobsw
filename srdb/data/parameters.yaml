@@ -1,0 +1,80 @@
+# parameters.yaml — telemetry parameter definitions
+#
+# Each parameter has:
+#   id          Unique 16-bit parameter ID (hex)
+#   name        Snake_case identifier — used in HK sets and code generation
+#   description Human-readable description
+#   type        C-compatible type: uint8, uint16, uint32, int8, int16, int32, float32
+#   unit        Engineering unit string (optional)
+#   conversion  Raw → engineering conversion (optional)
+#   limits      Soft and hard limits in engineering units (optional)
+
+parameters:
+  # ---- OBC thermal -------------------------------------------------------
+
+  - id: 0x0001
+    name: obc_temperature
+    description: "OBC board temperature (internal sensor)"
+    type: int16
+    unit: degC
+    conversion:
+      type: linear
+      slope: 0.1
+      offset: -40.0
+    limits:
+      soft_low: -10.0
+      soft_high: 60.0
+      hard_low: -20.0
+      hard_high: 85.0
+
+  # ---- OBC power ---------------------------------------------------------
+
+  - id: 0x0002
+    name: obc_voltage_3v3
+    description: "OBC 3.3V rail voltage"
+    type: uint16
+    unit: mV
+    limits:
+      soft_low: 3100.0
+      soft_high: 3500.0
+      hard_low: 2800.0
+      hard_high: 3800.0
+
+  - id: 0x0003
+    name: obc_voltage_5v
+    description: "OBC 5V rail voltage"
+    type: uint16
+    unit: mV
+    limits:
+      soft_low: 4750.0
+      soft_high: 5250.0
+      hard_low: 4500.0
+      hard_high: 5800.0
+
+  # ---- OBC uptime --------------------------------------------------------
+
+  - id: 0x0004
+    name: obc_uptime
+    description: "OBC uptime since last boot"
+    type: uint32
+    unit: s
+
+  # ---- FDIR / safe mode --------------------------------------------------
+
+  - id: 0x0005
+    name: safe_mode_entry_count
+    description: "Number of safe mode transitions since boot"
+    type: uint16
+    unit: count
+
+  - id: 0x0006
+    name: watchdog_kick_count
+    description: "Total watchdog kick count since boot"
+    type: uint32
+    unit: count
+
+  - id: 0x0007
+    name: watchdog_ticks_remaining
+    description: "Ticks remaining before watchdog expiry"
+    type: uint32
+    unit: ticks

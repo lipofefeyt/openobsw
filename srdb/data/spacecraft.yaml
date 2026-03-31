@@ -1,0 +1,11 @@
+# spacecraft.yaml — mission identity
+#
+# SCID is a 10-bit value (0x000–0x3FF) assigned by mission authority.
+# The value below is a placeholder for development/testing only.
+# See docs/mission-config.md for how to assign a real SCID.
+
+spacecraft:
+  name: "Demo Satellite"
+  description: "openobsw reference mission configuration"
+  scid: 0x001 # placeholder — mission-assigned
+  apid_default: 0x010 # default TC target APID

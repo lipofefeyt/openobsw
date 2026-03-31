@@ -22,3 +22,6 @@ set_target_properties(obsw PROPERTIES
     C_STANDARD_REQUIRED ON
     C_EXTENSIONS OFF
 )
+
+# Generated SRDB header — available to all consumers of obsw
+target_link_libraries(obsw PUBLIC obsw_srdb_generated)
