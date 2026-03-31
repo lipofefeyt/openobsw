@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obsw-srdb"
+version = "0.1.0"
+description = "openobsw Spacecraft Resource Database loader and code generator"
+requires-python = ">=3.9"
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+
+[project.scripts]
+obsw-srdb-codegen = "obsw_srdb.codegen:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["obsw_srdb*"]

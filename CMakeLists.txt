@@ -23,6 +23,7 @@ if(OBSW_ENABLE_ASAN)
     add_link_options(-fsanitize=address,undefined)
 endif()
 
+add_subdirectory(srdb)
 add_subdirectory(src)
 
 if(OBSW_BUILD_TESTS)
