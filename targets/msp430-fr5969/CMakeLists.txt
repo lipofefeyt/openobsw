@@ -28,11 +28,10 @@ set(MSP430_CFLAGS
 )
 
 set(MSP430_LDFLAGS
-    -mmcu=${MSP430_MCU}
     -mlarge
     -Wl,--gc-sections
     -Wl,-Map=openobsw-msp430.map
-    -T "${CMAKE_CURRENT_SOURCE_DIR}/linker.ld"
+    -Wl,--defsym,__stack_size=0x200
 )
 
 # ---- MSP430 profile: reduced buffer sizes --------------------------------
@@ -76,7 +75,6 @@ set(MSP430_SOURCES
     ${OBSW_ROOT}/src/fdir/watchdog.c
     # MSP430 HAL
     ${OBSW_ROOT}/src/hal/msp430/uart.c
-    ${OBSW_ROOT}/src/hal/msp430/startup.c
     # Application entry point
     main.c
 )
@@ -111,12 +109,14 @@ add_dependencies(openobsw_msp430 srdb_codegen_msp430)
 target_include_directories(openobsw_msp430 PRIVATE
     ${OBSW_ROOT}/include
     ${CMAKE_BINARY_DIR}/include
-    ${MSP430_MCU_INCLUDE}
+    ${MSP430_TOOLCHAIN_BIN}/../include
+    ${MSP430_TOOLCHAIN_BIN}/../msp430-elf/include
 )
 
 target_compile_options(openobsw_msp430 PRIVATE
     ${MSP430_CFLAGS}
     ${MSP430_PROFILE_DEFS}
+    -include "${SRDB_GENERATED_H}"
 )
 
 target_link_options(openobsw_msp430 PRIVATE
