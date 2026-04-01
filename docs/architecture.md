@@ -46,7 +46,7 @@ An integration test exercises the full uplink/downlink path end-to-end.
                           │  mode transitions / safe triggers
  ┌────────────────────────▼────────────────────────────────┐
  │              PUS-C Services                              │
- │    S1 (verification) · S3 (HK) · S5 (events) · S17      │
+ │    S1 · S3 · S5 · S6 (memory) · S8 (functions) · S17   │
  └────────────────────────┬────────────────────────────────┘
                           │  obsw_tc_t (parsed command)
  ┌────────────────────────▼────────────────────────────────┐
@@ -152,6 +152,41 @@ obsw_tm_frame_config_t cfg = {
     .frame_data_field_len        = 64,  /* mission-specific */
 };
 ```
+
+---
+
+### `pus/s6` — PUS-C S6 Memory Management
+
+Provides ground-commanded memory load, check and dump. All operations
+work on raw memory addresses encoded as 4-byte BE fields (PUS-C standard,
+correct for 32-bit targets).
+
+Key handlers: `obsw_s6_load()`, `obsw_s6_check()`, `obsw_s6_dump()`
+
+| Subservice | TC | TM response |
+|---|---|---|
+| 2 | Load memory area | TM(1,1) + TM(1,7) |
+| 5 | Check memory area (CRC-16/CCITT) | TM(6,10) match / TM(6,11) mismatch |
+| 9 | Dump memory area | TM(6,6) data packet |
+
+Reuses `obsw_crc16_ccitt()` from the TC frame layer — single CRC
+implementation across the whole stack.
+
+---
+
+### `pus/s8` — PUS-C S8 Function Management
+
+Executes named on-board functions by ID from a static caller-owned table.
+Replaces the earlier mission-defined `TC(128,1)` recovery command with a
+standards-compliant interface.
+
+Key handler: `obsw_s8_perform()`
+
+| Function ID | Name | Effect |
+|---|---|---|
+| 1 | `OBSW_S8_FN_RECOVER_NOMINAL` | Calls `obsw_fsm_to_nominal()` |
+
+Additional function IDs are registered by the application in `obsw_s8_entry_t[]`.
 
 ---
 
