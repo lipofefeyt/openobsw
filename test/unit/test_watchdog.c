@@ -1,9 +1,13 @@
-#include "unity.h"
-#include "obsw/fdir/watchdog.h"
 #include "obsw/fdir/fsm.h"
+#include "obsw/fdir/watchdog.h"
+#include "unity.h"
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{
+}
+void tearDown(void)
+{
+}
 
 static int expire_count;
 static void on_expire(void *ctx)
@@ -27,23 +31,20 @@ static obsw_wd_ctx_t make_wd(uint32_t timeout)
 void test_init_ok(void)
 {
     obsw_wd_ctx_t wd;
-    TEST_ASSERT_EQUAL_INT(OBSW_WD_OK,
-                          obsw_wd_init(&wd, 5, on_expire, NULL));
+    TEST_ASSERT_EQUAL_INT(OBSW_WD_OK, obsw_wd_init(&wd, 5, on_expire, NULL));
     TEST_ASSERT_FALSE(obsw_wd_expired(&wd));
 }
 
 void test_init_zero_timeout_fails(void)
 {
     obsw_wd_ctx_t wd;
-    TEST_ASSERT_EQUAL_INT(OBSW_WD_ERR_PARAM,
-                          obsw_wd_init(&wd, 0, on_expire, NULL));
+    TEST_ASSERT_EQUAL_INT(OBSW_WD_ERR_PARAM, obsw_wd_init(&wd, 0, on_expire, NULL));
 }
 
 void test_init_null_cb_fails(void)
 {
     obsw_wd_ctx_t wd;
-    TEST_ASSERT_EQUAL_INT(OBSW_WD_ERR_NULL,
-                          obsw_wd_init(&wd, 5, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(OBSW_WD_ERR_NULL, obsw_wd_init(&wd, 5, NULL, NULL));
 }
 
 /* ------------------------------------------------------------------ */
@@ -112,20 +113,18 @@ void test_late_kick_still_expires(void)
 
 void test_watchdog_triggers_fsm_safe(void)
 {
-    /* Wire watchdog expiry directly to FSM safe transition */
     obsw_fsm_ctx_t fsm;
     obsw_fsm_config_t cfg = {
-        .on_enter_safe = NULL,
-        .on_exit_safe = NULL,
-        .hook_ctx = NULL,
+        .on_enter_safe     = NULL,
+        .on_exit_safe      = NULL,
+        .hook_ctx          = NULL,
         .safe_tc_whitelist = NULL,
-        .whitelist_len = 0,
+        .whitelist_len     = 0,
     };
     obsw_fsm_init(&fsm, &cfg);
 
     obsw_wd_ctx_t wd;
-    obsw_wd_init(&wd, 2,
-                 (obsw_wd_expire_cb_t)obsw_fsm_to_safe, &fsm);
+    obsw_wd_init(&wd, 2, (obsw_wd_expire_cb_t)obsw_fsm_to_safe, &fsm);
 
     TEST_ASSERT_FALSE(obsw_fsm_is_safe(&fsm));
     obsw_wd_tick(&wd);
