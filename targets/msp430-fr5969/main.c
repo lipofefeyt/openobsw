@@ -25,6 +25,20 @@
 #include <string.h>
 
 /* ------------------------------------------------------------------ */
+/* Clock configuration — 8 MHz DCO                                    */
+/* ------------------------------------------------------------------ */
+
+static void clock_init(void)
+{
+    WDTCTL   = WDTPW | WDTHOLD; /* stop watchdog during init  */
+    CSCTL0_H = CSKEY >> 8;
+    CSCTL1   = DCOFSEL_6;       /* DCO = 8 MHz                */
+    CSCTL2   = SELA__VLOCLK | SELS__DCOCLK | SELM__DCOCLK;
+    CSCTL3   = DIVA__1 | DIVS__1 | DIVM__1;
+    CSCTL0_H = 0;
+}
+
+/* ------------------------------------------------------------------ */
 /* UART I/O ops (defined in hal/msp430/uart.c)                        */
 /* ------------------------------------------------------------------ */
 
@@ -183,6 +197,7 @@ static void on_watchdog_expiry(void *ctx)
 
 int main(void)
 {
+    clock_init();
     obsw_uart_init();
 
     /* TM store */

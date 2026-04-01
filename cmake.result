@@ -1,0 +1,42 @@
+In file included from /usr/msp430/include/in430.h:4,
+                 from /usr/msp430/include/msp430fr5969.h:113,
+                 from /usr/msp430/include/msp430.h:760,
+                 from /workspaces/openobsw/src/hal/msp430/uart.c:20:
+/usr/msp430/include/intrinsics.h:108:6: warning: conflicting types for built-in function '__delay_cycles'; expected 'void(long long int)' [-Wbuiltin-declaration-mismatch]
+  108 | void __delay_cycles (unsigned long int delay);
+      |      ^~~~~~~~~~~~~~
+/usr/msp430/include/intrinsics.h:1:1: note: '__delay_cycles' is declared in header '<math.h>'
+  +++ |+#include <math.h>
+    1 | /* ============================================================================
+/workspaces/openobsw/src/hal/msp430/uart.c:91:1: error: unknown type name 'obsw_io_ops_t'
+   91 | obsw_io_ops_t obsw_uart_ops = {
+      | ^~~~~~~~~~~~~
+/workspaces/openobsw/src/hal/msp430/uart.c:92:5: error: field name not in record or union initializer
+   92 |     .write = uart_write,
+      |     ^
+/workspaces/openobsw/src/hal/msp430/uart.c:92:5: note: (near initialization for 'obsw_uart_ops')
+/workspaces/openobsw/src/hal/msp430/uart.c:92:14: warning: initialization of 'int' from 'int (*)(const uint8_t *, size_t,  void *)' {aka 'int (*)(const unsigned char *, __int20 unsigned,  void *)'} makes integer from pointer without a cast [-Wint-conversion]
+   92 |     .write = uart_write,
+      |              ^~~~~~~~~~
+/workspaces/openobsw/src/hal/msp430/uart.c:92:14: note: (near initialization for 'obsw_uart_ops')
+/workspaces/openobsw/src/hal/msp430/uart.c:92:14: error: initializer element is not computable at load time
+/workspaces/openobsw/src/hal/msp430/uart.c:92:14: note: (near initialization for 'obsw_uart_ops')
+/workspaces/openobsw/src/hal/msp430/uart.c:93:5: error: field name not in record or union initializer
+   93 |     .read  = uart_read,
+      |     ^
+/workspaces/openobsw/src/hal/msp430/uart.c:93:5: note: (near initialization for 'obsw_uart_ops')
+/workspaces/openobsw/src/hal/msp430/uart.c:93:14: warning: excess elements in scalar initializer
+   93 |     .read  = uart_read,
+      |              ^~~~~~~~~
+/workspaces/openobsw/src/hal/msp430/uart.c:93:14: note: (near initialization for 'obsw_uart_ops')
+/workspaces/openobsw/src/hal/msp430/uart.c:94:5: error: field name not in record or union initializer
+   94 |     .ctx   = NULL,
+      |     ^
+/workspaces/openobsw/src/hal/msp430/uart.c:94:5: note: (near initialization for 'obsw_uart_ops')
+/workspaces/openobsw/src/hal/msp430/uart.c:94:14: warning: excess elements in scalar initializer
+   94 |     .ctx   = NULL,
+      |              ^~~~
+/workspaces/openobsw/src/hal/msp430/uart.c:94:14: note: (near initialization for 'obsw_uart_ops')
+gmake[2]: *** [CMakeFiles/openobsw_msp430.dir/build.make:272: CMakeFiles/openobsw_msp430.dir/workspaces/openobsw/src/hal/msp430/uart.c.obj] Error 1
+gmake[1]: *** [CMakeFiles/Makefile2:110: CMakeFiles/openobsw_msp430.dir/all] Error 2
+gmake: *** [Makefile:91: all] Error 2
