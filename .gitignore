@@ -1,66 +1,43 @@
-# Prerequisites
-*.d
-
-# Python stuff
+# Build directories
 build/
-.venv/
+build-msp430/
+build-*/
+
+# Compiled objects
+*.o
+*.a
+*.d
+*.elf
+*.hex
+*.map
+
+# CMake
+.cache/
+CMakeFiles/
+cmake_install.cmake
+CMakeCache.txt
+compile_commands.json
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
 *.egg-info/
 .pytest_cache/
+.venv/
+dist/
+*.egg
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+# VS Code — ignore personal settings, keep IntelliSense config
+.vscode/*
+!.vscode/c_cpp_properties.json
 
-# Linker output
-*.ilk
-*.map
-*.exp
 
-# Precompiled Headers
-*.gch
-*.pch
+# Toolchain downloads (large, install manually per docs/msp430-build.md)
+*.tar.bz2
+*.zip
+msp430-gcc-support-files/
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# debug information files
-*.dwo
-
-# Docker stuff
-.devcontainer/*
+# OS
+.DS_Store
+Thumbs.db
