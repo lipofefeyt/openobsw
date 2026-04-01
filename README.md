@@ -12,12 +12,14 @@ validation against equipment models.
 ```bash
 git clone https://github.com/lipofefeyt/openobsw
 cd openobsw
+pip install pydantic pyyaml --break-system-packages
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Requirements: `gcc`, `cmake >= 3.16`, `git` (Unity fetched automatically).
+Requirements: `gcc`, `cmake >= 3.16`, `git`, `python3`, `pydantic`, `pyyaml`.
+Unity is fetched automatically by CMake.
 
 ### Recommended aliases
 
@@ -33,10 +35,7 @@ alias oclean='rm -rf build'
 Always required when `CMakeLists.txt` files change:
 
 ```bash
-rm -rf build
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-ctest --test-dir build --output-on-failure
+oclean && omkdebug && omkbuild && otest
 ```
 
 ## What's in the box
@@ -61,10 +60,12 @@ ctest --test-dir build --output-on-failure
 
 | Module | Description | Standard |
 |---|---|---|
-| `pus/pus_tm` | Shared PUS-C TM packet builder — used by all services | ECSS PUS-C |
+| `pus/pus_tm` | Shared PUS-C TM packet builder | ECSS PUS-C |
 | `pus/s1` | TC verification: acceptance, start, completion ack/nak | PUS-C S1 |
-| `pus/s3` | Housekeeping: static parameter sets, periodic reports, enable/disable | PUS-C S3 |
-| `pus/s5` | Event reporting: four severity levels, FDIR safe-trigger coupling | PUS-C S5 |
+| `pus/s3` | Housekeeping: static parameter sets, periodic reports | PUS-C S3 |
+| `pus/s5` | Event reporting: four severity levels, FDIR coupling | PUS-C S5 |
+| `pus/s6` | Memory management: load, check (CRC-16), dump | PUS-C S6 |
+| `pus/s8` | Function management: static function table, perform by ID | PUS-C S8 |
 | `pus/s17` | Are-you-alive ping/pong | PUS-C S17 |
 
 **FDIR**
@@ -76,12 +77,22 @@ ctest --test-dir build --output-on-failure
 | `hal/arm/trap_table` | ARM Cortex-A exception handler stubs (ZynqMP) |
 | `hal/msp430/trap_table` | MSP430 fault handler stubs (safe-mode OBC) |
 
+**SRDB**
+
+| Component | Description |
+|---|---|
+| `srdb/data/*.yaml` | Mission parameter database: parameters, TCs, HK sets, events |
+| `srdb/obsw_srdb/` | Python loader + Pydantic validation + C header codegen |
+| `build/include/obsw/srdb_generated.h` | Generated at build time — named constants for C code |
+
 See [docs/architecture.md](docs/architecture.md) for full design documentation.
+See [docs/mission-config.md](docs/mission-config.md) for mission-specific parameters.
 
 ## Test coverage
 
 ```
-13 suites / 86 tests / 0 failures / 0 warnings
+15 C suites / 97 tests / 0 failures / 0 warnings
+42 Python tests / 0 failures
 ```
 
 | Suite | Tests | Type |
@@ -94,6 +105,8 @@ See [docs/architecture.md](docs/architecture.md) for full design documentation.
 | test_s1 | 6 | unit |
 | test_s3 | 10 | unit |
 | test_s5 | 5 | unit |
+| test_s6 | 8 | unit |
+| test_s8 | 5 | unit |
 | test_s17 | 5 | unit |
 | test_fsm | 11 | unit |
 | test_watchdog | 9 | unit |
@@ -102,13 +115,16 @@ See [docs/architecture.md](docs/architecture.md) for full design documentation.
 
 ## Host simulation
 
-`sim/main.c` is a host-mode process that reads length-prefixed TC frames
-from stdin and writes TM ack records to stdout. It is the future integration
-seam for the OpenSVF `OBCEmulatorAdapter`.
+`sim/main.c` reads length-prefixed TC frames from stdin, dispatches them
+through the real PUS service handlers, and writes ack records to stdout.
 
 ```bash
-# Send a S17/1 ping manually
+# Send a S17/1 ping
 python3 sim/send_ping.py | ./build/sim/obsw_sim
+
+# Expected output
+# stderr: [OBSW] Host sim started (SCID=0x001). Awaiting TC frames on stdin.
+# stdout: ACK apid=0x010 svc=17 subsvc=1 flags=0x09 seq=1
 ```
 
 ## Roadmap
@@ -117,9 +133,10 @@ python3 sim/send_ping.py | ./build/sim/obsw_sim
 |---|---|---|
 | v0.1 | Space Packet + TC dispatcher + TM store + host sim | ✅ |
 | v0.2 | TC Frame (CCSDS 232.0-B) + TM Frame (CCSDS 132.0-B) | ✅ |
-| v0.3 | PUS-C service handlers: S1, S3, S5, S17 | ✅ |
-| v0.4 | FDIR: safe mode FSM, watchdog, S5 FDIR coupling, trap stubs | ✅ |
-| v0.5 | Renode sentinel peripheral + OpenSVF OBCEmulatorAdapter | 🔜 |
+| v0.3 | PUS-C S1, S3, S5, S17 | ✅ |
+| v0.4 | FDIR: safe mode FSM, watchdog, S5 coupling, trap stubs | ✅ |
+| SRDB | YAML parameter database, Python loader, CMake codegen | ✅ |
+| v0.5 | S6/S8, MSP430 build profile, Renode, OBCEmulatorAdapter | 🔜 |
 
 ## Standards references
 
