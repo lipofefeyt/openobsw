@@ -15,6 +15,7 @@
  * the lockstep sync channel.
  */
 
+/* obsw headers must come before msp430.h to avoid type conflicts */
 #include "obsw/hal/io.h"
 
 #include <msp430.h>
@@ -62,10 +63,10 @@ void obsw_uart_init(void)
 /* obsw_io_ops_t implementation                                        */
 /* ------------------------------------------------------------------ */
 
-static int uart_write(const uint8_t *buf, size_t len, void *ctx)
+static int uart_write(const uint8_t *buf, uint16_t len, void *ctx)
 {
     (void)ctx;
-    for (size_t i = 0; i < len; i++) {
+    for (uint16_t i = 0; i < len; i++) {
         while (!(UCA1IFG & UCTXIFG))
             ; /* wait for TX buffer empty */
         UCA1TXBUF = buf[i];
@@ -73,10 +74,10 @@ static int uart_write(const uint8_t *buf, size_t len, void *ctx)
     return (int)len;
 }
 
-static int uart_read(uint8_t *buf, size_t len, void *ctx)
+static int uart_read(uint8_t *buf, uint16_t len, void *ctx)
 {
     (void)ctx;
-    size_t n = 0;
+    uint16_t n = 0;
     while (n < len) {
         if (UCA1IFG & UCRXIFG) {
             buf[n++] = UCA1RXBUF;

@@ -27,6 +27,7 @@ find_program(MSP430_GCC msp430-elf-gcc
     REQUIRED
 )
 get_filename_component(MSP430_TOOLCHAIN_BIN ${MSP430_GCC} DIRECTORY)
+set(MSP430_TOOLCHAIN_BIN "${MSP430_TOOLCHAIN_BIN}" CACHE PATH "MSP430 toolchain bin directory" FORCE)
 
 set(CMAKE_C_COMPILER   "${MSP430_TOOLCHAIN_BIN}/msp430-elf-gcc")
 set(CMAKE_CXX_COMPILER "${MSP430_TOOLCHAIN_BIN}/msp430-elf-g++")
@@ -38,8 +39,16 @@ set(CMAKE_SIZE         "${MSP430_TOOLCHAIN_BIN}/msp430-elf-size")
 # FR5969 target CPU
 set(MSP430_MCU "msp430fr5969" CACHE STRING "MSP430 MCU target")
 
-# Include support files (headers and linker scripts from msp430mcu package)
-set(MSP430_MCU_INCLUDE "/usr/msp430/include" CACHE PATH "MSP430 MCU include path")
+# Include support files — prefer TI toolchain headers over system msp430mcu package
+# The msp430mcu package (/usr/msp430/include) ships older headers that conflict
+# with TI msp430-elf-gcc. Use the toolchain's own include directory.
+execute_process(
+    COMMAND "${MSP430_GCC}" -print-sysroot
+    OUTPUT_VARIABLE MSP430_SYSROOT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set(MSP430_MCU_INCLUDE "${MSP430_TOOLCHAIN_BIN}/../msp430-elf/include"
+    CACHE PATH "MSP430 MCU include path" FORCE)
 
 set(CMAKE_C_FLAGS_INIT
     "-mmcu=${MSP430_MCU} -mlarge -mdata-region=none -mcode-region=none"
