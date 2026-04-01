@@ -429,3 +429,72 @@ The three deferred OpenSVF requirements that gate this integration are:
 | CCSDS 132.0-B | TM Space Data Link Protocol |
 | CCSDS 131.0-B | TM Synchronization and Channel Coding |
 | ECSS-E-ST-70-41C | Packet Utilisation Standard (PUS-C) |
+
+---
+
+## MSP430FR5969 target
+
+### Overview
+
+The MSP430FR5969 is the reference hardware target for openobsw. It serves
+as the **safe-mode OBC** in a dual-OBC topology — small enough to validate
+the complete stack on real hardware, constrained enough to prove the
+zero-allocation design holds under genuine memory pressure.
+
+| Resource | Value |
+|---|---|
+| Architecture | 16-bit RISC, MSP430 |
+| SRAM | 2 KB (0x2000–0x27FF) |
+| FRAM | 47 KB (0x4400–0xFF7F) |
+| Toolchain | TI msp430-elf-gcc 9.3.1.11 |
+
+### MSP430 build profile
+
+The standard build uses default sizing macros. The MSP430 profile overrides
+them at compile time to fit within 2KB SRAM:
+
+| Parameter | Default | MSP430 profile |
+|---|---|---|
+| `OBSW_TM_STORE_SLOTS` | 32 | 4 |
+| `OBSW_TM_MAX_PACKET_LEN` | 1024 B | 64 B |
+| `OBSW_TC_FRAME_MAX_LEN` | 1024 B | 128 B |
+| `OBSW_S5_MAX_SAFE_TRIGGERS` | 8 | 4 |
+
+TM store total: 4 × 64 = **256 bytes**.
+
+### HAL UART (USCI_A1)
+
+`src/hal/msp430/uart.c` implements `obsw_io_ops_t` using USCI_A1 on
+P2.0/P2.1 — the backchannel UART on the FR5969 LaunchPad. The same
+interface is used by Renode's emulated UART peripheral, so no code changes
+are needed when switching between emulation and hardware.
+
+Note: `obsw_io_ops_t` uses `uint16_t` for buffer lengths (not `size_t`)
+for portability across 16-bit targets where `size_t` is `__int20 unsigned`.
+
+### Build outputs
+
+```
+build-msp430/
+  openobsw-msp430.elf   — ELF image for Renode and GDB debugging
+  openobsw-msp430.hex   — Intel HEX for mspdebug / UniFlash flashing
+  openobsw-msp430.map   — linker symbol map
+```
+
+### Cross-compilation
+
+```bash
+cmake -B build-msp430 \
+  -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/msp430-toolchain.cmake \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -S targets/msp430-fr5969
+cmake --build build-msp430
+```
+
+See [msp430-build.md](msp430-build.md) for toolchain installation.
+
+### VS Code IntelliSense
+
+The MSP430 build generates `build-msp430/compile_commands.json`. Point
+`c_cpp_properties.json` at it so IntelliSense resolves `srdb_generated.h`
+and MSP430 register names correctly. See the README for the configuration.

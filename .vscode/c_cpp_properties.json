@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "name": "MSP430",
+            "compileCommands": "${workspaceFolder}/build-msp430/compile_commands.json"
+        },
+        {
+            "name": "Host",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+        }
+    ],
+    "version": 4
+}

@@ -22,18 +22,22 @@ Install it manually from TI:
 wget "http://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export/msp430-gcc-9.3.1.11_linux64.tar.bz2"
 wget "http://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export/msp430-gcc-support-files-1.212.zip"
 
-# Extract to /opt
+# Extract toolchain
 sudo tar xjf msp430-gcc-9.3.1.11_linux64.tar.bz2 -C /opt
 
-# Install support files (headers + linker scripts) into the toolchain
+# Install support files:
+#   Headers (.h)  → toolchain include/
+#   Linker scripts (.ld) → toolchain msp430-elf/lib/
 unzip msp430-gcc-support-files-1.212.zip
-sudo cp -r msp430-gcc-support-files/include/* /opt/msp430-gcc-9.3.1.11_linux64/include/
+find msp430-gcc-support-files -name "*.h"  -exec sudo cp {} /opt/msp430-gcc-9.3.1.11_linux64/include/ \;
+find msp430-gcc-support-files -name "*.ld" -exec sudo cp {} /opt/msp430-gcc-9.3.1.11_linux64/msp430-elf/lib/ \;
 
-# Add to PATH (add to ~/.bashrc for persistence)
+# Add to PATH
 export PATH=/opt/msp430-gcc-9.3.1.11_linux64/bin:$PATH
 
 # Verify
 msp430-elf-gcc --version
+ls /opt/msp430-gcc-9.3.1.11_linux64/msp430-elf/lib/msp430fr5969.ld
 ```
 
 Also install the MSP430 MCU headers and linker scripts:
@@ -55,7 +59,8 @@ tasks:
       wget -q "http://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export/msp430-gcc-support-files-1.212.zip"
       sudo tar xjf msp430-gcc-9.3.1.11_linux64.tar.bz2 -C /opt
       unzip -q msp430-gcc-support-files-1.212.zip
-      sudo cp -r msp430-gcc-support-files/include/* /opt/msp430-gcc-9.3.1.11_linux64/include/
+      find msp430-gcc-support-files -name "*.h"  -exec sudo cp {} /opt/msp430-gcc-9.3.1.11_linux64/include/ \;
+      find msp430-gcc-support-files -name "*.ld" -exec sudo cp {} /opt/msp430-gcc-9.3.1.11_linux64/msp430-elf/lib/ \;
       echo 'export PATH=/opt/msp430-gcc-9.3.1.11_linux64/bin:$PATH' >> ~/.bashrc
 ```
 
