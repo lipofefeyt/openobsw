@@ -8,6 +8,8 @@ add_library(obsw STATIC
     pus/s1.c
     pus/s3.c
     pus/s5.c
+    pus/s6.c
+    pus/s8.c
     pus/s17.c
     fdir/fsm.c
     fdir/watchdog.c
@@ -23,5 +25,4 @@ set_target_properties(obsw PROPERTIES
     C_EXTENSIONS OFF
 )
 
-# Generated SRDB header — available to all consumers of obsw
 target_link_libraries(obsw PUBLIC obsw_srdb_generated)

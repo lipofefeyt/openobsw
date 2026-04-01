@@ -45,11 +45,17 @@ telecommands:
         type: uint8
         description: "HK structure ID"
 
-  # ---- Mission-defined — Mode management ---------------------------------
+  # ---- S8 - Function Management -----------------------------------------
 
-  - name: recover_nominal
-    description: "Mission TC(128,1) — ground-commanded recovery to NOMINAL mode"
+  - name: s8_perform_function
+    description: "TC(8,1) perform an on-board function"
     apid: 0x010
-    service: 128
+    service: 8
     subservice: 1
-    parameters: []
+    parameters:
+      - name: function_id
+        type: uint16
+        description: "Function ID (1=recover_nominal)"
+      - name: args_len
+        type: uint8
+        description: "Length of arguments in bytes"

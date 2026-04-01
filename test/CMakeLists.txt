@@ -76,3 +76,13 @@ add_executable(test_tc_pipeline integration/test_tc_pipeline.c)
 target_link_libraries(test_tc_pipeline PRIVATE obsw unity)
 target_compile_options(test_tc_pipeline PRIVATE ${TEST_SUPPRESS})
 add_test(NAME tc_pipeline COMMAND test_tc_pipeline)
+
+add_executable(test_s6 unit/test_s6.c)
+target_link_libraries(test_s6 PRIVATE obsw unity)
+target_compile_options(test_s6 PRIVATE ${TEST_SUPPRESS})
+add_test(NAME s6 COMMAND test_s6)
+
+add_executable(test_s8 unit/test_s8.c)
+target_link_libraries(test_s8 PRIVATE obsw unity)
+target_compile_options(test_s8 PRIVATE ${TEST_SUPPRESS})
+add_test(NAME s8 COMMAND test_s8)
