@@ -60,8 +60,8 @@ fi
 echo "=== [4/5] Installing Renode nightly ==="
 RENODE_DIR="/opt/renode-nightly"
 if [ ! -f "$RENODE_DIR/renode" ]; then
-    echo "Downloading Renode v1.15.3..."
-    wget -q "https://github.com/renode/renode/releases/download/v1.15.3/renode-1.15.3.linux-portable.tar.gz" -O renode.tar.gz
+    echo "Downloading Renode nightly..."
+    wget -q "https://builds.renode.io/renode-latest.linux-portable.tar.gz" -O renode.tar.gz
     sudo mkdir -p "$RENODE_DIR"
     sudo tar xf renode.tar.gz -C "$RENODE_DIR" --strip-components=1
     rm -f renode.tar.gz
