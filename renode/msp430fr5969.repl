@@ -1,0 +1,23 @@
+cpu: CPU.MSP430X @ sysbus
+    cpuType: "msp430x"
+
+peripherals_lo: Memory.ArrayMemory @ sysbus 0x0000
+    size: 0x05C0
+
+uart0: UART.MSP430_USCIA @ {
+    sysbus 0x05C0;
+    sysbus new Bus.BusMultiRegistration { address: 0x05D8; size: 0x1; region: "interruptEnable" };
+    sysbus new Bus.BusMultiRegistration { address: 0x05DA; size: 0x1; region: "interruptStatus" }
+}
+
+info_mem: Memory.ArrayMemory @ sysbus 0x1800
+    size: 0x0800
+
+sram: Memory.ArrayMemory @ sysbus 0x2000
+    size: 0x0800
+
+fram: Memory.ArrayMemory @ sysbus 0x4400
+    size: 0xBB80
+
+ivt: Memory.ArrayMemory @ sysbus 0xFF80
+    size: 0x0080
