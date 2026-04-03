@@ -1,0 +1,15 @@
+using sysbus
+
+mach create "msp430fr5969"
+machine LoadPlatformDescription @renode/msp430fr5969.repl
+
+sysbus LoadELF @build-msp430/openobsw-msp430.elf
+
+emulation CreateServerSocketTerminal 3456 "term" false
+connector Connect uart0 term
+
+machine StartGdbServer 3333
+showAnalyzer uart0
+
+logLevel 3
+start

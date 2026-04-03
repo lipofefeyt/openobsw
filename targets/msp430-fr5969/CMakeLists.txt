@@ -50,6 +50,11 @@ set(MSP430_PROFILE_DEFS
     -DOBSW_S5_MAX_SAFE_TRIGGERS=4
 )
 
+# Renode build: add register layout shim for Renode's MSP430_USCIA model
+if(RENODE_BUILD)
+    list(APPEND MSP430_PROFILE_DEFS -DRENODE_BUILD=1)
+endif()
+
 # ---- Source files --------------------------------------------------------
 
 set(OBSW_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
