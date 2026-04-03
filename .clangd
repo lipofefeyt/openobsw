@@ -1,0 +1,10 @@
+---
+# Disable diagnostics for MSP430 HAL files when using the host toolchain.
+# These files are only valid in the MSP430 cross-compilation context.
+# Use the "MSP430" configuration in c_cpp_properties.json when editing them.
+If:
+  PathMatch: src/hal/msp430/.*
+CompileFlags:
+  Remove: [-mmcu=*, -mlarge, -mdata-region=*, -mcode-region=*]
+Diagnostics:
+  Suppress: '*'
