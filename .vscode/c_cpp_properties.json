@@ -1,12 +1,17 @@
 {
     "configurations": [
         {
-            "name": "MSP430",
-            "compileCommands": "${workspaceFolder}/build-msp430/compile_commands.json"
+            "name": "Host",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "intelliSenseMode": "linux-gcc-x64"
         },
         {
-            "name": "Host",
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+            "name": "MSP430",
+            "compileCommands": "${workspaceFolder}/build-msp430/compile_commands.json",
+            "intelliSenseMode": "linux-gcc-arm",
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true
+            }
         }
     ],
     "version": 4
