@@ -117,3 +117,25 @@ msp430-elf-gdb build-msp430/openobsw-msp430.elf
 
 See `renode/README.md` for running the MSP430 build under Renode
 without physical hardware.
+
+## VS Code IntelliSense setup
+
+IntelliSense for MSP430 files (`src/hal/msp430/`, `targets/msp430-fr5969/`)
+requires `build-msp430/compile_commands.json` to exist. This is generated
+at build time and is not committed. Run the MSP430 build once per workspace:
+
+```bash
+mkdebug-msp430 && mkbuild-msp430
+```
+
+Then in VS Code:
+
+1. Open any MSP430 file (e.g. `src/hal/msp430/uart.c`)
+2. Click the configuration name in the bottom-right status bar
+3. Select **"MSP430"**
+4. Run **Ctrl+Shift+P → C/C++: Reset IntelliSense Database** if squiggles persist
+
+For host files, keep the configuration set to **"Host"**.
+
+Both `compile_commands.json` files are regenerated automatically on each
+rebuild — no manual steps needed after the first setup.
