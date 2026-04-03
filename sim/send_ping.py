@@ -43,7 +43,7 @@ def parse_response(data: bytes):
 
 
 def main():
-    print("Spawning host sim, sending 10 × TC(17,1) ping...")
+    print("Spawning host sim, sending TC(17,1) ping...")
 
     proc = subprocess.Popen(
         ["./build/sim/obsw_sim"],
@@ -52,7 +52,7 @@ def main():
         stderr=subprocess.PIPE,
     )
 
-    stdout, stderr = proc.communicate(input=PACKET * 10, timeout=5)
+    stdout, stderr = proc.communicate(input=PACKET, timeout=5)
 
     print(f"\nReceived {len(stdout)} bytes:")
     count = parse_response(stdout)
