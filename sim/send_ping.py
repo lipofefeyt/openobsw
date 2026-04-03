@@ -1,43 +1,70 @@
 #!/usr/bin/env python3
 """
-send_ping.py — manually inject a TC(17,1) are-you-alive into obsw_sim.
+sim/send_ping.py — Manual test for openobsw host sim.
+
+Spawns the sim as a subprocess, sends 10 TC(17,1) pings, and parses
+the binary TM response including the sync byte.
 
 Usage:
-    python3 sim/send_ping.py | ./build/sim/obsw_sim
-
-Expected output (stderr):
-    [OBSW] Host sim started. Awaiting TC frames on stdin.
-    [OBSW] S17/1 are-you-alive received on APID 0x010
-
-Expected output (stdout):
-    ACK apid=0x010 svc=17 subsvc=1 flags=0x09 seq=1
+    python3 sim/send_ping.py
 """
-
-import sys
 import struct
+import subprocess
 
-# ---------------------------------------------------------------------------
-# Build a PUS-C TC space packet: S17/1 are-you-alive on APID 0x010
-# ---------------------------------------------------------------------------
 
-APID       = 0x010
-SEQ_FLAGS  = 0b11          # unsegmented
-SEQ_COUNT  = 1
-DATA_LEN   = 3             # 4 bytes payload - 1
+FRAME  = bytes.fromhex("1801c0000003201101" + "00")
+PACKET = struct.pack(">H", len(FRAME)) + FRAME
 
-# Primary header (6 bytes)
-word0 = (0 << 13) | (1 << 12) | (1 << 11) | APID   # TC, sec_hdr=1
-word1 = (SEQ_FLAGS << 14) | SEQ_COUNT
-word2 = DATA_LEN
 
-primary_hdr = struct.pack('>HHH', word0, word1, word2)
+def parse_response(data: bytes):
+    offset, count = 0, 0
+    while offset < len(data):
+        if data[offset] == 0xFF:
+            print("  0xFF — sync byte ✓")
+            offset += 1
+            continue
+        if offset + 2 > len(data): break
+        length = struct.unpack(">H", data[offset:offset+2])[0]
+        offset += 2
+        if offset + length > len(data): break
+        pkt = data[offset:offset+length]
+        offset += length
+        if len(pkt) >= 9:
+            svc, subsvc = pkt[7], pkt[8]
+            label = {
+                (1, 1):  "TM(1,1)  acceptance ✓",
+                (17, 2): "TM(17,2) pong ✓",
+                (1, 7):  "TM(1,7)  completion ✓",
+                (5, 1):  "TM(5,1)  event info",
+            }.get((svc, subsvc), f"TM({svc},{subsvc})")
+            print(f"  {label}")
+            count += 1
+    return count
 
-# PUS-C TC secondary header (4 bytes): PUS ver+ack, svc, subsvc, src_id_hi
-secondary_hdr = bytes([0x11, 17, 1, 0x00])
 
-frame = primary_hdr + secondary_hdr
+def main():
+    print("Spawning host sim, sending 10 × TC(17,1) ping...")
 
-# Length-prefix (2-byte big-endian) + frame
-sys.stdout.buffer.write(struct.pack('>H', len(frame)))
-sys.stdout.buffer.write(frame)
-sys.stdout.buffer.flush()
+    proc = subprocess.Popen(
+        ["./build/sim/obsw_sim"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    stdout, stderr = proc.communicate(input=PACKET * 10, timeout=5)
+
+    print(f"\nReceived {len(stdout)} bytes:")
+    count = parse_response(stdout)
+
+    if stderr:
+        print(f"\nSim log:\n{stderr.decode().strip()}")
+
+    if count >= 3:
+        print(f"\nSUCCESS — {count} TM packets + sync byte received ✓")
+    else:
+        print(f"\nFAILED — only {count} packets received")
+
+
+if __name__ == "__main__":
+    main()

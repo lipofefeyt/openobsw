@@ -9,6 +9,8 @@ uart0: UART.MSP430_USCIA @ {
     sysbus new Bus.BusMultiRegistration { address: 0x05D8; size: 0x1; region: "interruptEnable" };
     sysbus new Bus.BusMultiRegistration { address: 0x05DA; size: 0x1; region: "interruptStatus" }
 }
+    RxInterrupt -> cpu@56
+    TxInterrupt -> cpu@56
 
 info_mem: Memory.ArrayMemory @ sysbus 0x1800
     size: 0x0800
