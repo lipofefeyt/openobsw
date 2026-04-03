@@ -7,75 +7,63 @@ bare metal, FreeRTOS, or RTEMS — and to integrate directly with
 [OpenSVF](https://github.com/lipofefeyt/opensvf) for closed-loop system
 validation against equipment models.
 
-The reference target is the **MSP430FR5969 LaunchPad** — the same hardware
-can be validated under Renode emulation and then flashed and run on the board
-without changing a line of code.
+**Validated on real hardware**: S17 ping/pong confirmed on MSP430FR5969 LaunchPad.
+**Validated in simulation**: Full PUS-C TC/TM pipeline exercised end-to-end via OpenSVF.
 
-## Quick start (host build)
+## Quick start
 
 ```bash
 git clone https://github.com/lipofefeyt/openobsw
 cd openobsw
-pip install pydantic pyyaml --break-system-packages
+bash scripts/setup-workspace.sh   # installs all dependencies
+source ~/.bashrc
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Requirements: `gcc`, `cmake >= 3.16`, `git`, `python3 >= 3.9`, `pydantic >= 2`, `pyyaml`.
-Unity is fetched automatically by CMake.
-
-### Recommended aliases
-
-```bash
-alias omkdebug='cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
-alias omkbuild='cmake --build build'
-alias otest='ctest --test-dir build --output-on-failure'
-alias oclean='rm -rf build'
-```
-
 ## MSP430 cross-compilation
 
-See [docs/msp430-build.md](docs/msp430-build.md) for toolchain installation.
-Once installed:
-
 ```bash
-cmake -B build-msp430 \
-  -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/msp430-toolchain.cmake \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-  -S targets/msp430-fr5969
-cmake --build build-msp430
+mkdebug-msp430 && mkbuild-msp430
 # outputs: build-msp430/openobsw-msp430.{elf,hex,map}
 ```
+
+See [docs/msp430-build.md](docs/msp430-build.md) for toolchain installation.
+
+## Host simulation (OpenSVF integration)
+
+```bash
+cmake --build build
+python3 sim/send_ping.py
+```
+
+The host sim (`build/sim/obsw_sim`) speaks a binary pipe protocol:
+- **stdin**: `[uint16 BE length][TC frame bytes]`
+- **stdout**: `[uint16 BE length][TM packet bytes]` then `[0xFF]` sync byte
+
+This is the interface consumed by the OpenSVF `OBCEmulatorAdapter`.
 
 ## What's in the box
 
 **CCSDS / framing**
 
-| Module | Description | Standard |
-|---|---|---|
-| `ccsds/space_packet` | Space Packet primary header encode/decode | CCSDS 133.0-B |
-| `ccsds/tc_frame` | TC Transfer Frame decode, CRC-16/CCITT | CCSDS 232.0-B |
-| `ccsds/tm_frame` | TM Transfer Frame build, idle fill, FECF | CCSDS 132.0-B |
-
-**TC/TM stack**
-
-| Module | Description |
+| Module | Standard |
 |---|---|
-| `tc/dispatcher` | Zero-alloc static routing table, handler + responder API |
-| `tm/store` | Fixed-size ring buffer, store-and-forward |
-| `hal/io` | Platform I/O vtable (`uint16_t` len, portable to 16-bit targets) |
+| `ccsds/space_packet` | CCSDS 133.0-B |
+| `ccsds/tc_frame` | CCSDS 232.0-B |
+| `ccsds/tm_frame` | CCSDS 132.0-B |
 
 **PUS-C services**
 
-| Module | Description | Standard |
-|---|---|---|
-| `pus/s1` | TC verification: acceptance, completion ack/nak | PUS-C S1 |
-| `pus/s3` | Housekeeping: static parameter sets, periodic tick | PUS-C S3 |
-| `pus/s5` | Event reporting: four severity levels, FDIR coupling | PUS-C S5 |
-| `pus/s6` | Memory management: load, check (CRC-16), dump | PUS-C S6 |
-| `pus/s8` | Function management: static table, recover_nominal | PUS-C S8 |
-| `pus/s17` | Are-you-alive ping/pong | PUS-C S17 |
+| Service | Description |
+|---|---|
+| S1 | TC verification: acceptance, completion ack/nak |
+| S3 | Housekeeping: static parameter sets, periodic tick |
+| S5 | Event reporting: four severity levels, FDIR coupling |
+| S6 | Memory management: load, check (CRC-16), dump |
+| S8 | Function management: static table, recover_nominal |
+| S17 | Are-you-alive ping/pong |
 
 **FDIR**
 
@@ -83,58 +71,27 @@ cmake --build build-msp430
 |---|---|
 | `fdir/fsm` | Safe mode FSM: NOMINAL ↔ SAFE, hooks, TC whitelist |
 | `fdir/watchdog` | Software watchdog, kick API, expiry callback |
-| `hal/arm/trap_table` | ARM Cortex-A exception stubs (ZynqMP) |
-| `hal/msp430/trap_table` | MSP430 fault stubs |
-| `hal/msp430/uart` | USCI_A1 UART driver (FR5969 LaunchPad backchannel) |
+| `hal/msp430/uart` | USCI_A0 UART driver (FR5969 LaunchPad backchannel) |
 
-**SRDB**
-
-| Component | Description |
-|---|---|
-| `srdb/data/*.yaml` | Mission database: parameters, TCs, HK sets, events |
-| `srdb/obsw_srdb/` | Python loader + Pydantic validation + C header codegen |
-| `build/include/obsw/srdb_generated.h` | Generated at build time — named constants for C |
-
-See [docs/architecture.md](docs/architecture.md) for full design documentation.
-See [docs/mission-config.md](docs/mission-config.md) for mission-specific parameters.
-See [docs/msp430-build.md](docs/msp430-build.md) for the MSP430 target build guide.
+**SRDB** — YAML mission database with Pydantic validation and CMake-driven C header codegen.
 
 ## Test coverage
 
 ```
 15 C suites / 97 tests / 0 failures / 0 warnings
-42 Python tests / 0 failures
 ```
 
-| Suite | Tests | Type |
-|---|---|---|
-| test_space_packet | 8 | unit |
-| test_dispatcher | 6 | unit |
-| test_tm_store | 6 | unit |
-| test_tc_frame | 10 | unit |
-| test_tm_frame | 9 | unit |
-| test_s1 | 6 | unit |
-| test_s3 | 10 | unit |
-| test_s5 | 5 | unit |
-| test_s6 | 8 | unit |
-| test_s8 | 5 | unit |
-| test_s17 | 5 | unit |
-| test_fsm | 11 | unit |
-| test_watchdog | 9 | unit |
-| test_s5_fdir | 5 | unit |
-| test_tc_pipeline | 2 | integration |
+## Workspace setup
 
-## Host simulation
+After cloning or workspace reset:
 
 ```bash
-python3 sim/send_ping.py | ./build/sim/obsw_sim
-# [OBSW] Host sim started (SCID=0x001). Awaiting TC frames on stdin.
-# ACK apid=0x010 svc=17 subsvc=1 flags=0x09 seq=1
+bash scripts/setup-workspace.sh
+source ~/.bashrc
 ```
 
 ## VS Code IntelliSense
 
-Add `.vscode/c_cpp_properties.json` with:
 ```json
 {
     "configurations": [
@@ -147,17 +104,15 @@ Add `.vscode/c_cpp_properties.json` with:
 
 ## Roadmap
 
-| Milestone | Content | Status |
-|---|---|---|
-| v0.1 | Space Packet + TC dispatcher + TM store + host sim | ✅ |
-| v0.2 | TC Frame + TM Frame + CRC-16 | ✅ |
-| v0.3 | PUS-C S1, S3, S5, S17 | ✅ |
-| v0.4 | FDIR: FSM, watchdog, trap stubs | ✅ |
-| SRDB | YAML database, Python loader, CMake codegen | ✅ |
-| v0.5 phase 1 | S6 memory mgmt, S8 function mgmt | ✅ |
-| v0.5 phase 2 | MSP430 toolchain, FR5969 target, ELF + HEX output | ✅ |
-| v0.5 phase 3 | Renode MSP430 platform + sentinel peripheral | 🔜 |
-| v0.5 phase 4 | OpenSVF OBCEmulatorAdapter | 🔜 |
+| Milestone | Status |
+|---|---|
+| v0.1 — Space Packet + TC dispatcher + TM store | ✅ |
+| v0.2 — TC Frame + TM Frame + CRC-16 | ✅ |
+| v0.3 — PUS-C S1, S3, S5, S17 | ✅ |
+| v0.4 — FDIR: FSM, watchdog, trap stubs | ✅ |
+| SRDB — YAML database, Python loader, CMake codegen | ✅ |
+| v0.5 — S6/S8, MSP430 build, hardware validation, OpenSVF integration | ✅ |
+| v0.6 — Renode MSP430 emulation, ZynqMP target | 🔜 |
 
 ## Standards references
 
@@ -167,6 +122,7 @@ Add `.vscode/c_cpp_properties.json` with:
 | CCSDS 232.0-B | TC Space Data Link Protocol |
 | CCSDS 132.0-B | TM Space Data Link Protocol |
 | ECSS-E-ST-70-41C | Packet Utilisation Standard (PUS-C) |
+| ECSS-E-TM-10-21A | System validation via simulation |
 
 ## License
 
