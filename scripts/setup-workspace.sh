@@ -13,8 +13,6 @@ echo "=== [1/5] Installing apt packages ==="
 sudo apt-get update -q
 sudo apt-get install -y \
     build-essential \
-    cmake \
-    ninja-build \
     git \
     python3 \
     python3-full \
@@ -26,8 +24,16 @@ sudo apt-get install -y \
     mspdebug \
     unzip \
     wget \
-    curl \
-    libncurses5 2>/dev/null || true
+    curl 2>/dev/null || true
+
+# Install cmake separately — fall back to pip if apt fails
+if ! command -v cmake &>/dev/null; then
+    echo "cmake not found via apt, installing via pip..."
+    pip3 install cmake --break-system-packages
+fi
+
+# Verify cmake
+cmake --version || { echo "ERROR: cmake install failed"; exit 1; }
 
 echo "=== [2/5] Setting up Python venv ==="
 python3 -m venv .venv
