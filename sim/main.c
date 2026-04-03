@@ -242,8 +242,9 @@ int main(void)
         }
 
         drain_tm();
+        write_sync_byte(); /* 0xFF — one control cycle complete */
 
-        /* Periodic tick — emit sync byte every 10 TCs (simulated cycle) */
+        /* Periodic housekeeping every 10 TCs */
         tick++;
         if (tick % 10U == 0U) {
             param_uptime_s++;
@@ -252,7 +253,6 @@ int main(void)
             obsw_wd_tick(&wd_ctx);
             param_wd_kick_count++;
             drain_tm();
-            write_sync_byte(); /* 0xFF — lockstep signal to OBCEmulatorAdapter */
         }
     }
 
