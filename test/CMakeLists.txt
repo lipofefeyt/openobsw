@@ -71,6 +71,18 @@ target_link_libraries(test_s5_fdir PRIVATE obsw unity)
 target_compile_options(test_s5_fdir PRIVATE ${TEST_SUPPRESS})
 add_test(NAME s5_fdir COMMAND test_s5_fdir)
 
+# v0.5 — AOCS (including bdot)
+
+add_executable(test_bdot unit/test_bdot.c)
+target_link_libraries(test_bdot PRIVATE obsw unity)
+target_compile_options(test_bdot PRIVATE ${TEST_SUPPRESS})
+add_test(NAME bdot COMMAND test_bdot)
+
+add_executable(test_adcs unit/test_adcs.c)
+target_link_libraries(test_adcs PRIVATE obsw unity m)
+target_compile_options(test_adcs PRIVATE ${TEST_SUPPRESS})
+add_test(NAME adcs COMMAND test_adcs)
+
 # Integration
 add_executable(test_tc_pipeline integration/test_tc_pipeline.c)
 target_link_libraries(test_tc_pipeline PRIVATE obsw unity)
