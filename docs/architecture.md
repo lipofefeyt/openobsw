@@ -284,10 +284,8 @@ Two-state mode machine. All state is caller-owned; no globals.
 ```mermaid
 stateDiagram-v2
     [*] --> NOMINAL : obsw_fsm_init()
-
-    NOMINAL --> SAFE : obsw_fsm_to_safe()\n(watchdog expiry / trap handler\n/ S5 HIGH safe-trigger event)
-
-    SAFE --> NOMINAL : obsw_fsm_recover() TC handler\n(ground-commanded only)
+    NOMINAL --> SAFE : obsw_fsm_to_safe()
+    SAFE --> NOMINAL : obsw_fsm_to_nominal() via TC(8,1)
 ```
 
 **Entry/exit hooks** are mission-defined function pointers registered in
@@ -361,18 +359,18 @@ If `fsm` is NULL, S5 behaves exactly as in v0.3 — no breaking change.
 
 ```mermaid
 flowchart TD
-    WD[Watchdog expiry\nobsw_wd_tick()]
-    TRAP[Trap handler\ndata abort / prefetch / stack overflow]
-    S5[S5 HIGH event\nmatching safe_trigger_id]
+    WD["Watchdog expiry"]
+    TRAP["Trap handler"]
+    S5["S5 HIGH event"]
 
-    WD   --> SAFE[obsw_fsm_to_safe()]
+    WD   --> SAFE["obsw_fsm_to_safe()"]
     TRAP --> SAFE
     S5   --> SAFE
 
-    SAFE --> HOOK[on_enter_safe hook\ndisable payload\nswitch beacon]
-    SAFE --> TM[TM store\nS5 event report enqueued]
+    SAFE --> HOOK["on_enter_safe hook"]
+    SAFE --> TM["S5 event report"]
 
-    RECOVER[Ground TC\nobsw_fsm_recover()] --> NOM[NOMINAL\non_exit_safe hook]
+    RECOVER["Ground TC(8,1)"] --> NOM["NOMINAL mode"]
 ```
 
 ---
