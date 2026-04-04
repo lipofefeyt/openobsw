@@ -2,20 +2,21 @@
 
 Open-source on-board software core for satellite applications.
 
-A portable, zero-allocation TT&C middleware stack in C11, designed to run on
-bare metal, FreeRTOS, or RTEMS — and to integrate directly with
+A portable, zero-allocation TT&C and AOCS middleware stack in C11, designed
+to run on bare metal, FreeRTOS, or RTEMS — and to integrate directly with
 [OpenSVF](https://github.com/lipofefeyt/opensvf) for closed-loop system
 validation against equipment models.
 
 **Validated on real hardware**: S17 ping/pong confirmed on MSP430FR5969 LaunchPad.
-**Validated in simulation**: Full PUS-C TC/TM pipeline exercised end-to-end via OpenSVF.
+**Closed-loop AOCS**: B-dot detumbling (safe mode) + PD attitude control (nominal).
+**OpenSVF integrated**: full TC/TM pipeline exercised end-to-end via binary pipe.
 
 ## Quick start
 
 ```bash
 git clone https://github.com/lipofefeyt/openobsw
 cd openobsw
-bash scripts/setup-workspace.sh   # installs all dependencies
+bash scripts/setup-workspace.sh
 source ~/.bashrc
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build
@@ -39,10 +40,15 @@ python3 sim/send_ping.py
 ```
 
 The host sim (`build/sim/obsw_sim`) speaks a binary pipe protocol:
-- **stdin**: `[uint16 BE length][TC frame bytes]`
-- **stdout**: `[uint16 BE length][TM packet bytes]` then `[0xFF]` sync byte
 
-This is the interface consumed by the OpenSVF `OBCEmulatorAdapter`.
+```
+stdin:  [0x01][uint16 BE len][TC frame]     — TC uplink
+        [0x02][uint16 BE len][sensor frame] — sensor injection (sim-only)
+stdout: [uint16 BE len][TM packet]          — TM downlink
+        [0xFF]                              — sync byte (end of cycle)
+```
+
+See [docs/architecture.md](docs/architecture.md) for protocol details.
 
 ## What's in the box
 
@@ -71,15 +77,49 @@ This is the interface consumed by the OpenSVF `OBCEmulatorAdapter`.
 |---|---|
 | `fdir/fsm` | Safe mode FSM: NOMINAL ↔ SAFE, hooks, TC whitelist |
 | `fdir/watchdog` | Software watchdog, kick API, expiry callback |
+
+**AOCS**
+
+| Module | Description |
+|---|---|
+| `aocs/bdot` | B-dot detumbling controller (safe mode) |
+| `aocs/adcs` | PD attitude controller + quaternion math (nominal mode) |
+
+**HAL**
+
+| Module | Description |
+|---|---|
 | `hal/msp430/uart` | USCI_A0 UART driver (FR5969 LaunchPad backchannel) |
+| `hal/arm/trap_table` | ARM Cortex-A exception stubs |
+| `hal/msp430/trap_table` | MSP430 fault stubs |
 
 **SRDB** — YAML mission database with Pydantic validation and CMake-driven C header codegen.
 
 ## Test coverage
 
 ```
-15 C suites / 97 tests / 0 failures / 0 warnings
+17 C suites / 116 tests / 0 failures / 0 warnings
 ```
+
+| Suite | Tests | Description |
+|---|---|---|
+| test_space_packet | 8 | CCSDS Space Packet |
+| test_dispatcher | 6 | TC dispatcher routing |
+| test_tm_store | 6 | TM ring buffer |
+| test_tc_frame | 10 | TC Transfer Frame |
+| test_tm_frame | 9 | TM Transfer Frame |
+| test_s1 | 6 | PUS-C S1 verification |
+| test_s3 | 10 | PUS-C S3 housekeeping |
+| test_s5 | 5 | PUS-C S5 events |
+| test_s6 | 8 | PUS-C S6 memory mgmt |
+| test_s8 | 5 | PUS-C S8 function mgmt |
+| test_s17 | 5 | PUS-C S17 ping |
+| test_fsm | 11 | Safe mode FSM |
+| test_watchdog | 9 | Software watchdog |
+| test_s5_fdir | 5 | S5 ↔ FSM coupling |
+| test_tc_pipeline | 2 | Integration |
+| test_bdot | 6 | B-dot controller |
+| test_adcs | 10 | PD controller + quaternion math |
 
 ## Workspace setup
 
@@ -111,8 +151,9 @@ source ~/.bashrc
 | v0.3 — PUS-C S1, S3, S5, S17 | ✅ |
 | v0.4 — FDIR: FSM, watchdog, trap stubs | ✅ |
 | SRDB — YAML database, Python loader, CMake codegen | ✅ |
-| v0.5 — S6/S8, MSP430 build, hardware validation, OpenSVF integration | ✅ |
-| v0.6 — Renode MSP430 emulation, ZynqMP target | 🔜 |
+| v0.5 — S6/S8, MSP430 hardware validation, OpenSVF integration | ✅ |
+| v0.6 — AOCS: B-dot + PD controller, sensor injection protocol | 🔄 |
+| v0.7 — ZynqMP BSP, FreeRTOS tasks, Renode emulation | 🔜 |
 
 ## Standards references
 
