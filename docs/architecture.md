@@ -498,3 +498,95 @@ See [msp430-build.md](msp430-build.md) for toolchain installation.
 The MSP430 build generates `build-msp430/compile_commands.json`. Point
 `c_cpp_properties.json` at it so IntelliSense resolves `srdb_generated.h`
 and MSP430 register names correctly. See the README for the configuration.
+
+---
+
+## AOCS — Attitude and Orbit Control
+
+### Overview
+
+openobsw implements a two-mode AOCS control law that runs as part of the
+main control cycle in `sim/main.c` (host sim) and will run as a dedicated
+task in the FreeRTOS target (v0.7).
+
+```
+FSM mode       Sensors used          Algorithm       Actuators
+─────────────────────────────────────────────────────────────────
+SAFE           Magnetometer          B-dot            Magnetorquers
+NOMINAL        Star tracker + Gyro   PD quaternion    Reaction wheels
+```
+
+### B-dot controller (`aocs/bdot.c`)
+
+Classical detumbling algorithm for safe mode. Requires only a magnetometer
+— appropriate when the spacecraft may be tumbling and the star tracker is
+unavailable.
+
+```
+m_cmd = -k * dB/dt
+
+where:
+  m_cmd  = magnetorquer dipole command [A·m²]
+  k      = controller gain [A·m²·s/T]
+  dB/dt  ≈ (B_now - B_prev) / dt   (finite difference)
+```
+
+Key properties:
+- Zero-allocation, no trigonometry, suitable for MSP430
+- First step always outputs zero (no derivative available)
+- Dipole commands saturated at configurable `max_dipole`
+- `obsw_bdot_reset()` clears state on mode re-entry
+
+### PD attitude controller (`aocs/adcs.c`)
+
+Quaternion-based PD controller for nominal mode. Uses multiplicative
+quaternion error to avoid gimbal lock and singularities.
+
+```
+q_err = q_cmd ⊗ q_meas*           (multiplicative error)
+τ_cmd = -Kp * q_err_vec - Kd * ω  (PD law)
+
+where:
+  q_err_vec = vector part of q_err (x, y, z components)
+  ω         = angular velocity from gyro [rad/s]
+```
+
+Key properties:
+- Short-path enforcement: flips q_err sign if w < 0
+- Torque saturated at configurable `max_torque`
+- Quaternion utilities: normalise, conjugate, multiply
+- Returns `false` if measured quaternion has near-zero norm
+
+### Sensor injection protocol (simulation only)
+
+The host sim extends the pipe protocol with a type-prefixed framing layer.
+This is **simulation-only** — it does not exist in flight software.
+
+```
+Type 0x01 — TC uplink (unchanged):
+  [0x01][uint16 BE length][TC frame bytes]
+
+Type 0x02 — Sensor injection:
+  [0x02][uint16 BE length][obsw_sensor_frame_t bytes]
+```
+
+`obsw_sensor_frame_t` carries magnetometer (Tesla), star tracker
+(quaternion), and gyro (rad/s) data with per-sensor validity flags.
+This matches OpenSVF equipment model output units directly.
+
+The `OBCEmulatorAdapter` in OpenSVF reads sensor values from
+`ParameterStore` each tick and packages them as type-0x02 frames
+before sending the heartbeat TC. Sensor frames are parsed in
+`sim/sensor_inject.c` and fed directly to the AOCS algorithms.
+
+### AOCS telemetry
+
+The control loop emits observability TM each cycle:
+
+| Packet | Contents |
+|---|---|
+| TM(8,128) | B-dot report: `dB/dt[3]`, `m_cmd[3]` |
+| TM(8,129) | PD report: `torque_cmd[3]`, `angle_err_rad`, `q_err[4]` |
+
+These are parsed by `OBCEmulatorAdapter._parse_tm()` and written to
+`ParameterStore` so OpenSVF scenarios can assert on AOCS behaviour.
