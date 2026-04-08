@@ -78,3 +78,14 @@ parameters:
     description: "Ticks remaining before watchdog expiry"
     type: uint32
     unit: ticks
+
+# AOCS b-dot controller parameters
+bdot_gain:
+  description: "B-dot controller gain (Am2.s/T)"
+  value: 1.0e4
+  dtype: float
+
+bdot_max_dipole:
+  description: "Maximum MTQ dipole moment (Am2)"
+  value: 10.0
+  dtype: float
