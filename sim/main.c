@@ -59,14 +59,6 @@ static void write_actuator_frame(const obsw_actuator_frame_t *act)
 
 static obsw_tm_store_t tm_store;
 
-static void drain_tm(void)
-{
-    uint8_t pkt[OBSW_TM_MAX_PACKET_LEN];
-    uint16_t len = 0;
-    while (obsw_tm_store_dequeue(&tm_store, pkt, sizeof(pkt), &len) == OBSW_TM_OK)
-        write_tm_packet(pkt, len);
-}
-
 static void sim_responder(uint8_t f, const obsw_tc_t *t, void *c)
 {
     (void)f; (void)t; (void)c;
@@ -250,21 +242,58 @@ obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
                 if (dt <= 0.0f) dt = 0.1f;
                 last_sim_time = sensor.sim_time;
 
-                if (sensor.mag_valid) {
+                obsw_actuator_frame_t act;
+                memset(&act, 0, sizeof(act));
+                act.sim_time   = sensor.sim_time;
+                act.controller = 0;
+
+                bool in_nominal = !obsw_fsm_is_safe(&fsm_ctx);
+
+                if (in_nominal && sensor.st_valid && sensor.gyro_valid) {
+                    obsw_quat_t q_meas = {
+                        sensor.st_q_w, sensor.st_q_x,
+                        sensor.st_q_y, sensor.st_q_z
+                    };
+                    float omega[3] = {
+                        sensor.gyro_x, sensor.gyro_y, sensor.gyro_z
+                    };
+                    obsw_adcs_output_t adcs_out;
+                    if (obsw_adcs_step(&adcs_ctx, &q_meas, omega, &adcs_out)) {
+                        act.rw_torque_x = adcs_out.torque_cmd[0];
+                        act.rw_torque_y = adcs_out.torque_cmd[1];
+                        act.rw_torque_z = adcs_out.torque_cmd[2];
+                        act.controller  = 1;
+                        fprintf(stderr,
+                            "[OBSW] adcs tau=[%.3e,%.3e,%.3e] Nm\n",
+                            act.rw_torque_x, act.rw_torque_y, act.rw_torque_z);
+                    }
+                } else if (sensor.mag_valid) {
                     float b[3] = {sensor.mag_x, sensor.mag_y, sensor.mag_z};
-                    obsw_bdot_output_t out;
-                    obsw_bdot_step(&bdot_ctx, b, dt, &out);
+                    obsw_bdot_output_t bdot_out;
+                    obsw_bdot_step(&bdot_ctx, b, dt, &bdot_out);
+                    act.mtq_dipole_x = bdot_out.m_cmd[0];
+                    act.mtq_dipole_y = bdot_out.m_cmd[1];
+                    act.mtq_dipole_z = bdot_out.m_cmd[2];
+                    act.controller   = 0;
                     fprintf(stderr,
-                        "[OBSW] bdot m=[%.3e, %.3e, %.3e] Am2\n",
-                        out.m_cmd[0], out.m_cmd[1], out.m_cmd[2]);
+                        "[OBSW] bdot m=[%.3e,%.3e,%.3e] Am2\n",
+                        act.mtq_dipole_x, act.mtq_dipole_y, act.mtq_dipole_z);
                 }
+
+                /* Drain any TM generated during sensor tick */
+                {
+                    uint8_t pkt[OBSW_TM_MAX_PACKET_LEN];
+                    uint16_t plen = 0;
+                    while (obsw_tm_store_dequeue(&tm_store, pkt, sizeof(pkt), &plen) == OBSW_TM_OK)
+                        write_tm_packet(pkt, plen);
+                }
+                write_actuator_frame(&act);
+
                 param_uptime_s = (uint16_t)sensor.sim_time;
                 obsw_wd_kick(&wd_ctx);
                 obsw_s3_tick(&s3_ctx);
             }
         }
-
-        drain_tm();
         write_sync_byte();
     }
 
