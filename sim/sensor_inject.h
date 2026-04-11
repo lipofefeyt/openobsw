@@ -105,4 +105,27 @@ bool obsw_sim_parse_sensor(const uint8_t *buf, uint16_t len, obsw_sensor_frame_t
 }
 #endif
 
+
+/* ------------------------------------------------------------------ */
+/* Type 0x03 — Actuator output frame (obsw_sim → SVF)                 */
+/* ------------------------------------------------------------------ */
+
+#define OBSW_FRAME_TM       0x04U /**< TM packet frame (sim stdout) */
+#define OBSW_FRAME_ACTUATOR 0x03U
+
+#pragma pack(push, 1)
+typedef struct {
+    float mtq_dipole_x;   /**< MTQ dipole X [Am²] — b-dot output   */
+    float mtq_dipole_y;
+    float mtq_dipole_z;
+    float rw_torque_x;    /**< RW torque X [Nm]  — ADCS output     */
+    float rw_torque_y;
+    float rw_torque_z;
+    uint8_t controller;   /**< 0=bdot (SAFE), 1=adcs (NOMINAL)     */
+    float sim_time;       /**< Simulation time [s]                  */
+} obsw_actuator_frame_t;
+#pragma pack(pop)
+
+#define OBSW_ACTUATOR_FRAME_LEN ((uint16_t)sizeof(obsw_actuator_frame_t))
+
 #endif /* OBSW_SIM_SENSOR_INJECT_H */
