@@ -8,6 +8,7 @@
 
 #include "obsw/obsw.h"
 #include "obsw/aocs/bdot.h"
+#include "obsw/aocs/adcs.h"
 #include "obsw/srdb_generated.h"
 #include "sensor_inject.h"
 
@@ -21,8 +22,12 @@
 
 static void write_tm_packet(const uint8_t *pkt, uint16_t len)
 {
-    uint8_t hdr[2] = {(uint8_t)(len >> 8), (uint8_t)(len & 0xFFU)};
-    fwrite(hdr, 1, 2, stdout);
+    uint8_t hdr[3] = {
+        OBSW_FRAME_TM,
+        (uint8_t)(len >> 8),
+        (uint8_t)(len & 0xFFU)
+    };
+    fwrite(hdr, 1, 3, stdout);
     fwrite(pkt, 1, len, stdout);
     fflush(stdout);
 }
@@ -31,6 +36,20 @@ static void write_sync_byte(void)
 {
     uint8_t sync = 0xFFU;
     fwrite(&sync, 1, 1, stdout);
+    fflush(stdout);
+}
+
+
+static void write_actuator_frame(const obsw_actuator_frame_t *act)
+{
+    uint16_t len = OBSW_ACTUATOR_FRAME_LEN;
+    uint8_t  hdr[3] = {
+        OBSW_FRAME_ACTUATOR,
+        (uint8_t)(len >> 8),
+        (uint8_t)(len & 0xFFU)
+    };
+    fwrite(hdr, 1, 3, stdout);
+    fwrite(act, 1, len, stdout);
     fflush(stdout);
 }
 
@@ -195,6 +214,14 @@ obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
         .max_dipole = 10.0f,
     };
     obsw_bdot_init(&bdot_ctx, &bdot_cfg);
+
+    obsw_adcs_ctx_t adcs_ctx;
+    obsw_adcs_config_t adcs_cfg = {
+        .kp         = 0.5f,
+        .kd         = 0.1f,
+        .max_torque = 0.01f,
+    };
+    obsw_adcs_init(&adcs_ctx, &adcs_cfg);
 
     float last_sim_time = 0.0f;
 
