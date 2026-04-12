@@ -176,5 +176,26 @@ def main() -> None:
     print(f"[srdb codegen] wrote {output_path}")
 
 
+def export_main() -> None:
+    """CLI entry point: obsw-srdb-export --data-dir srdb/data --output-dir srdb/export"""
+    import argparse
+    from obsw_srdb.loader import SRDBLoader
+    from obsw_srdb.csv_io import export_csv
+
+    parser = argparse.ArgumentParser(description="Export SRDB to CSV")
+    parser.add_argument("--data-dir", default="srdb/data",
+                        help="Path to SRDB YAML data directory")
+    parser.add_argument("--output-dir", default="srdb/export",
+                        help="Output directory for CSV files")
+    args = parser.parse_args()
+
+    srdb = SRDBLoader.load(args.data_dir)
+    export_csv(srdb, args.output_dir)
+    print(f"Exported {len(srdb.parameters)} parameters, "
+          f"{len(srdb.telecommands)} TCs, "
+          f"{len(srdb.events)} events, "
+          f"{len(srdb.hk_sets)} HK sets to {args.output_dir}/")
+
+
 if __name__ == "__main__":
     main()
