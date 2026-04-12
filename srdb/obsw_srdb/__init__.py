@@ -24,3 +24,4 @@ __all__ = [
     "Spacecraft",
     "Telecommand",
 ]
+from .hardware import HardwareProfile, load_profile, list_profiles
