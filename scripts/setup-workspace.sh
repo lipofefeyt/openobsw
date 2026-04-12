@@ -2,7 +2,7 @@
 # OpenOBSW Workspace Setup
 # Usage: source scripts/setup-workspace.sh
 
-set -e
+# set -e intentionally omitted — sourced scripts must not exit the parent shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)
 cd "$REPO"
 
@@ -26,7 +26,7 @@ if [ ! -f "$REPO/.venv/bin/activate" ]; then
     "$VENV_PY" -m venv "$REPO/.venv"
 fi
 source "$REPO/.venv/bin/activate"
-pip install -q pydantic pyyaml
+pip install -q pydantic pyyaml pytest
 pip install -q -e "$REPO/srdb/"
 echo "    Python: $(python3 --version)"
 python3 -c "import yaml, pydantic; print('    deps: pyyaml + pydantic OK')"

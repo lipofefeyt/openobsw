@@ -20,6 +20,7 @@ dev = [
 
 [project.scripts]
 obsw-srdb-codegen = "obsw_srdb.codegen:main"
+obsw-srdb-export = "obsw_srdb.codegen:export_main"
 
 [tool.setuptools.packages.find]
 where = ["."]
