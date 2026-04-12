@@ -58,6 +58,7 @@ def generate_header(srdb: SRDB) -> str:
         f"#define SRDB_SPACECRAFT_NAME  \"{srdb.spacecraft.name}\"",
         f"#define SRDB_SCID             0x{srdb.spacecraft.scid:03X}U",
         f"#define SRDB_APID_DEFAULT     0x{srdb.spacecraft.apid_default:03X}U",
+        f"#define SRDB_VERSION          \"0.1.0\"",
         "",
     ]
 

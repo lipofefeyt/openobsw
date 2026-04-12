@@ -218,6 +218,7 @@ obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
     float last_sim_time = 0.0f;
 
     fprintf(stderr, "[OBSW] Host sim started (type-frame protocol v2).\n");
+    fprintf(stderr, "[OBSW] SRDB version: %s\n", SRDB_VERSION);
 
     uint8_t frame[1024];
     while (1)
