@@ -1,0 +1,12 @@
+# GPS Receiver — default profile
+hardware_id: gps_default
+type: gps
+description: "Generic spaceborne GPS receiver — representative smallsat parameters"
+vendor: generic
+params:
+  position_noise_m: 5.0        # 1-sigma position error per axis [m]
+  velocity_noise_m_s: 0.05     # 1-sigma velocity error per axis [m/s]
+  acquisition_time_s: 30.0     # cold start acquisition time [s]
+  update_rate_hz: 1.0          # position fix rate [Hz]
+  eclipse_outage: true         # lose fix during eclipse
+  min_satellites: 4            # minimum satellites for fix
