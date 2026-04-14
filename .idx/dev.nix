@@ -15,6 +15,9 @@
     pkgs.git
     pkgs.curl
 
+    # Renode emulator (MSP430X support in unstable)
+    pkgs.renode-unstable
+
     # aarch64 cross-compiler (lighter — just the compiler, no full sysroot)
     pkgs.gcc-arm-embedded
 
