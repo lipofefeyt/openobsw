@@ -2,6 +2,7 @@
 build/
 build-msp430/
 build-*/
+build_*/
 
 # Compiled objects
 *.o
