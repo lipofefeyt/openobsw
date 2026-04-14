@@ -1,170 +1,176 @@
-# openobsw
+# OpenOBSW
 
-Open-source on-board software core for satellite applications.
+**Open-source spacecraft On-Board Software stack**
 
-A portable, zero-allocation TT&C and AOCS middleware stack in C11, designed
-to run on bare metal, FreeRTOS, or RTEMS — and to integrate directly with
-[OpenSVF](https://github.com/lipofefeyt/opensvf) for closed-loop system
-validation against equipment models.
+OpenOBSW is a C11 OBSW implementing PUS-C services, b-dot detumbling, ADCS PD attitude control, and FDIR. Validated on MSP430FR5969 hardware and aarch64 (ZynqMP) via QEMU emulation.
 
-**Validated on real hardware**: S17 ping/pong confirmed on MSP430FR5969 LaunchPad.
-**Closed-loop AOCS**: B-dot detumbling (safe mode) + PD attitude control (nominal).
-**OpenSVF integrated**: full TC/TM pipeline exercised end-to-end via binary pipe.
+---
 
-## Quick start
+## Architecture
+
+```
+openobsw
+├── src/
+│   ├── aocs/
+│   │   ├── bdot.c          B-dot detumbling (SAFE mode)
+│   │   └── adcs.c          PD attitude control (NOMINAL mode)
+│   ├── fdir/
+│   │   └── fsm.c           Mode FSM (SAFE ↔ NOMINAL)
+│   ├── pus/
+│   │   ├── s1.c            TC verification
+│   │   ├── s3.c            HK reporting
+│   │   ├── s5.c            Event reporting + FDIR trigger
+│   │   ├── s8.c            Function management
+│   │   └── s17.c           Test (ping/pong)
+│   └── hal/
+│       └── msp430/
+│           └── uart.c      MSP430FR5969 UCA0 UART HAL
+├── sim/
+│   ├── main.c              Host simulation harness (pipe protocol v3)
+│   └── sensor_inject.h     Sensor/actuator frame definitions
+├── srdb/                   Spacecraft Resource Database
+│   ├── data/               YAML parameter/event/TC definitions
+│   ├── hardware/           Equipment hardware profiles
+│   └── obsw_srdb/          Python loader + codegen + CSV I/O
+├── cmake/
+│   ├── msp430-toolchain.cmake
+│   └── aarch64-linux-gnu.cmake
+└── test/                   Unity C test suites (17 tests)
+```
+
+---
+
+## Validated Targets
+
+| Target | Architecture | Toolchain | Validation |
+|---|---|---|---|
+| `obsw_msp430` | MSP430X (FR5969) | msp430-elf-gcc 9.3 | Hardware (LaunchPad) |
+| `obsw_sim` | x86_64 (host) | system GCC | CI + SVF SIL |
+| `obsw_sim_aarch64` | aarch64 (ZynqMP PS) | aarch64-linux-gnu-gcc 12.3 | QEMU user-mode |
+
+---
+
+## Wire Protocol (obsw_sim ↔ SVF)
+
+Protocol v3 — all frames type-prefixed:
+
+```
+SVF → obsw_sim stdin:
+  [0x01][uint16 BE len][TC frame]          TC uplink
+  [0x02][uint16 BE len][sensor_frame_t]    MAG/GYRO/ST injection
+
+obsw_sim → SVF stdout:
+  [0x04][uint16 BE len][TM packet]         PUS TM downlink
+  [0x03][uint16 BE len][actuator_frame_t]  Dipoles / RW torques
+  [0xFF]                                   End of tick
+
+obsw_sim stderr (startup):
+  [OBSW] Host sim started (type-frame protocol v2).
+  [OBSW] SRDB version: 0.1.0
+```
+
+### Mode-aware AOCS
+
+```
+FSM SAFE    + MAG valid  → b-dot  → mtq_dipole[3]  Am²
+FSM NOMINAL + ST + GYRO  → ADCS PD → rw_torque[3] Nm
+```
+
+---
+
+## Quick Start
 
 ```bash
 git clone https://github.com/lipofefeyt/openobsw
 cd openobsw
-bash scripts/setup-workspace.sh
-source ~/.bashrc
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
+source scripts/setup-workspace.sh
+
+# Build host sim (x86_64)
+omkbuild
+omkctest        # 17/17 tests passing
+
+# Build for aarch64 (ZynqMP)
+omkbuild-aarch64
+
+# Run under QEMU
+omksim-aarch64
 ```
 
-## MSP430 cross-compilation
+---
+
+## SRDB
+
+The Spacecraft Resource Database defines all parameters, events, telecommands and HK sets:
 
 ```bash
-mkdebug-msp430 && mkbuild-msp430
-# outputs: build-msp430/openobsw-msp430.{elf,hex,map}
+# Export to CSV for review
+obsw-srdb-export --data-dir srdb/data --output-dir srdb/export
+
+# Regenerate C header
+obsw-srdb-codegen --data-dir srdb/data --output include/obsw/srdb_generated.h
 ```
 
-See [docs/msp430-build.md](docs/msp430-build.md) for toolchain installation.
+Hardware profiles in `srdb/data/hardware/`:
 
-## Host simulation (OpenSVF integration)
-
-```bash
-cmake --build build
-python3 sim/send_ping.py
-```
-
-The host sim (`build/sim/obsw_sim`) speaks a binary pipe protocol:
-
-```
-stdin:  [0x01][uint16 BE len][TC frame]     — TC uplink
-        [0x02][uint16 BE len][sensor frame] — sensor injection (sim-only)
-stdout: [uint16 BE len][TM packet]          — TM downlink
-        [0xFF]                              — sync byte (end of cycle)
-```
-
-See [docs/architecture.md](docs/architecture.md) for protocol details.
-
-## What's in the box
-
-**CCSDS / framing**
-
-| Module | Standard |
+| Profile | Type |
 |---|---|
-| `ccsds/space_packet` | CCSDS 133.0-B |
-| `ccsds/tc_frame` | CCSDS 232.0-B |
-| `ccsds/tm_frame` | CCSDS 132.0-B |
+| `rw_default` | Reaction wheel |
+| `rw_sinclair_rw003` | Sinclair RW-0.03 |
+| `mtq_default` | Magnetorquer |
+| `mag_default` | Magnetometer |
+| `gyro_default` | Gyroscope |
+| `thr_default` | Cold gas thruster |
+| `thr_moog_monarc_1` | Moog Monarc-1 hydrazine |
+| `gps_default` | Generic GPS |
+| `gps_novatel_oem7` | NovAtel OEM7 |
+| `thermal_default` | 3-node thermal |
 
-**PUS-C services**
+---
 
-| Service | Description |
-|---|---|
-| S1 | TC verification: acceptance, completion ack/nak |
-| S3 | Housekeeping: static parameter sets, periodic tick |
-| S5 | Event reporting: four severity levels, FDIR coupling |
-| S6 | Memory management: load, check (CRC-16), dump |
-| S8 | Function management: static table, recover_nominal |
-| S17 | Are-you-alive ping/pong |
+## PUS Services
 
-**FDIR**
-
-| Module | Description |
-|---|---|
-| `fdir/fsm` | Safe mode FSM: NOMINAL ↔ SAFE, hooks, TC whitelist |
-| `fdir/watchdog` | Software watchdog, kick API, expiry callback |
-
-**AOCS**
-
-| Module | Description |
-|---|---|
-| `aocs/bdot` | B-dot detumbling controller (safe mode) |
-| `aocs/adcs` | PD attitude controller + quaternion math (nominal mode) |
-
-**HAL**
-
-| Module | Description |
-|---|---|
-| `hal/msp430/uart` | USCI_A0 UART driver (FR5969 LaunchPad backchannel) |
-| `hal/arm/trap_table` | ARM Cortex-A exception stubs |
-| `hal/msp430/trap_table` | MSP430 fault stubs |
-
-**SRDB** — YAML mission database with Pydantic validation and CMake-driven C header codegen.
-
-## Test coverage
-
-```
-17 C suites / 116 tests / 0 failures / 0 warnings
-```
-
-| Suite | Tests | Description |
+| Service | Status | Description |
 |---|---|---|
-| test_space_packet | 8 | CCSDS Space Packet |
-| test_dispatcher | 6 | TC dispatcher routing |
-| test_tm_store | 6 | TM ring buffer |
-| test_tc_frame | 10 | TC Transfer Frame |
-| test_tm_frame | 9 | TM Transfer Frame |
-| test_s1 | 6 | PUS-C S1 verification |
-| test_s3 | 10 | PUS-C S3 housekeeping |
-| test_s5 | 5 | PUS-C S5 events |
-| test_s6 | 8 | PUS-C S6 memory mgmt |
-| test_s8 | 5 | PUS-C S8 function mgmt |
-| test_s17 | 5 | PUS-C S17 ping |
-| test_fsm | 11 | Safe mode FSM |
-| test_watchdog | 9 | Software watchdog |
-| test_s5_fdir | 5 | S5 ↔ FSM coupling |
-| test_tc_pipeline | 2 | Integration |
-| test_bdot | 6 | B-dot controller |
-| test_adcs | 10 | PD controller + quaternion math |
+| S1 | ✅ | TC verification (acceptance + completion) |
+| S3 | ✅ | HK parameter reporting |
+| S5 | ✅ | Event reporting + FDIR safe trigger |
+| S6 | ✅ | Memory management |
+| S8 | ✅ | Function management (recover nominal) |
+| S17 | ✅ | Are-you-alive ping/pong |
+| S20 | ✅ | Parameter get/set |
 
-## Workspace setup
+---
 
-After cloning or workspace reset:
+## Related Projects
 
-```bash
-bash scripts/setup-workspace.sh
-source ~/.bashrc
-```
+| Project | Role |
+|---|---|
+| [opensvf](https://github.com/lipofefeyt/opensvf) | Python SVF: validates openobsw via SIL |
+| [opensvf-kde](https://github.com/lipofefeyt/opensvf-kde) | C++ 6-DOF physics engine (FMI 2.0) |
 
-## VS Code IntelliSense
-
-```json
-{
-    "configurations": [
-        { "name": "Host",   "compileCommands": "${workspaceFolder}/build/compile_commands.json" },
-        { "name": "MSP430", "compileCommands": "${workspaceFolder}/build-msp430/compile_commands.json" }
-    ],
-    "version": 4
-}
-```
+---
 
 ## Roadmap
 
 | Milestone | Status |
 |---|---|
-| v0.1 — Space Packet + TC dispatcher + TM store | ✅ |
-| v0.2 — TC Frame + TM Frame + CRC-16 | ✅ |
-| v0.3 — PUS-C S1, S3, S5, S17 | ✅ |
-| v0.4 — FDIR: FSM, watchdog, trap stubs | ✅ |
-| SRDB — YAML database, Python loader, CMake codegen | ✅ |
-| v0.5 — S6/S8, MSP430 hardware validation, OpenSVF integration | ✅ |
-| v0.6 — AOCS: B-dot + PD controller, sensor injection protocol | 🔄 |
-| v0.7 — ZynqMP BSP, FreeRTOS tasks, Renode emulation | 🔜 |
+| v0.1–v0.4 — Core PUS stack | ✅ Done |
+| v0.5 — FDIR, AOCS, MSP430 hardware | ✅ Done |
+| v0.6 — ZynqMP aarch64 SIL | 🔄 In progress |
+| v0.7 — Renode ZynqMP emulation | 📋 Planned |
 
-## Standards references
+### v0.6 Open Issues
+- #18 Cadence UART HAL for ZynqMP PS
+- #19 Renode ZynqMP platform script
+- #14 MSP430 HAL UART driver (for hardware flashing)
+- #17 Flash to MSP430FR5969 LaunchPad
 
-| Standard | Title |
-|---|---|
-| CCSDS 133.0-B | Space Packet Protocol |
-| CCSDS 232.0-B | TC Space Data Link Protocol |
-| CCSDS 132.0-B | TM Space Data Link Protocol |
-| ECSS-E-ST-70-41C | Packet Utilisation Standard (PUS-C) |
-| ECSS-E-TM-10-21A | System validation via simulation |
+---
 
 ## License
 
 Apache 2.0
+
+---
+
+*Sister projects: [opensvf](https://github.com/lipofefeyt/opensvf) · [opensvf-kde](https://github.com/lipofefeyt/opensvf-kde)*
