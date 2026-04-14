@@ -2,6 +2,25 @@
 # OpenOBSW Workspace Setup
 # Usage: source scripts/setup-workspace.sh
 
+# ------------------------------------------------------------------ #
+# Cross-compilation toolchain (aarch64 ZynqMP)                       #
+# ------------------------------------------------------------------ #
+AARCH64_GCC=$(find /nix/store -name "aarch64-unknown-linux-gnu-gcc"     -path "*/gcc-wrapper*/bin/*" -type f 2>/dev/null | head -1)
+if [ -z "$AARCH64_GCC" ]; then
+    echo "[toolchain] Installing aarch64 cross-compiler..."
+    nix-env -iA nixpkgs.pkgsCross.aarch64-multiplatform.stdenv.cc         > /dev/null 2>&1 && echo "[toolchain] aarch64-linux-gnu-gcc installed"
+fi
+# Add nix profile to PATH
+if [ -d "$HOME/.nix-profile/bin" ]; then
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+fi
+# Verify
+if command -v aarch64-unknown-linux-gnu-gcc &>/dev/null; then
+    echo "[toolchain] aarch64: $(aarch64-unknown-linux-gnu-gcc --version | head -1)"
+else
+    echo "[toolchain] WARNING: aarch64-unknown-linux-gnu-gcc not found"
+fi
+
 # set -e intentionally omitted — sourced scripts must not exit the parent shell
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)
 cd "$REPO"
@@ -71,6 +90,9 @@ alias omkbuild='cmake --build $OPENOBSW_REPO/build -j$(nproc) 2>&1 | tail -5'
 alias omkctest='cd $OPENOBSW_REPO/build && ctest --output-on-failure && cd $OPENOBSW_REPO'
 alias omkclean='rm -rf $OPENOBSW_REPO/build && echo "Build cleaned"'
 alias omkrebuild='omkclean && cmake -S $OPENOBSW_REPO -B $OPENOBSW_REPO/build -DCMAKE_BUILD_TYPE=Debug -DOBSW_BUILD_TESTS=ON -DOBSW_BUILD_SIM=ON -G "Unix Makefiles" -DPython3_EXECUTABLE=$OPENOBSW_PYTHON > /dev/null && omkbuild'
+alias omkbuild-aarch64='cmake -S $REPO -B $REPO/build_aarch64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$REPO/cmake/aarch64-linux-gnu.cmake -DOBSW_BUILD_TESTS=OFF -DOBSW_BUILD_SIM=ON -G "Unix Makefiles" -DPython3_EXECUTABLE=$REPO/.venv/bin/python3 > /dev/null && cmake --build $REPO/build_aarch64 -j$(nproc) 2>&1 | tail -3'
+alias omksim-aarch64='qemu-aarch64 -L $(find /nix/store -name "ld-linux-aarch64.so.1" -path "*/glibc-aarch64*" 2>/dev/null | head -1 | xargs dirname | xargs dirname) $REPO/build_aarch64/sim/obsw_sim'
+alias omkfile-aarch64='file $REPO/build_aarch64/sim/obsw_sim'
 alias omksim='$OPENOBSW_REPO/build/sim/obsw_sim'
 alias omktest-sim='python3 $OPENOBSW_REPO/sim/send_ping.py'
 
