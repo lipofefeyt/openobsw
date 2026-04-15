@@ -30,6 +30,12 @@ typedef struct {
     void *ctx;
 } obsw_io_ops_t;
 
+/**
+ * Platform-specific UART initialisation.
+ * Called once at startup before any I/O.
+ */
+void obsw_uart_init(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -93,6 +93,8 @@ alias omkrebuild='omkclean && cmake -S $OPENOBSW_REPO -B $OPENOBSW_REPO/build -D
 alias omkbuild-aarch64='cmake -S $REPO -B $REPO/build_aarch64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$REPO/cmake/aarch64-linux-gnu.cmake -DOBSW_BUILD_TESTS=OFF -DOBSW_BUILD_SIM=ON -G "Unix Makefiles" -DPython3_EXECUTABLE=$REPO/.venv/bin/python3 > /dev/null && cmake --build $REPO/build_aarch64 -j$(nproc) 2>&1 | tail -3'
 alias omksim-aarch64='qemu-aarch64 -L $(find /nix/store -name "ld-linux-aarch64.so.1" -path "*/glibc-aarch64*" 2>/dev/null | head -1 | xargs dirname | xargs dirname) $REPO/build_aarch64/sim/obsw_sim'
 alias omkfile-aarch64='file $REPO/build_aarch64/sim/obsw_sim'
+alias omkbuild-zynqmp='cmake -S $REPO -B $REPO/build_zynqmp -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=$REPO/cmake/aarch64-linux-gnu.cmake -DOBSW_BUILD_TESTS=OFF -DOBSW_BUILD_SIM=OFF -DOBSW_BUILD_ZYNQMP=ON -G "Unix Makefiles" -DPython3_EXECUTABLE=$REPO/.venv/bin/python3 > /dev/null && cmake --build $REPO/build_zynqmp -j$(nproc) 2>&1 | tail -5'
+alias omkfile-zynqmp='file $REPO/build_zynqmp/obsw_zynqmp'
 alias omksim='$OPENOBSW_REPO/build/sim/obsw_sim'
 alias omktest-sim='python3 $OPENOBSW_REPO/sim/send_ping.py'
 
