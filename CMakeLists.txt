@@ -34,3 +34,23 @@ endif()
 if(OBSW_BUILD_SIM)
     add_subdirectory(sim)
 endif()
+# ------------------------------------------------------------------ #
+# ZynqMP bare-metal target (aarch64)                                  #
+# ------------------------------------------------------------------ #
+option(OBSW_BUILD_ZYNQMP "Build ZynqMP bare-metal target" OFF)
+
+if(OBSW_BUILD_ZYNQMP)
+    add_executable(obsw_zynqmp
+        src/hal/zynqmp/uart.c
+        src/platform/zynqmp/main.c
+    )
+    target_link_libraries(obsw_zynqmp PRIVATE obsw obsw_srdb_generated m)
+    target_include_directories(obsw_zynqmp PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${CMAKE_BINARY_DIR}/include
+    )
+    target_compile_definitions(obsw_zynqmp PRIVATE
+        ZYNQMP_BUILD
+        ZYNQMP_UART_BAUD_INIT
+    )
+endif()
