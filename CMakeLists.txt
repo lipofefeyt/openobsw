@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(openobsw VERSION 0.1.0 LANGUAGES C)
+project(openobsw VERSION 0.1.0 LANGUAGES C ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -43,8 +43,10 @@ if(OBSW_BUILD_ZYNQMP)
     add_executable(obsw_zynqmp
         src/hal/zynqmp/uart.c
         src/platform/zynqmp/main.c
+        src/platform/zynqmp/startup.S
+        src/platform/zynqmp/libc_shim.c
     )
-    target_link_libraries(obsw_zynqmp PRIVATE obsw obsw_srdb_generated m)
+    target_link_libraries(obsw_zynqmp PRIVATE obsw obsw_srdb_generated)
     target_include_directories(obsw_zynqmp PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${CMAKE_BINARY_DIR}/include
@@ -53,4 +55,11 @@ if(OBSW_BUILD_ZYNQMP)
         ZYNQMP_BUILD
         ZYNQMP_UART_BAUD_INIT
     )
+    # Linker script for bare-metal (only when using none-elf toolchain)
+    if(CMAKE_C_COMPILER MATCHES "none-elf")
+        target_link_options(obsw_zynqmp PRIVATE
+            -T ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/zynqmp/zynqmp.ld
+            -nostdlib -nostartfiles
+        )
+    endif()
 endif()
