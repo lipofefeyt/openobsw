@@ -4,14 +4,7 @@
  *
  * Runs the openobsw PUS stack on ZynqMP Cortex-A53 (APU).
  * Uses Cadence UART HAL for I/O (uart0 @ 0xFF000000).
- *
- * Wire protocol: same type-prefixed pipe protocol as obsw_sim,
- * but over UART instead of stdin/stdout. Enables Renode SIL via
- * the HostInterface socket adapter.
- *
- * Build:
- *   cmake -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake \
- *         -DOBSW_BUILD_ZYNQMP=ON ...
+ * Wire protocol v3: type-prefixed frames (same as obsw_sim).
  */
 
 #include "obsw/hal/io.h"
@@ -24,13 +17,9 @@
 #include <stdint.h>
 #include <string.h>
 
-/* Defined in src/hal/zynqmp/uart.c */
 extern obsw_io_ops_t obsw_uart_ops;
 extern void obsw_uart_init(void);
 
-/* ------------------------------------------------------------------ */
-/* Frame types (same as sim/sensor_inject.h)                          */
-/* ------------------------------------------------------------------ */
 #define OBSW_FRAME_TC       0x01U
 #define OBSW_FRAME_SENSOR   0x02U
 #define OBSW_FRAME_ACTUATOR 0x03U
@@ -38,7 +27,7 @@ extern void obsw_uart_init(void);
 #define OBSW_SYNC_BYTE      0xFFU
 
 /* ------------------------------------------------------------------ */
-/* UART I/O helpers                                                    */
+/* UART helpers                                                        */
 /* ------------------------------------------------------------------ */
 
 static void uart_putc(uint8_t c)
@@ -46,9 +35,10 @@ static void uart_putc(uint8_t c)
     obsw_uart_ops.write(&c, 1, obsw_uart_ops.ctx);
 }
 
-static int uart_getc(uint8_t *c)
+static void uart_getc_blocking(uint8_t *c)
 {
-    return obsw_uart_ops.read(c, 1, obsw_uart_ops.ctx);
+    while (obsw_uart_ops.read(c, 1, obsw_uart_ops.ctx) == 0)
+        ;
 }
 
 static void uart_write_u16_be(uint16_t v)
@@ -69,28 +59,30 @@ static void write_sync(void)
     uart_putc(OBSW_SYNC_BYTE);
 }
 
-/* ------------------------------------------------------------------ */
-/* Read typed frame from UART                                         */
-/* ------------------------------------------------------------------ */
-
-static uint8_t read_frame(uint8_t *buf, uint16_t bufsize,
-                          uint16_t *out_len)
+static uint8_t read_frame(uint8_t *buf, uint16_t bufsize, uint16_t *out_len)
 {
     uint8_t type, hi, lo;
-    if (!uart_getc(&type)) return 0;
-    if (!uart_getc(&hi))   return 0;
-    if (!uart_getc(&lo))   return 0;
+    uart_getc_blocking(&type);
+    uart_getc_blocking(&hi);
+    uart_getc_blocking(&lo);
 
     uint16_t len = (uint16_t)(((uint16_t)hi << 8) | lo);
     if (len > bufsize) return 0;
 
-    for (uint16_t i = 0; i < len; i++) {
-        uint8_t b;
-        if (!uart_getc(&b)) return 0;
-        buf[i] = b;
-    }
+    for (uint16_t i = 0; i < len; i++)
+        uart_getc_blocking(&buf[i]);
+
     *out_len = len;
     return type;
+}
+
+/* ------------------------------------------------------------------ */
+/* No-op responder                                                     */
+/* ------------------------------------------------------------------ */
+
+static void noop_responder(uint8_t flag, const obsw_tc_t *tc, void *ctx)
+{
+    (void)flag; (void)tc; (void)ctx;
 }
 
 /* ------------------------------------------------------------------ */
@@ -101,16 +93,14 @@ int main(void)
 {
     obsw_uart_init();
 
-    /* Announce startup */
-    const char *banner = "[OBSW] ZynqMP started (type-frame protocol v2).\r\n";
+    const char *banner =
+        "[OBSW] ZynqMP started (type-frame protocol v2).\r\n";
     obsw_uart_ops.write((const uint8_t *)banner,
-                        (uint16_t)strlen(banner),
-                        obsw_uart_ops.ctx);
+                        (uint16_t)strlen(banner), obsw_uart_ops.ctx);
 
     const char *version = "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
     obsw_uart_ops.write((const uint8_t *)version,
-                        (uint16_t)strlen(version),
-                        obsw_uart_ops.ctx);
+                        (uint16_t)strlen(version), obsw_uart_ops.ctx);
 
     /* TM store */
     obsw_tm_store_t tm_store;
@@ -133,25 +123,29 @@ int main(void)
     obsw_bdot_init(&bdot_ctx, &bdot_cfg);
 
     obsw_adcs_ctx_t adcs_ctx;
-    obsw_adcs_config_t adcs_cfg = { .kp = 0.5f, .kd = 0.1f,
-                                    .max_torque = 0.01f };
+    obsw_adcs_config_t adcs_cfg = {
+        .kp = 0.5f, .kd = 0.1f, .max_torque = 0.01f
+    };
     obsw_adcs_init(&adcs_ctx, &adcs_cfg);
 
-    /* S17 ping */
-    obsw_s1_ctx_t  s1_ctx  = {0};
+    /* PUS contexts */
+    obsw_s1_ctx_t s1_ctx = {0};
+    s1_ctx.tm_store = &tm_store;
+    s1_ctx.apid     = SRDB_APID_DEFAULT;
+
     obsw_s17_ctx_t s17_ctx = {0};
-    s1_ctx.tm_store  = &tm_store;
-    s1_ctx.apid      = SRDB_APID_DEFAULT;
     s17_ctx.tm_store = &tm_store;
     s17_ctx.s1       = &s1_ctx;
     s17_ctx.apid     = SRDB_APID_DEFAULT;
 
+    /* Dispatcher */
     obsw_tc_route_t routes[] = {
         { .apid = 0xFFFF, .service = 17, .subservice = 1,
           .handler = obsw_s17_ping, .ctx = &s17_ctx },
     };
     obsw_tc_dispatcher_t dispatcher;
-    obsw_tc_dispatcher_init(&dispatcher, routes, 1, NULL, NULL);
+    obsw_tc_dispatcher_init(&dispatcher, routes, 1,
+                            noop_responder, NULL);
 
     float last_sim_time = 0.0f;
     uint8_t frame[256];
@@ -165,7 +159,6 @@ int main(void)
             obsw_tc_dispatcher_feed(&dispatcher, frame, frame_len);
 
         } else if (type == OBSW_FRAME_SENSOR) {
-            /* Unpack sensor frame (same layout as obsw_sensor_frame_t) */
             float mag_x, mag_y, mag_z;
             uint8_t mag_valid;
             float st_qw, st_qx, st_qy, st_qz;
@@ -194,8 +187,7 @@ int main(void)
             if (dt <= 0.0f) dt = 0.1f;
             last_sim_time = sim_time;
 
-            /* Actuator frame */
-            float act[8] = {0};  /* mtq[3], rw[3], controller, sim_time */
+            float act[8] = {0};
             act[7] = sim_time;
 
             bool nominal = !obsw_fsm_is_safe(&fsm_ctx);
@@ -207,7 +199,7 @@ int main(void)
                     act[3] = out.torque_cmd[0];
                     act[4] = out.torque_cmd[1];
                     act[5] = out.torque_cmd[2];
-                    act[6] = 1.0f;  /* controller = adcs */
+                    act[6] = 1.0f;
                 }
             } else if (mag_valid) {
                 float b[3] = { mag_x, mag_y, mag_z };
@@ -216,22 +208,19 @@ int main(void)
                 act[0] = out.m_cmd[0];
                 act[1] = out.m_cmd[1];
                 act[2] = out.m_cmd[2];
-                act[6] = 0.0f;  /* controller = bdot */
+                act[6] = 0.0f;
             }
 
-            /* Write actuator frame (29 bytes: 6 floats + uint8 + float) */
             uint8_t act_buf[29];
             uint8_t *q = act_buf;
             for (int i = 0; i < 6; i++) {
                 memcpy(q, &act[i], 4); q += 4;
             }
-            uint8_t ctrl = (uint8_t)act[6];
-            *q++ = ctrl;
+            *q++ = (uint8_t)act[6];
             memcpy(q, &act[7], 4);
             write_frame(OBSW_FRAME_ACTUATOR, act_buf, 29);
         }
 
-        /* Drain TM */
         uint8_t pkt[128];
         uint16_t plen = 0;
         while (obsw_tm_store_dequeue(&tm_store, pkt,
