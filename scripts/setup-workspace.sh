@@ -5,10 +5,10 @@
 # ------------------------------------------------------------------ #
 # Cross-compilation toolchain (aarch64 ZynqMP)                       #
 # ------------------------------------------------------------------ #
-AARCH64_GCC=$(find /nix/store -name "aarch64-unknown-linux-gnu-gcc"     -path "*/gcc-wrapper*/bin/*" -type f 2>/dev/null | head -1)
+AARCH64_GCC=$(find /nix/store -name "aarch64-unknown-linux-gnu-gcc" -path "*/gcc-wrapper*/bin/*" -type f 2>/dev/null | head -1)
 if [ -z "$AARCH64_GCC" ]; then
     echo "[toolchain] Installing aarch64 cross-compiler..."
-    nix-env -iA nixpkgs.pkgsCross.aarch64-multiplatform.stdenv.cc         > /dev/null 2>&1 && echo "[toolchain] aarch64-linux-gnu-gcc installed"
+    nix-env -iA nixpkgs.pkgsCross.aarch64-multiplatform.stdenv.cc > /dev/null 2>&1 && echo "[toolchain] aarch64-linux-gnu-gcc installed"
 fi
 # Add nix profile to PATH
 if [ -d "$HOME/.nix-profile/bin" ]; then
@@ -86,6 +86,11 @@ echo "[4/4] Setting up aliases..."
 export OPENOBSW_REPO="$REPO"
 export OPENOBSW_PYTHON="$PYTHON_EXE"
 
+# General alisases
+alias bashed='vim ~/.bashrc'
+alias bashed='source ~/.bashrc'
+
+# Build aliases
 alias omkbuild='cmake --build $OPENOBSW_REPO/build -j$(nproc) 2>&1 | tail -5'
 alias omkctest='cd $OPENOBSW_REPO/build && ctest --output-on-failure && cd $OPENOBSW_REPO'
 alias omkclean='rm -rf $OPENOBSW_REPO/build && echo "Build cleaned"'
@@ -97,6 +102,10 @@ alias omkbuild-zynqmp='cmake -S $REPO -B $REPO/build_zynqmp -DCMAKE_BUILD_TYPE=D
 alias omkfile-zynqmp='file $REPO/build_zynqmp/obsw_zynqmp'
 alias omksim='$OPENOBSW_REPO/build/sim/obsw_sim'
 alias omktest-sim='python3 $OPENOBSW_REPO/sim/send_ping.py'
+
+# Probably to be changed in the future
+alias baremetal-build='cmake --build build_zynqmp_baremetal -j$(nproc)'
+alias baremetal-objcopy='/tmp/arm-gnu-toolchain-12.3.rel1-x86_64-aarch64-none-elf/bin/aarch64-none-elf-objcopy -O binary build_zynqmp_baremetal/obsw_zynqmp build_zynqmp_baremetal/obsw_zynqmp.bin'
 
 echo ""
 echo "=== Setup complete ==="
