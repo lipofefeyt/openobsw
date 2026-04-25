@@ -98,3 +98,8 @@ add_executable(test_s8 unit/test_s8.c)
 target_link_libraries(test_s8 PRIVATE obsw unity)
 target_compile_options(test_s8 PRIVATE ${TEST_SUPPRESS})
 add_test(NAME s8 COMMAND test_s8)
+
+add_executable(test_s20 unit/test_s20.c)
+target_link_libraries(test_s20 PRIVATE obsw unity)
+target_compile_options(test_s20 PRIVATE ${TEST_SUPPRESS})
+add_test(NAME s20 COMMAND test_s20)
