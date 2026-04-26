@@ -1,38 +1,41 @@
 # OpenOBSW
 
-**Open-source spacecraft On-Board Software stack**
+**Open-source spacecraft On-Board Software stack — C11, PUS-C, validated on real hardware**
 
-OpenOBSW is a C11 OBSW implementing PUS-C services, b-dot detumbling, ADCS PD attitude control, and FDIR. Validated on MSP430FR5969 hardware, x86_64 host simulation, aarch64 QEMU, and ZynqMP Renode emulation.
+OpenOBSW is a flight software stack for small satellites. It implements the PUS-C service protocol, b-dot detumbling, ADCS PD attitude control, and FDIR — in portable C11 with zero dynamic allocation. It runs on MSP430FR5969 hardware, x86_64 host simulation, aarch64 QEMU, and ZynqMP Renode emulation. It is validated by [OpenSVF](https://github.com/lipofefeyt/opensvf) in closed-loop SIL against a 6-DOF physics engine.
 
 ---
 
-## Validated Targets
+## Validated targets
 
-| Target | Architecture | Transport | Validation |
+| Target | Architecture | Transport | Status |
 |---|---|---|---|
-| `obsw_msp430` | MSP430X (FR5969) | UCA0 UART | ✅ Hardware (LaunchPad) |
+| `obsw_msp430` | MSP430X (FR5969) | UCA0 UART 9600 baud | ✅ Hardware (LaunchPad) |
 | `obsw_sim` | x86_64 (host) | stdin/stdout pipe | ✅ CI + SVF SIL |
 | `obsw_sim_aarch64` | aarch64 (ZynqMP PS) | stdin/stdout pipe via QEMU | ✅ QEMU user-mode |
-| `obsw_zynqmp` | aarch64 bare-metal | Cadence UART (0xFF000000) | ✅ Renode ZynqMP |
+| `obsw_zynqmp` | aarch64 bare-metal | Cadence UART @ 0xFF000000 | ✅ Renode ZynqMP |
 
 ---
 
-## Quick Start
+## Quick start
 
 ```bash
 git clone https://github.com/lipofefeyt/openobsw
 cd openobsw
 source scripts/setup-workspace.sh
 
-omkbuild        # host sim (x86_64)
-omkctest        # 17/17 C tests
+omkbuild        # build host sim (x86_64)
+omkctest        # run 18 C unit tests
+```
 
-omkbuild-aarch64     # aarch64 Linux (QEMU)
-omksim-aarch64       # run under QEMU
-
-baremetal-build      # aarch64 bare-metal (Renode)
-renode renode/zynqmp_obsw.resc   # start Renode
-python3 renode/test_ping_zynqmp.py  # validate ping
+```
+Test project /home/user/openobsw/build
+ 1/18 Test  #1: space_packet ...........   Passed    0.01 sec
+ 2/18 Test  #2: dispatcher .............   Passed    0.00 sec
+...
+17/18 Test #17: s8 .....................   Passed    0.00 sec
+18/18 Test #18: s20 ....................   Passed    0.00 sec
+100% tests passed, 0 tests failed out of 18
 ```
 
 ---
@@ -40,96 +43,95 @@ python3 renode/test_ping_zynqmp.py  # validate ping
 ## Architecture
 
 ```
-openobsw
+openobsw/
 ├── src/
-│   ├── aocs/
-│   │   ├── bdot.c          B-dot detumbling (SAFE mode)
-│   │   └── adcs.c          PD attitude control (NOMINAL mode)
-│   ├── fdir/
-│   │   └── fsm.c           Mode FSM (SAFE ↔ NOMINAL)
 │   ├── pus/
-│   │   ├── s1.c            TC verification
-│   │   ├── s3.c            HK reporting
-│   │   ├── s5.c            Event reporting + FDIR
-│   │   ├── s6.c            Memory management
-│   │   ├── s8.c            Function management
-│   │   ├── s17.c           Test (ping/pong)
-│   │   └── s20.c           Parameter get/set
-│   └── hal/
-│       ├── msp430/uart.c   MSP430FR5969 UCA0 UART HAL
-│       └── zynqmp/uart.c   ZynqMP Cadence UART HAL (0xFF000000)
+│   │   ├── s1.c      TC verification (TM 1,1/2/3/7/8)
+│   │   ├── s3.c      Housekeeping reporting
+│   │   ├── s5.c      Event reporting + FDIR triggers
+│   │   ├── s6.c      Memory management (load/check/dump)
+│   │   ├── s8.c      Function management (recover_nominal)
+│   │   ├── s17.c     Are-you-alive ping/pong
+│   │   └── s20.c     On-board parameter get/set
+│   ├── aocs/
+│   │   ├── bdot.c    B-dot detumbling (SAFE mode)
+│   │   └── adcs.c    PD attitude control (NOMINAL mode)
+│   ├── fdir/
+│   │   ├── fsm.c     Mode FSM (SAFE ↔ NOMINAL)
+│   │   └── watchdog.c  Software watchdog
+│   ├── hal/
+│   │   ├── msp430/uart.c   MSP430FR5969 UCA0 UART
+│   │   └── zynqmp/uart.c   ZynqMP Cadence UART (register-level)
+│   └── platform/
+│       └── zynqmp/
+│           ├── main.c      ZynqMP bare-metal entry point
+│           ├── startup.S   AArch64 minimal startup
+│           └── zynqmp.ld   Linker script (load at 0x400000)
 ├── sim/
-│   └── main.c              Host sim (stdin/stdout pipe protocol v3)
-├── src/platform/
-│   └── zynqmp/
-│       ├── main.c          ZynqMP bare-metal entry point
-│       ├── startup.S       AArch64 minimal startup (_start, BSS clear)
-│       ├── zynqmp.ld       Linker script (0x400000, separate RX/RW)
-│       └── libc_shim.c     memcpy/memset/strlen/sqrtf/acosf stubs
+│   └── main.c        Host sim — wire protocol v3 over stdin/stdout
 ├── renode/
-│   ├── zynqmp_obsw.resc    Renode ZynqMP platform script
-│   └── test_ping_zynqmp.py S17 ping test via Renode socket
-├── srdb/                   Spacecraft Resource Database
-└── cmake/
-    ├── msp430-toolchain.cmake
-    ├── aarch64-linux-gnu.cmake   Linux cross-compiler
-    └── aarch64-none-elf.cmake    Bare-metal toolchain (Renode)
+│   ├── zynqmp_obsw.resc     Renode ZynqMP platform script
+│   └── test_ping_zynqmp.py  TC(17,1) ping validation via socket
+└── srdb/
+    └── data/
+        ├── parameters.yaml  TM parameter definitions (ID, type, limits)
+        └── spacecraft.yaml  APID, modes, default gains
 ```
 
 ---
 
-## Wire Protocol v3
+## PUS-C services
+
+| Service | Subservices | Notes |
+|---|---|---|
+| S1 TC Verification | TM(1,1) accept, TM(1,2) fail, TM(1,7) complete, TM(1,8) fail | All TC handlers emit S1 reports |
+| S3 HK Reporting | TC(3,1) define, TC(3,5/6) enable/disable, TM(3,25) report | Essential sets auto-enabled at boot |
+| S5 Event Reporting | TM(5,1–4) info/low/medium/high | High-severity events trigger safe mode |
+| S6 Memory Management | TC(6,2) load, TC(6,5) check, TC(6,9) dump | CRC-16/CCITT verification |
+| S8 Function Management | TC(8,1) perform | Function ID 1 = recover to NOMINAL |
+| S17 Are-You-Alive | TC(17,1) ping, TM(17,2) pong | Used as heartbeat by SVF |
+| S20 Parameter Management | TC(20,1) set, TC(20,3) get, TM(20,2) report | Static parameter table, zero allocation |
+
+---
+
+## Wire protocol v3
+
+The same protocol runs over stdin/stdout (host sim), QEMU pipe, and Renode socket:
 
 ```
-SVF/host → OBSW stdin (or UART):
-  [0x01][uint16 BE len][TC frame]          TC uplink
-  [0x02][uint16 BE len][sensor_frame_t]    MAG/GYRO/ST injection
+Host/SVF → OBSW:
+  [0x01][uint16 BE len][PUS TC bytes]       TC uplink
+  [0x02][uint16 BE len][sensor_frame_t]     MAG/GYRO/ST sensor injection
 
-OBSW → SVF stdout (or UART):
-  [0x04][uint16 BE len][TM packet]         PUS TM downlink
-  [0x03][uint16 BE len][actuator_frame_t]  Dipoles / RW torques
-  [0xFF]                                   End of tick
+OBSW → Host/SVF:
+  [0x03][uint16 BE len][actuator_frame_t]   MTQ dipoles + RW torques
+  [0x04][uint16 BE len][PUS TM bytes]       TM downlink
+  [0xFF]                                    End of tick (sync byte)
 
-OBSW stderr/UART (startup):
+Startup (stderr/UART):
   [OBSW] ZynqMP started (type-frame protocol v2).
   [OBSW] SRDB version: 0.1.0
 ```
 
----
+`sensor_frame_t` (47 bytes, packed, little-endian): MAG xyz + valid, ST quaternion + valid, GYRO xyz + valid, sim_time.
 
-## Renode ZynqMP Emulation
-
-The ZynqMP target runs the real C11 OBSW on Renode's emulated Cortex-A53:
-
-```
-test_ping_zynqmp.py                    Renode v1.15
-  TCP socket ──────────────────────► ZynqMP platform
-                                       zynqmp.repl:
-                                         4x Cortex-A53 (APU)
-                                         Cadence UART @ 0xFF000000
-                                         Full DDR map
-                                       obsw_zynqmp ELF loaded at 0x400000
-                                       startup.S → main.c
-                                       Cadence UART HAL (register access)
-```
-
-**Validated:** TC(17,1) → TM(1,1) acceptance + TM(17,2) pong + TM(1,7) completion
-
-This is stronger than QEMU user-mode — the UART HAL exercises real Cadence UART register writes that Renode intercepts and emulates.
+`actuator_frame_t` (29 bytes, packed, little-endian): MTQ dipoles xyz, RW torques xyz, controller byte, sim_time.
 
 ---
 
-## PUS Services
+## Renode ZynqMP emulation
 
-| Service | Status |
-|---|---|
-| S1 TC Verification | ✅ |
-| S3 HK Reporting | ✅ |
-| S5 Event Reporting + FDIR | ✅ |
-| S6 Memory Management | ✅ |
-| S8 Function Management | ✅ |
-| S17 Are-You-Alive | ✅ |
-| S20 Parameter Get/Set | ✅ |
+The ZynqMP bare-metal binary runs on Renode's emulated Cortex-A53. The Cadence UART HAL exercises real UART register writes that Renode intercepts — this is stronger validation than QEMU user-mode.
+
+```bash
+# Terminal 1
+renode renode/zynqmp_obsw.resc
+
+# Terminal 2 — validated: TM(1,1) + TM(17,2) + TM(1,7)
+python3 renode/test_ping_zynqmp.py
+```
+
+OpenSVF connects to the same Renode socket and runs full closed-loop campaigns against the ZynqMP binary.
 
 ---
 
@@ -138,32 +140,50 @@ This is stronger than QEMU user-mode — the UART HAL exercises real Cadence UAR
 | Target | Toolchain | Install |
 |---|---|---|
 | Host sim | System GCC | pre-installed |
-| MSP430 | msp430-elf-gcc 9.3 | `nix-env -iA nixpkgs.msp430-elf-gcc` |
+| MSP430 | msp430-elf-gcc 9.3.1 | `nix-env -iA nixpkgs.msp430-elf-gcc` |
 | aarch64 Linux | aarch64-unknown-linux-gnu-gcc | `nix-env -iA nixpkgs.pkgsCross.aarch64-multiplatform.stdenv.cc` |
-| aarch64 bare-metal | aarch64-none-elf-gcc 12.3 | Download from developer.arm.com |
+| aarch64 bare-metal | aarch64-none-elf-gcc 12.3 | [ARM Developer](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads) |
+
+---
+
+## MSP430 hardware validation
+
+Tested on MSP430FR5969 LaunchPad:
+
+- UCA0 UART (not UCA1) at 9600 baud, 1MHz MCLK
+- `PM5CTL0 &= ~LOCKLPM5` to unlock GPIO
+- Watchdog disabled at startup
+- COM5 application UART, COM6 backchannel debug
+
+```bash
+# Flash and validate
+MSPFlasher -i USB -w build_msp430/obsw_msp430.hex -v -z [VCC]
+```
 
 ---
 
 ## Roadmap
 
-| Milestone | Status |
+| Version | Status |
 |---|---|
-| v0.1–v0.4 — Core PUS stack | ✅ Done |
-| v0.5 — FDIR, AOCS, MSP430 hardware | ✅ Done |
-| v0.6 — ZynqMP aarch64 SIL + Renode | ✅ Done |
-| v0.7 — Full SVF closed loop via Renode socket | 📋 Planned |
+| v0.1–v0.4 — Core PUS stack (S1, S3, S5, S17), CCSDS framing | ✅ Done |
+| v0.5 — FDIR, b-dot, ADCS PD, MSP430 hardware validation | ✅ Done |
+| v0.6 — ZynqMP aarch64 SIL, S6/S8, SRDB, Renode emulation | ✅ Done |
+| v0.7 — S20 parameter management, SVF closed-loop via Renode socket | ✅ Done |
 
 ---
 
-## Related Projects
+## Related projects
 
 | Project | Role |
 |---|---|
-| [opensvf](https://github.com/lipofefeyt/opensvf) | Python SVF: validates openobsw via SIL |
-| [opensvf-kde](https://github.com/lipofefeyt/opensvf-kde) | C++ 6-DOF physics engine (FMI 2.0) |
+| [opensvf](https://github.com/lipofefeyt/opensvf) | Python SVF: validates openobsw in closed-loop SIL |
+| [opensvf-kde](https://github.com/lipofefeyt/opensvf-kde) | C++ 6-DOF kinematics and dynamics engine (FMI 3.0) |
 
 ---
 
 ## License
 
 Apache 2.0
+
+*Built by [lipofefeyt](https://github.com/lipofefeyt)*
