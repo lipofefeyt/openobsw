@@ -2,7 +2,7 @@
 #include <string.h>
 
 /* PUS-C secondary header layout (TC): CRC excluded here, minimal fields */
-#define PUS_TC_SEC_HDR_LEN 4U /* PUS version(4b) ack(4b) svc(8b) subsvc(8b) src_id(16b) */
+#define PUS_TC_SEC_HDR_LEN 5U  /* PUS-C: ver+ack(1) + svc(1) + subsvc(1) + src_id(2) */
 
 int obsw_tc_dispatcher_init(obsw_tc_dispatcher_t *d,
                             obsw_tc_route_t *table,

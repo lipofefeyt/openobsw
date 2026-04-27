@@ -38,23 +38,24 @@ static size_t make_tc_frame_with_pus(uint8_t *buf, size_t buf_len,
     (void)buf_len;
 
     /* Build PUS-C TC space packet: 6 primary hdr + 4 secondary hdr */
-    uint8_t sp[10];
+    uint8_t sp[11]; /* 6 primary + 5 PUS-C secondary */
     obsw_sp_primary_hdr_t hdr = {
         .type = OBSW_SP_TYPE_TC,
         .sec_hdr_flag = 1,
         .apid = apid,
         .seq_flags = OBSW_SP_SEQ_UNSEGMENTED,
         .seq_count = 1,
-        .data_len = 3, /* 4 bytes payload - 1 */
+        .data_len = 4, /* 5 bytes PUS-C secondary header - 1 */
     };
     obsw_sp_encode_primary(&hdr, sp);
     sp[6] = 0x11; /* PUS-C ver + ack flags */
     sp[7] = svc;
     sp[8] = subsvc;
     sp[9] = 0x00;
+    sp[10] = 0x00; /* src_id LSB */
 
     /* Wrap in TC Transfer Frame */
-    size_t sp_len = 10;
+    size_t sp_len = 11;
     size_t total = OBSW_TC_FRAME_PRIMARY_HDR_LEN + sp_len + OBSW_TC_FRAME_CRC_LEN;
     uint16_t flen = (uint16_t)(total - 1U);
 
