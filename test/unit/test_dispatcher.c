@@ -52,14 +52,15 @@ static size_t make_tc_frame(uint8_t *buf, size_t buf_len,
         .apid = apid,
         .seq_flags = OBSW_SP_SEQ_UNSEGMENTED,
         .seq_count = 1,
-        .data_len = 3, /* 4 bytes of PUS secondary header */
+        .data_len = 4, /* 5 bytes PUS-C secondary header - 1 */
     };
     obsw_sp_encode_primary(&hdr, buf);
     buf[6] = 0x11; /* PUS-C version + ack flags */
     buf[7] = svc;
     buf[8] = subsvc;
     buf[9] = 0x00;
-    return 10;
+    buf[10] = 0x00; /* src_id LSB */
+    return 11;
 }
 
 /* ------------------------------------------------------------------ */
