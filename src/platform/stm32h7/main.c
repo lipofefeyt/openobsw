@@ -27,6 +27,109 @@
  #include <stdint.h>
  #include <string.h>
  #include <stdio.h>
+
+/* ------------------------------------------------------------------ */
+/* RCC register map (minimal — only what clock init needs)            */
+/* ------------------------------------------------------------------ */
+
+#define RCC_CR          (*(volatile uint32_t *)(0x58024400UL + 0x000))
+#define RCC_CFGR        (*(volatile uint32_t *)(0x58024400UL + 0x010))
+#define RCC_D1CFGR      (*(volatile uint32_t *)(0x58024400UL + 0x018))
+#define RCC_D2CFGR      (*(volatile uint32_t *)(0x58024400UL + 0x01C))
+#define RCC_D3CFGR      (*(volatile uint32_t *)(0x58024400UL + 0x020))
+#define RCC_PLLCKSELR   (*(volatile uint32_t *)(0x58024400UL + 0x028))
+#define RCC_PLLCFGR     (*(volatile uint32_t *)(0x58024400UL + 0x02C))
+#define RCC_PLL1DIVR    (*(volatile uint32_t *)(0x58024400UL + 0x030))
+
+/* Flash latency register */
+#define FLASH_ACR       (*(volatile uint32_t *)(0x52002000UL + 0x000))
+
+/* PWR register — needed to set VOS0 for 480 MHz */
+#define PWR_CR3         (*(volatile uint32_t *)(0x58024800UL + 0x00C))
+#define PWR_D3CR        (*(volatile uint32_t *)(0x58024800UL + 0x018))
+#define SYSCFG_PWRCR    (*(volatile uint32_t *)(0x58000400UL + 0x004))
+
+ /**
+ * STM32H750 System Clock Configuration
+ *
+ * Target: SYSCLK = 480 MHz, APB1 = 120 MHz
+ * Source: HSE 25 MHz (WeAct board crystal) → PLL1
+ *
+ * PLL1 configuration:
+ *   HSE = 25 MHz
+ *   DIVM1 = 5   → PLL1 input = 5 MHz (ref clock)
+ *   DIVN1 = 192 → VCO = 960 MHz
+ *   DIVP1 = 2   → SYSCLK = 480 MHz
+ *   DIVQ1 = 4   → PLL1Q = 240 MHz (USB, SPI etc.)
+ *   DIVR1 = 2   → PLL1R = 480 MHz
+ *
+ * APB prescalers:
+ *   PPRE1 (APB1) = /4 → 120 MHz  ← USART3 BRR = 120000000/115200 = 1041
+ *   PPRE2 (APB2) = /2 → 240 MHz
+ *
+ * Add this block at the top of main(), before obsw_uart_init():
+ */
+static void system_clock_init(void)
+{
+    /* 1. Boost VOS to VOS0 (required for 480 MHz) */
+    /* Enable SYSCFG clock */
+    *(volatile uint32_t *)(0x58024400UL + 0x0E4) |= (1U << 1); /* APB4ENR SYSCFGEN */
+    /* Set VOS0 via SYSCFG_PWRCR ODEN bit */
+    SYSCFG_PWRCR |= (1U << 0);
+    /* Wait for VOS ready */
+    while (!(PWR_D3CR & (1U << 13)))
+        ;
+
+    /* 2. Enable HSE */
+    RCC_CR |= (1U << 16);          /* HSEON */
+    while (!(RCC_CR & (1U << 17))) /* Wait HSERDY */
+        ;
+
+    /* 3. Flash latency for 480 MHz (4 wait states + 2 extra = 6 total, VOS0) */
+    FLASH_ACR = (FLASH_ACR & ~0xFU) | 6U;
+    FLASH_ACR |= (1U << 8);   /* ARTEN  */
+    FLASH_ACR |= (1U << 9);   /* ARTRST — not needed but harmless */
+
+    /* 4. Configure PLL1: HSE/5 * 192 / 2 = 480 MHz */
+    /* Select HSE as PLL source, DIVM1=5 */
+    RCC_PLLCKSELR = (2U << 0)    /* PLLSRC = HSE */
+                  | (5U << 4);   /* DIVM1 = 5 */
+
+    /* DIVN1=192-1=191, DIVP1=2-1=1, DIVQ1=4-1=3, DIVR1=2-1=1 */
+    RCC_PLL1DIVR = ((191U) << 0)  /* DIVN1 */
+                 | ((1U)   << 9)  /* DIVP1 */
+                 | ((3U)   << 16) /* DIVQ1 */
+                 | ((1U)   << 24);/* DIVR1 */
+
+    /* Enable PLL1 fractional and wide-range VCO */
+    RCC_PLLCFGR = (1U << 0)   /* DIVPEN — enable P output */
+                | (1U << 1)   /* DIVQEN — enable Q output */
+                | (1U << 2)   /* DIVREN — enable R output */
+                | (3U << 2)   /* PLL1RGE: input 4-8 MHz range */
+                | (1U << 4);  /* PLL1VCOSEL: wide VCO 192-836 MHz */
+
+    /* 5. Enable PLL1 */
+    RCC_CR |= (1U << 24);          /* PLL1ON */
+    while (!(RCC_CR & (1U << 25))) /* Wait PLL1RDY */
+        ;
+
+    /* 6. Set bus prescalers before switching clock */
+    /* D1CFGR: HPRE=/2 (AHB=240MHz), D1PPRE=/2 (APB3=120MHz) */
+    RCC_D1CFGR = (8U << 0)   /* HPRE = /2 */
+               | (4U << 4);  /* D1PPRE = /2 */
+
+    /* D2CFGR: D2PPRE1=/4 (APB1=120MHz), D2PPRE2=/2 (APB2=240MHz) */
+    RCC_D2CFGR = (5U << 4)   /* D2PPRE1 = /4 → APB1 = 120 MHz */
+               | (4U << 8);  /* D2PPRE2 = /2 → APB2 = 240 MHz */
+
+    /* D3CFGR: D3PPRE=/2 (APB4=120MHz) */
+    RCC_D3CFGR = (4U << 4);
+
+    /* 7. Switch system clock to PLL1P */
+    RCC_CFGR = (RCC_CFGR & ~0x7U) | 3U; /* SW = PLL1 */
+    while (((RCC_CFGR >> 3) & 0x7U) != 3U) /* Wait SWS = PLL1 */
+        ;
+}
  
  /* ------------------------------------------------------------------ */
  /* External symbols from startup.S and HAL                             */
@@ -107,6 +210,9 @@
  
  int main(void)
  {
+     /* Init the clock */
+     //system_clock_init();
+
      /* Peripheral init */
      obsw_uart_init();
  

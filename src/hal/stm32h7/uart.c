@@ -81,7 +81,7 @@ void obsw_uart_init(void)
     USART3_CR3 = 0;
  
     /* BRR = APB1_CLK / baud = 120000000 / 115200 = 1041 */
-    USART3_BRR = 1041U;
+    USART3_BRR = 555U;
  
     /* Enable TX, RX, USART */
     USART3_CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
