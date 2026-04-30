@@ -123,3 +123,45 @@ jobs:
           name: obsw_zynqmp_bin
           path: build_zynqmp/obsw_zynqmp.bin
           retention-days: 30
+
+  # ------------------------------------------------------------------ #
+  # STM32H750 bare-metal binary — build and publish as artifact        #
+  # ------------------------------------------------------------------ #
+  build-stm32h7:
+    name: STM32H750 bare-metal binary
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build python3-pip gcc-arm-none-eabi
+          pip install pydantic pyyaml --break-system-packages
+          pip install -e srdb/ --break-system-packages
+
+      - name: Verify toolchain
+        run: arm-none-eabi-gcc --version
+
+      - name: Configure STM32H7 build
+        run: |
+          cmake -S targets/stm32h7 -B build_stm32h7 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/stm32h7-toolchain.cmake \
+            -DPython3_EXECUTABLE=$(which python3) \
+            -DOBSW_ROOT=$(pwd)
+
+      - name: Build STM32H7 binary
+        run: |
+          cmake --build build_stm32h7 -j$(nproc)
+          ls -lh build_stm32h7/obsw_stm32h7.bin
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obsw_stm32h7_bin
+          path: build_stm32h7/obsw_stm32h7.bin
+          retention-days: 30
