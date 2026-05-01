@@ -2,7 +2,7 @@
 
 **Open-source spacecraft On-Board Software stack — C11, PUS-C, validated on real hardware**
 
-OpenOBSW is a flight software stack for small satellites. It implements the PUS-C service protocol, b-dot detumbling, ADCS PD attitude control, and FDIR — in portable C11 with zero dynamic allocation. It runs on MSP430FR5969 hardware, x86_64 host simulation, aarch64 QEMU, and ZynqMP Renode emulation. It is validated by [OpenSVF](https://github.com/lipofefeyt/opensvf) in closed-loop SIL against a 6-DOF physics engine.
+OpenOBSW is a flight software stack for small satellites. It implements the PUS-C service protocol, b-dot detumbling, ADCS PD attitude control, and FDIR — in portable C11 with zero dynamic allocation. It runs on MSP430FR5969 hardware, STM32H750VBT6 hardware, x86_64 host simulation, aarch64 QEMU, and ZynqMP Renode emulation. It is validated by [OpenSVF](https://github.com/lipofefeyt/opensvf) in closed-loop SIL against a 6-DOF physics engine.
 
 ---
 
@@ -14,6 +14,7 @@ OpenOBSW is a flight software stack for small satellites. It implements the PUS-
 | `obsw_sim` | x86_64 (host) | stdin/stdout pipe | ✅ CI + SVF SIL |
 | `obsw_sim_aarch64` | aarch64 (ZynqMP PS) | stdin/stdout pipe via QEMU | ✅ QEMU user-mode |
 | `obsw_zynqmp` | aarch64 bare-metal | Cadence UART @ 0xFF000000 | ✅ Renode ZynqMP |
+| `obsw_stm32h7` | Cortex-M7 (STM32H750) | USART3 PD8/PD9 | 🔄 Builds, HIL pending |
 
 ---
 
@@ -170,6 +171,7 @@ MSPFlasher -i USB -w build_msp430/obsw_msp430.hex -v -z [VCC]
 | v0.5 — FDIR, b-dot, ADCS PD, MSP430 hardware validation | ✅ Done |
 | v0.6 — ZynqMP aarch64 SIL, S6/S8, SRDB, Renode emulation | ✅ Done |
 | v0.7 — S20 parameter management, SVF closed-loop via Renode socket | ✅ Done |
+| v0.8 — STM32H750 HIL validation, USB CDC, MSP430 Renode emulation | 🔄 In progress |
 
 ---
 
