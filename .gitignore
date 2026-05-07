@@ -45,3 +45,5 @@ msp430-gcc-support-files/
 # OS
 .DS_Store
 Thumbs.dbsrdb/obsw_srdb.egg-info/
+__pycache__/
+*.pyc
