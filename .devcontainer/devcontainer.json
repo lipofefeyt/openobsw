@@ -1,20 +1,51 @@
-// The Dev Container format allows you to configure your environment. At the heart of it
-// is a Docker image or Dockerfile which controls the tools available in your environment.
-//
-// See https://aka.ms/devcontainer.json for more information.
 {
-	"name": "Ona",
-	// Use "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
-	// instead of the build to use a pre-built image.
-	"build": {
-        "context": ".",
-        "dockerfile": "Dockerfile"
+    "name": "openobsw",
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": true,
+            "configureZshAsDefaultShell": false,
+            "installOhMyZsh": false,
+            "upgradePackages": true
+        },
+        "ghcr.io/devcontainers/features/python:1": {
+            "version": "3.12"
+        },
+        "ghcr.io/devcontainers/features/java:1": {
+            "version": "21",
+            "jdk": "ms"
+        }
+    },
+    "mounts": [
+        "source=${localWorkspaceFolder}/../opensvf,target=/workspace/opensvf,type=bind,consistency=cached",
+        "source=${localWorkspaceFolder}/../opensvf-kde,target=/workspace/opensvf-kde,type=bind,consistency=cached"
+    ],
+    "runArgs": [
+        "--privileged"
+    ],
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+    "forwardPorts": [
+        8090
+    ],
+    "remoteEnv": {
+        "OPENOBSW_REPO": "${containerWorkspaceFolder}",
+        "OPENSVF_REPO": "/workspace/opensvf",
+        "OPENSVF_KDE_REPO": "/workspace/opensvf-kde"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "twxs.cmake",
+                "ms-python.python",
+                "ms-python.mypy-type-checker",
+                "marus25.cortex-debug"
+            ],
+            "settings": {
+                "cmake.configureOnOpen": false,
+                "python.defaultInterpreterPath": "/usr/local/bin/python3"
+            }
+        }
     }
-	// Features add additional features to your environment. See https://containers.dev/features
-	// Beware: features are not supported on all platforms and may have unintended side-effects.
-	// "features": {
-    //   "ghcr.io/devcontainers/features/docker-in-docker": {
-    //     "moby": false
-    //   }
-    // }
 }
