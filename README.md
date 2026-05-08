@@ -14,7 +14,7 @@ OpenOBSW is a flight software stack for small satellites. It implements the PUS-
 | `obsw_sim` | x86_64 (host) | stdin/stdout pipe | ✅ CI + SVF SIL |
 | `obsw_sim_aarch64` | aarch64 (ZynqMP PS) | stdin/stdout pipe via QEMU | ✅ QEMU user-mode |
 | `obsw_zynqmp` | aarch64 bare-metal | Cadence UART @ 0xFF000000 | ✅ Renode ZynqMP |
-| `obsw_stm32h7` | Cortex-M7 (STM32H750) | USART3 PD8/PD9 | 🔄 Builds, HIL pending |
+| `obsw_stm32h7` | Cortex-M7 (STM32H750) | USART3 PD8/PD9 | ✅ Hardware validated (ST-Link SWD) |
 
 ---
 
