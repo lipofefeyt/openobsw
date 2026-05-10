@@ -2,6 +2,8 @@
 
 **Open-source spacecraft On-Board Software stack — C11, PUS-C, validated on real hardware**
 
+[![CI](https://github.com/lipofefeyt/openobsw/actions/workflows/ci.yml/badge.svg)](https://github.com/lipofefeyt/openobsw/actions/workflows/ci.yml)
+
 OpenOBSW is a flight software stack for small satellites. It implements the PUS-C service protocol, b-dot detumbling, ADCS PD attitude control, and FDIR — in portable C11 with zero dynamic allocation. It runs on MSP430FR5969 hardware, STM32H750VBT6 hardware, x86_64 host simulation, aarch64 QEMU, and ZynqMP Renode emulation. It is validated by [OpenSVF](https://github.com/lipofefeyt/opensvf) in closed-loop SIL against a 6-DOF physics engine.
 
 ---
@@ -23,19 +25,32 @@ OpenOBSW is a flight software stack for small satellites. It implements the PUS-
 ```bash
 git clone https://github.com/lipofefeyt/openobsw
 cd openobsw
-source scripts/setup-workspace.sh
 
-omkbuild        # build host sim (x86_64)
-omkctest        # run 18 C unit tests
+# Install dependencies (Ubuntu/Debian)
+sudo apt-get install -y cmake ninja-build gcc clang \
+    gcc-arm-none-eabi python3-full python3-venv
+
+# Set up Python venv
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e srdb/
+
+# Build host sim and run tests
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug \
+    -DOBSW_BUILD_TESTS=ON -DOBSW_BUILD_SIM=ON -G Ninja
+cmake --build build -j$(nproc)
+ctest --test-dir build --output-on-failure
+```
+
+Or with the dev container (recommended):
+
+```bash
+# Open in VS Code dev container — all toolchains pre-installed
+source scripts/activate.sh   # load aliases
+host-build                   # build host sim
+host-test                    # run 18 C unit tests
 ```
 
 ```
-Test project /home/user/openobsw/build
- 1/18 Test  #1: space_packet ...........   Passed    0.01 sec
- 2/18 Test  #2: dispatcher .............   Passed    0.00 sec
-...
-17/18 Test #17: s8 .....................   Passed    0.00 sec
-18/18 Test #18: s20 ....................   Passed    0.00 sec
 100% tests passed, 0 tests failed out of 18
 ```
 
@@ -62,8 +77,13 @@ openobsw/
 │   │   └── watchdog.c  Software watchdog
 │   ├── hal/
 │   │   ├── msp430/uart.c   MSP430FR5969 UCA0 UART
+│   │   ├── stm32h7/uart.c  STM32H750 USART3 UART
 │   │   └── zynqmp/uart.c   ZynqMP Cadence UART (register-level)
 │   └── platform/
+│       ├── stm32h7/
+│       │   ├── main.c      STM32H750 entry point
+│       │   ├── startup.S   Cortex-M7 minimal startup
+│       │   └── stm32h750.ld Linker script
 │       └── zynqmp/
 │           ├── main.c      ZynqMP bare-metal entry point
 │           ├── startup.S   AArch64 minimal startup
@@ -90,7 +110,7 @@ openobsw/
 | S5 Event Reporting | TM(5,1–4) info/low/medium/high | High-severity events trigger safe mode |
 | S6 Memory Management | TC(6,2) load, TC(6,5) check, TC(6,9) dump | CRC-16/CCITT verification |
 | S8 Function Management | TC(8,1) perform | Function ID 1 = recover to NOMINAL |
-| S17 Are-You-Alive | TC(17,1) ping, TM(17,2) pong | Used as heartbeat by SVF |
+| S17 Are-You-Alive | TC(17,1) ping, TM(17,2) pong | Used as heartbeat by SVF and YAMCS |
 | S20 Parameter Management | TC(20,1) set, TC(20,3) get, TM(20,2) report | Static parameter table, zero allocation |
 
 ---
@@ -108,10 +128,6 @@ OBSW → Host/SVF:
   [0x03][uint16 BE len][actuator_frame_t]   MTQ dipoles + RW torques
   [0x04][uint16 BE len][PUS TM bytes]       TM downlink
   [0xFF]                                    End of tick (sync byte)
-
-Startup (stderr/UART):
-  [OBSW] ZynqMP started (type-frame protocol v2).
-  [OBSW] SRDB version: 0.1.0
 ```
 
 `sensor_frame_t` (47 bytes, packed, little-endian): MAG xyz + valid, ST quaternion + valid, GYRO xyz + valid, sim_time.
@@ -121,8 +137,6 @@ Startup (stderr/UART):
 ---
 
 ## Renode ZynqMP emulation
-
-The ZynqMP bare-metal binary runs on Renode's emulated Cortex-A53. The Cadence UART HAL exercises real UART register writes that Renode intercepts — this is stronger validation than QEMU user-mode.
 
 ```bash
 # Terminal 1
@@ -136,14 +150,21 @@ OpenSVF connects to the same Renode socket and runs full closed-loop campaigns a
 
 ---
 
-## Toolchains
+## STM32H750 hardware validation
 
-| Target | Toolchain | Install |
-|---|---|---|
-| Host sim | System GCC | pre-installed |
-| MSP430 | msp430-elf-gcc 9.3.1 | `nix-env -iA nixpkgs.msp430-elf-gcc` |
-| aarch64 Linux | aarch64-unknown-linux-gnu-gcc | `nix-env -iA nixpkgs.pkgsCross.aarch64-multiplatform.stdenv.cc` |
-| aarch64 bare-metal | aarch64-none-elf-gcc 12.3 | [ARM Developer](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads) |
+Tested on WeAct STM32H750VBT6 board via ST-Link V2 SWD:
+
+```bash
+# Attach ST-Link to WSL2 (PowerShell admin on Windows)
+usbipd bind --busid <busid>
+usbipd attach --wsl --busid <busid>
+
+# Flash via OpenOCD (inside dev container)
+openocd -f interface/stlink.cfg -f target/stm32h7x.cfg \
+    -c "program build_stm32h7/obsw_stm32h7.bin 0x08000000 verify reset exit"
+```
+
+UART on USART3 PD8/PD9 at 115200 baud (HSI 64MHz, BRR=555). PLL init (480MHz) is written but disabled — debugging in progress via ST-Link GDB.
 
 ---
 
@@ -154,11 +175,38 @@ Tested on MSP430FR5969 LaunchPad:
 - UCA0 UART (not UCA1) at 9600 baud, 1MHz MCLK
 - `PM5CTL0 &= ~LOCKLPM5` to unlock GPIO
 - Watchdog disabled at startup
-- COM5 application UART, COM6 backchannel debug
 
 ```bash
-# Flash and validate
 MSPFlasher -i USB -w build_msp430/obsw_msp430.hex -v -z [VCC]
+```
+
+---
+
+## Toolchains
+
+| Target | Toolchain | Install |
+|---|---|---|
+| Host sim | System GCC / Clang | `apt install gcc clang` |
+| MSP430 | msp430-elf-gcc 9.3.1 | TI toolchain installer |
+| aarch64 Linux | aarch64-linux-gnu-gcc | `apt install gcc-aarch64-linux-gnu` |
+| aarch64 bare-metal | aarch64-none-elf-gcc 12.3 | [ARM Developer](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads) |
+| STM32H7 | arm-none-eabi-gcc | `apt install gcc-arm-none-eabi` |
+
+The dev container installs all toolchains automatically via `post-create.sh`.
+
+---
+
+## Local development (WSL2 + Dev Containers)
+
+```bash
+# Windows (PowerShell admin)
+wsl --install -d Ubuntu-24.04
+winget install -e --id Docker.DockerDesktop --source winget
+winget install -e --id dorssel.usbipd-win --source winget
+
+# WSL2
+git clone https://github.com/lipofefeyt/openobsw ~/workspace/openobsw
+code ~/workspace/openobsw   # VS Code → Reopen in Container
 ```
 
 ---
@@ -171,7 +219,8 @@ MSPFlasher -i USB -w build_msp430/obsw_msp430.hex -v -z [VCC]
 | v0.5 — FDIR, b-dot, ADCS PD, MSP430 hardware validation | ✅ Done |
 | v0.6 — ZynqMP aarch64 SIL, S6/S8, SRDB, Renode emulation | ✅ Done |
 | v0.7 — S20 parameter management, SVF closed-loop via Renode socket | ✅ Done |
-| v0.8 — STM32H750 HIL validation, USB CDC, MSP430 Renode emulation | 🔄 In progress |
+| v0.8 — STM32H750 PLL clock init, USB CDC, MSP430 Renode emulation | 🔄 In progress |
+| v0.9 — Dual-OBC topology (ZynqMP + MSP430 lockstep) | 🔄 Planned |
 
 ---
 
@@ -180,7 +229,7 @@ MSPFlasher -i USB -w build_msp430/obsw_msp430.hex -v -z [VCC]
 | Project | Role |
 |---|---|
 | [opensvf](https://github.com/lipofefeyt/opensvf) | Python SVF: validates openobsw in closed-loop SIL |
-| [opensvf-kde](https://github.com/lipofefeyt/opensvf-kde) | C++ 6-DOF kinematics and dynamics engine (FMI 3.0) |
+| [opensvf-kde](https://github.com/lipofefeyt/opensvf-kde) | C++ 6-DOF kinematics and dynamics engine (FMI 2.0) |
 
 ---
 

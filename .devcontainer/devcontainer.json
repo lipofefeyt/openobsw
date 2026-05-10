@@ -17,8 +17,8 @@
         }
     },
     "mounts": [
-        "source=${localWorkspaceFolder}/../opensvf,target=/workspace/opensvf,type=bind,consistency=cached",
-        "source=${localWorkspaceFolder}/../opensvf-kde,target=/workspace/opensvf-kde,type=bind,consistency=cached"
+        "source=${localWorkspaceFolder}/../opensvf,target=/workspaces/opensvf,type=bind,consistency=cached",
+        "source=${localWorkspaceFolder}/../opensvf-kde,target=/workspaces/opensvf-kde,type=bind,consistency=cached"
     ],
     "runArgs": [
         "--privileged"
@@ -29,8 +29,8 @@
     ],
     "remoteEnv": {
         "OPENOBSW_REPO": "${containerWorkspaceFolder}",
-        "OPENSVF_REPO": "/workspace/opensvf",
-        "OPENSVF_KDE_REPO": "/workspace/opensvf-kde"
+        "OPENSVF_REPO": "/workspaces/opensvf",
+        "OPENSVF_KDE_REPO": "/workspaces/opensvf-kde"
     },
     "customizations": {
         "vscode": {
