@@ -97,8 +97,36 @@ msp430-elf-gdb build-msp430/openobsw-msp430.elf
 
 ## Renode emulation
 
-See `renode/README.md` for running the MSP430 build under Renode
-without physical hardware.
+Run the MSP430 build in Renode without physical hardware:
+
+```bash
+# Build the MSP430 ELF first (requires MSP430 toolchain — see above)
+cmake -B build-msp430 -DCMAKE_TOOLCHAIN_FILE=cmake/msp430-toolchain.cmake \
+    -S targets/msp430-fr5969 -DRENODE_BUILD=ON
+cmake --build build-msp430
+
+# Terminal 1: launch Renode
+renode renode/msp430fr5969.resc
+
+# Terminal 2: send a TC(17,1) ping and verify TM(1,1) + TM(17,2) + TM(1,7)
+python3 renode/test_ping.py
+```
+
+Expected output:
+
+```
+Connecting to Renode UART on localhost:3456...
+Connected. Sending TC(17,1) ping...
+  TM(1,1) — acceptance ✓
+  TM(17,2) — are-you-alive pong ✓
+  TM(1,7) — completion ✓
+
+SUCCESS — TM(1,1) + TM(17,2) + TM(1,7) received ✓
+```
+
+The `RENODE_BUILD` flag switches the UART HAL from polled UCA0 registers to
+interrupt-driven RX via the `MSP430_USCIA` Renode model (base 0x05C0, IE at
+0x05D8, IFG at 0x05DA). The model's TCP terminal is exposed on port 3456.
 
 ## VS Code IntelliSense setup
 

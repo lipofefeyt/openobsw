@@ -56,7 +56,8 @@ def parse_packets(raw: bytes) -> None:
 
 def main():
     # TC(17,1) are-you-alive — length-prefixed space packet
-    frame  = bytes.fromhex("1801c0000003201101" + "00")
+    # APID=0x010, data_len=4 (5-byte PUS-C secondary header: ver+ack, svc, subsvc, src_id[2])
+    frame  = bytes.fromhex("1810c00000042011010000")
     packet = struct.pack(">H", len(frame)) + frame
 
     print(f"Connecting to Renode UART on {HOST}:{PORT}...")
