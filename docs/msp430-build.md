@@ -46,24 +46,6 @@ Also install the MSP430 MCU headers and linker scripts:
 sudo apt-get install -y binutils-msp430 msp430mcu
 ```
 
-### Gitpod persistence
-
-Add to `.gitpod.yml` to install automatically on workspace start:
-
-```yaml
-tasks:
-  - init: |
-      sudo apt-get install -y binutils-msp430 msp430mcu python3-pip
-      pip install pydantic pyyaml
-      wget -q "http://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export/msp430-gcc-9.3.1.11_linux64.tar.bz2"
-      wget -q "http://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export/msp430-gcc-support-files-1.212.zip"
-      sudo tar xjf msp430-gcc-9.3.1.11_linux64.tar.bz2 -C /opt
-      unzip -q msp430-gcc-support-files-1.212.zip
-      find msp430-gcc-support-files -name "*.h"  -exec sudo cp {} /opt/msp430-gcc-9.3.1.11_linux64/include/ \;
-      find msp430-gcc-support-files -name "*.ld" -exec sudo cp {} /opt/msp430-gcc-9.3.1.11_linux64/msp430-elf/lib/ \;
-      echo 'export PATH=/opt/msp430-gcc-9.3.1.11_linux64/bin:$PATH' >> ~/.bashrc
-```
-
 ## Building
 
 ```bash

@@ -22,7 +22,7 @@
 #include "obsw/tm/store.h"
 
 #define OBSW_VERSION_MAJOR 0
-#define OBSW_VERSION_MINOR 5
+#define OBSW_VERSION_MINOR 7
 #define OBSW_VERSION_PATCH 0
 
 #endif /* OBSW_H */

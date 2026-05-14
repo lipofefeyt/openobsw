@@ -1,3 +1,11 @@
+/**
+ * @file dispatcher.c
+ * @brief TC command dispatcher — routes incoming TC packets to handlers.
+ *
+ * Parses the space packet primary and PUS secondary headers, then performs
+ * a linear scan of the routing table for a matching (APID, service,
+ * subservice) tuple. Wildcard APID (0xFFFF) matches any source.
+ */
 #include "obsw/tc/dispatcher.h"
 #include <string.h>
 

@@ -1,3 +1,11 @@
+/**
+ * @file bdot.c
+ * @brief B-dot detumbling controller implementation.
+ *
+ * Implements the B-dot law: m_cmd = -k * dB/dt, where dB/dt is estimated
+ * via finite difference. Used in SAFE mode until angular rates are small
+ * enough for the ADCS PD controller to take over.
+ */
 #include "obsw/aocs/bdot.h"
 
 #include <math.h>

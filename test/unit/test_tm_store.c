@@ -88,6 +88,44 @@ void test_store_full(void)
                           obsw_tm_store_enqueue(&s, pkt, 1));
 }
 
+void test_ring_buffer_wraparound(void)
+{
+    obsw_tm_store_t s;
+    obsw_tm_store_init(&s);
+
+    uint8_t pkt[2];
+    uint8_t out[4];
+    uint16_t len;
+
+    /* Fill to capacity, drain — advances head and tail to SLOTS-1 */
+    for (size_t i = 0; i < OBSW_TM_STORE_SLOTS - 1; i++) {
+        pkt[0] = (uint8_t)(i & 0xFFU);
+        pkt[1] = (uint8_t)(i >> 8);
+        TEST_ASSERT_EQUAL_INT(OBSW_TM_OK,
+                              obsw_tm_store_enqueue(&s, pkt, 2));
+    }
+    for (size_t i = 0; i < OBSW_TM_STORE_SLOTS - 1; i++) {
+        TEST_ASSERT_EQUAL_INT(OBSW_TM_OK,
+                              obsw_tm_store_dequeue(&s, out, sizeof(out), &len));
+        TEST_ASSERT_EQUAL_UINT16(2, len);
+        TEST_ASSERT_EQUAL_UINT8((uint8_t)(i & 0xFFU), out[0]);
+    }
+    TEST_ASSERT_TRUE(obsw_tm_store_empty(&s));
+
+    /* Second fill: head/tail have wrapped. Verify FIFO order is preserved. */
+    for (size_t i = 0; i < OBSW_TM_STORE_SLOTS - 1; i++) {
+        pkt[0] = (uint8_t)((i + 1U) & 0xFFU);
+        TEST_ASSERT_EQUAL_INT(OBSW_TM_OK,
+                              obsw_tm_store_enqueue(&s, pkt, 1));
+    }
+    for (size_t i = 0; i < OBSW_TM_STORE_SLOTS - 1; i++) {
+        TEST_ASSERT_EQUAL_INT(OBSW_TM_OK,
+                              obsw_tm_store_dequeue(&s, out, sizeof(out), &len));
+        TEST_ASSERT_EQUAL_UINT8((uint8_t)((i + 1U) & 0xFFU), out[0]);
+    }
+    TEST_ASSERT_TRUE(obsw_tm_store_empty(&s));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -97,5 +135,6 @@ int main(void)
     RUN_TEST(test_dequeue_empty);
     RUN_TEST(test_packet_too_large);
     RUN_TEST(test_store_full);
+    RUN_TEST(test_ring_buffer_wraparound);
     return UNITY_END();
 }
