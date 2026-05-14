@@ -1,3 +1,10 @@
+/**
+ * @file s1.c
+ * @brief PUS-C Service 1 — TC Verification implementation.
+ *
+ * Emits TM(1,1/2/7/8) acceptance and completion reports. All report
+ * functions are called by higher-level TC handlers, not dispatched directly.
+ */
 #include "obsw/pus/s1.h"
 #include <string.h>
 
@@ -12,6 +19,7 @@
 /* Byte 4-5: Failure code    (success reports omit this)              */
 /* ------------------------------------------------------------------ */
 
+/** Encode TC packet ID and sequence control into the first 4 bytes of buf. */
 static void encode_tc_ref(const obsw_tc_t *tc, uint8_t *buf)
 {
     uint16_t pkt_id = (uint16_t)((1U << 12) | (1U << 11) | (tc->apid & 0x7FFU));

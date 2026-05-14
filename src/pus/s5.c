@@ -1,3 +1,10 @@
+/**
+ * @file s5.c
+ * @brief PUS-C Service 5 — Event Reporting implementation.
+ *
+ * Emits TM(5,x) event reports at four severity levels and optionally
+ * triggers FDIR safe-mode transitions for high-severity events.
+ */
 #include "obsw/pus/s5.h"
 #include "obsw/fdir/fsm.h"
 #include <string.h>

@@ -1,3 +1,11 @@
+/**
+ * @file pus_tm.c
+ * @brief PUS-C TM packet builder.
+ *
+ * Assembles a PUS-C TM space packet (primary header + secondary header +
+ * application data) and enqueues it into the TM store. All PUS services
+ * route their telemetry through this single entry point.
+ */
 #include "obsw/pus/pus_tm.h"
 #include "obsw/ccsds/space_packet.h"
 #include <string.h>

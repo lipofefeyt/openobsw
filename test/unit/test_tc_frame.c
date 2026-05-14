@@ -175,6 +175,62 @@ void test_strerror_known_codes(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* Adversarial inputs                                                  */
+/* ------------------------------------------------------------------ */
+
+void test_decode_minimum_payload(void)
+{
+    /* Minimum valid frame: 5-byte header + 1-byte payload + 2-byte CRC */
+    uint8_t payload[] = {0xAB};
+    uint8_t buf[16];
+    size_t len = make_tc_frame(buf, sizeof(buf), 0x001, 0x00, 0,
+                               payload, sizeof(payload));
+    obsw_tc_frame_t frm;
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_FRAME_OK,
+                          obsw_tc_frame_decode(buf, len, &frm));
+    TEST_ASSERT_EQUAL_UINT16(1, frm.data_len);
+    TEST_ASSERT_EQUAL_UINT8(0xABU, frm.data[0]);
+}
+
+void test_decode_all_zeros(void)
+{
+    /* An all-zero buffer should fail CRC (init value is 0xFFFF, not 0x0000) */
+    uint8_t buf[16] = {0};
+    obsw_tc_frame_t frm;
+    TEST_ASSERT_NOT_EQUAL(OBSW_TC_FRAME_OK,
+                          obsw_tc_frame_decode(buf, sizeof(buf), &frm));
+}
+
+void test_decode_single_bit_flip(void)
+{
+    /* Any single-bit corruption must be caught by CRC-16/CCITT */
+    uint8_t payload[] = {0x11, 17, 1, 0x00};
+    uint8_t buf[32];
+    size_t len = make_tc_frame(buf, sizeof(buf), 0x001, 0x00, 0,
+                               payload, sizeof(payload));
+    obsw_tc_frame_t frm;
+
+    /* Flip one bit in the payload area */
+    buf[OBSW_TC_FRAME_PRIMARY_HDR_LEN] ^= 0x01U;
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_FRAME_ERR_CRC,
+                          obsw_tc_frame_decode(buf, len, &frm));
+}
+
+void test_decode_frame_len_exceeds_buffer(void)
+{
+    /* frame_len field claims more bytes than the buffer actually holds */
+    uint8_t payload[] = {0xAA, 0xBB};
+    uint8_t buf[32];
+    size_t len = make_tc_frame(buf, sizeof(buf), 0x001, 0x00, 0,
+                               payload, sizeof(payload));
+
+    /* Shrink the buffer by 2 bytes — frame_len field now over-claims */
+    obsw_tc_frame_t frm;
+    TEST_ASSERT_NOT_EQUAL(OBSW_TC_FRAME_OK,
+                          obsw_tc_frame_decode(buf, len - 2U, &frm));
+}
+
+/* ------------------------------------------------------------------ */
 /* Runner                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -191,5 +247,9 @@ int main(void)
     RUN_TEST(test_decode_bad_crc);
     RUN_TEST(test_decode_frame_len_mismatch);
     RUN_TEST(test_strerror_known_codes);
+    RUN_TEST(test_decode_minimum_payload);
+    RUN_TEST(test_decode_all_zeros);
+    RUN_TEST(test_decode_single_bit_flip);
+    RUN_TEST(test_decode_frame_len_exceeds_buffer);
     return UNITY_END();
 }

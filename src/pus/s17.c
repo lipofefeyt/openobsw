@@ -1,3 +1,10 @@
+/**
+ * @file s17.c
+ * @brief PUS-C Service 17 — Are-You-Alive implementation.
+ *
+ * Handles TC(17,1) ping: emits TM(1,1) acceptance, TM(17,2) pong,
+ * and TM(1,7) completion. Used as a heartbeat by SVF and YAMCS.
+ */
 #include "obsw/pus/s17.h"
 
 int obsw_s17_ping(const obsw_tc_t *tc,

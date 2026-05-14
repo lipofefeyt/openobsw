@@ -12,7 +12,73 @@ OpenSVF validates your flight software against a 6-DOF physics engine and a real
 
 ---
 
-## Step 1: Installation
+## Standalone use (without OpenSVF)
+
+You can run and test openobsw without OpenSVF using the host simulation binary directly. The host sim speaks a simple framed protocol over stdin/stdout — you can drive it from any language.
+
+### Quick sanity check
+
+```bash
+# Build the host sim
+cmake -S . -B build -DOBSW_BUILD_SIM=ON -DOBSW_BUILD_TESTS=ON -G Ninja
+cmake --build build -j$(nproc)
+
+# Send a TC(17,1) ping and inspect raw output
+python3 - <<'EOF'
+import subprocess, struct
+
+def make_tc_frame(apid, svc, subsvc):
+    # Space packet: version=0, type=TC, sec_hdr=1, seq_flags=3
+    sp  = struct.pack(">HHH",
+        0x1800 | (apid & 0x7FF),   # packet ID
+        0xC000,                     # standalone, seq=0
+        4)                          # data_len = sec_hdr (5) - 1 = 4
+    sp += bytes([0x11, svc, subsvc, 0x00, 0x00])  # PUS-C TC sec hdr
+    return struct.pack(">BH", 0x01, len(sp)) + sp  # wire frame type=0x01
+
+proc = subprocess.Popen(
+    ["./build/sim/obsw_sim"],
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+proc.stdin.write(make_tc_frame(0x010, 17, 1))
+proc.stdin.flush()
+data = proc.stdout.read(256)
+print("Raw response:", data.hex())
+proc.terminate()
+EOF
+```
+
+### Writing a minimal test harness
+
+```python
+import subprocess, struct, sys
+
+SYNC = 0xFF
+TM_FRAME = 0x04
+
+def read_tm_packets(proc):
+    """Drain TM packets until the sync byte (end-of-tick)."""
+    packets = []
+    while True:
+        hdr = proc.stdout.read(1)
+        if not hdr or hdr[0] == SYNC:
+            break
+        if hdr[0] == TM_FRAME:
+            length = struct.unpack(">H", proc.stdout.read(2))[0]
+            packets.append(proc.stdout.read(length))
+    return packets
+
+proc = subprocess.Popen(
+    ["./build/sim/obsw_sim"],
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+
+# ... send TCs and call read_tm_packets() to collect responses
+```
+
+Transport options are described in the [OBSW Transport Options](#obsw-transport-options) table below.
+
+---
+
+## Step 1: Installation (OpenSVF)
 
 ```bash
 git clone https://github.com/lipofefeyt/opensvf

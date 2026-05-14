@@ -54,6 +54,8 @@ host-test                    # run 18 C unit tests
 100% tests passed, 0 tests failed out of 18
 ```
 
+18 unit tests + 1 integration test cover TC/TM framing, all PUS services, FDIR state machine, watchdog, and AOCS algorithms.
+
 ---
 
 ## Architecture
@@ -98,6 +100,8 @@ openobsw/
         ├── parameters.yaml  TM parameter definitions (ID, type, limits)
         └── spacecraft.yaml  APID, modes, default gains
 ```
+
+See [docs/architecture.md](docs/architecture.md) for full module descriptions, data flow diagrams, and AOCS algorithm documentation.
 
 ---
 

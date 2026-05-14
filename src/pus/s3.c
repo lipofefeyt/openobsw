@@ -1,10 +1,20 @@
+/**
+ * @file s3.c
+ * @brief PUS-C Service 3 — Housekeeping Reporting implementation.
+ *
+ * Manages periodic housekeeping sets: TC(3,5) enable, TC(3,6) disable,
+ * obsw_s3_tick() drives countdown timers, and TM(3,25) packets are emitted
+ * when a set's countdown reaches zero.
+ */
 #include "obsw/pus/s3.h"
+#include "obsw/util/bytes.h"
 #include <string.h>
 
 /* ------------------------------------------------------------------ */
 /* Internal helpers                                                    */
 /* ------------------------------------------------------------------ */
 
+/** Find a housekeeping set by ID; returns NULL if not registered. */
 static obsw_s3_set_t *find_set(obsw_s3_ctx_t *ctx, uint8_t set_id)
 {
     for (uint8_t i = 0; i < ctx->set_count; i++)
@@ -15,6 +25,7 @@ static obsw_s3_set_t *find_set(obsw_s3_ctx_t *ctx, uint8_t set_id)
     return NULL;
 }
 
+/** Serialise all parameters of a set into buf; returns byte count, or 0 on overflow. */
 static uint16_t serialise_set(const obsw_s3_set_t *set,
                               uint8_t *buf, uint16_t buf_len)
 {
@@ -30,6 +41,7 @@ static uint16_t serialise_set(const obsw_s3_set_t *set,
     return offset;
 }
 
+/** Emit a TM(3,25) housekeeping report for the given set. */
 static int emit_hk_report(obsw_s3_ctx_t *ctx, obsw_s3_set_t *set)
 {
     uint8_t buf[OBSW_TM_MAX_PACKET_LEN];
@@ -64,8 +76,8 @@ int obsw_s3_enable(const obsw_tc_t *tc,
         return -1;
     }
 
-    uint8_t set_id = tc->user_data[0];
-    uint32_t interval = ((uint32_t)tc->user_data[1] << 24) | ((uint32_t)tc->user_data[2] << 16) | ((uint32_t)tc->user_data[3] << 8) | (uint32_t)tc->user_data[4];
+    uint8_t set_id    = tc->user_data[0];
+    uint32_t interval = obsw_be32(tc->user_data + 1);
 
     obsw_s3_set_t *set = find_set(s, set_id);
     if (!set)

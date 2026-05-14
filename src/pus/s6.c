@@ -1,7 +1,15 @@
+/**
+ * @file s6.c
+ * @brief PUS-C Service 6 — Memory Management implementation.
+ *
+ * TC(6,2) loads data to an arbitrary address; TC(6,5) verifies a memory
+ * region with CRC-16/CCITT; TC(6,9) dumps a region as TM(6,6). The
+ * target address is passed verbatim from the TC — mission software is
+ * responsible for address-range validation before dispatching these TCs.
+ */
 #include "obsw/pus/s6.h"
-
 #include "obsw/ccsds/tc_frame.h" /* obsw_crc16_ccitt */
-
+#include "obsw/util/bytes.h"
 #include <string.h>
 
 /* Maximum data bytes in a single TM(6,6) dump packet.
@@ -27,9 +35,8 @@ int obsw_s6_load(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    uint32_t addr     = ((uint32_t)tc->user_data[0] << 24) | ((uint32_t)tc->user_data[1] << 16) |
-                        ((uint32_t)tc->user_data[2] << 8) | (uint32_t)tc->user_data[3];
-    uint16_t data_len = (uint16_t)(((uint16_t)tc->user_data[4] << 8) | tc->user_data[5]);
+    uint32_t addr     = obsw_be32(tc->user_data);
+    uint16_t data_len = obsw_be16(tc->user_data + 4);
 
     if (tc->user_data_len < (uint16_t)(OBSW_S6_LOAD_MIN_LEN + data_len)) {
         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_SUBSVC);
@@ -61,11 +68,10 @@ int obsw_s6_check(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    uint32_t addr   = ((uint32_t)tc->user_data[0] << 24) | ((uint32_t)tc->user_data[1] << 16) |
-                      ((uint32_t)tc->user_data[2] << 8) | (uint32_t)tc->user_data[3];
-    uint16_t length = (uint16_t)(((uint16_t)tc->user_data[4] << 8) | tc->user_data[5]);
+    uint32_t addr     = obsw_be32(tc->user_data);
+    uint16_t length   = obsw_be16(tc->user_data + 4);
     /* tc->user_data[6] = mem_id (ignored for now) */
-    uint16_t expected = (uint16_t)(((uint16_t)tc->user_data[7] << 8) | tc->user_data[8]);
+    uint16_t expected = obsw_be16(tc->user_data + 7);
 
     obsw_s1_accept_success(s->s1, tc);
 
@@ -112,9 +118,8 @@ int obsw_s6_dump(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    uint32_t addr   = ((uint32_t)tc->user_data[0] << 24) | ((uint32_t)tc->user_data[1] << 16) |
-                      ((uint32_t)tc->user_data[2] << 8) | (uint32_t)tc->user_data[3];
-    uint16_t length = (uint16_t)(((uint16_t)tc->user_data[4] << 8) | tc->user_data[5]);
+    uint32_t addr   = obsw_be32(tc->user_data);
+    uint16_t length = obsw_be16(tc->user_data + 4);
     uint8_t mem_id  = tc->user_data[6];
 
     if (length > S6_MAX_DUMP_DATA) {
