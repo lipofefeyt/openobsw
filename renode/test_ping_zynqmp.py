@@ -30,7 +30,7 @@ def build_tc_frame(apid: int, svc: int, subsvc: int,
                    data: bytes = b"") -> bytes:
     """Build a minimal PUS-C TC space packet."""
     data_len = len(data)
-    packet_len = 6 + 3 + data_len  # primary + secondary + data
+    packet_len = 6 + 5 + data_len  # primary(6) + secondary(5) + app data
     header = struct.pack(">HHH",
         0x1800 | (apid & 0x7FF),    # version=0, type=1(TC), APID
         0xC000,                      # seq flags=11 (standalone), count=0
@@ -78,7 +78,7 @@ def parse_response(raw: bytes) -> list:
 
 
 def main() -> None:
-    tc = bytes.fromhex('1810c0000003201101' + '00')  # PUS-C TC(17,1) APID=0x010
+    tc = build_tc_frame(0x010, 17, 1)  # PUS-C TC(17,1)
 
     print(f"Connecting to Renode ZynqMP uart0 on {HOST}:{PORT}...")
     with socket.create_connection((HOST, PORT), timeout=TIMEOUT) as sock:

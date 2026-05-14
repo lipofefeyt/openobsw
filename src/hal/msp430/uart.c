@@ -23,10 +23,12 @@
  * model compiler materialises the address correctly. */
 static volatile uint8_t *const _uart_rxbuf = (volatile uint8_t *)0x05C6U;
 static volatile uint8_t *const _uart_txbuf = (volatile uint8_t *)0x05C7U;
+static volatile uint8_t *const _uart_ie    = (volatile uint8_t *)0x05D8U;
 static volatile uint8_t *const _uart_ifg   = (volatile uint8_t *)0x05DAU;
 #define UART_RXBUF (*_uart_rxbuf)
 #define UART_TXBUF (*_uart_txbuf)
-#define UART_IFG (*_uart_ifg)
+#define UART_IE    (*_uart_ie)
+#define UART_IFG   (*_uart_ifg)
 #define UART_TXIFG 0x02U
 #define UART_RXIFG 0x01U
 #else
@@ -79,7 +81,10 @@ void __attribute__((interrupt(USCI_A0_VECTOR))) usci_a0_isr(void)
 
 void obsw_uart_init(void)
 {
-#ifndef RENODE_BUILD
+#ifdef RENODE_BUILD
+    UART_IE |= UART_RXIFG;   /* enable RX interrupt in model's IE register */
+    __enable_interrupt();
+#else
     PM5CTL0 &= ~LOCKLPM5;
     P2SEL1 |= BIT0 | BIT1;
     P2SEL0 &= ~(BIT0 | BIT1);
@@ -89,7 +94,6 @@ void obsw_uart_init(void)
     UCA0MCTLW = 0x0200U;
     UCA0CTLW0 &= ~UCSWRST;
 #endif
-    /* In RENODE_BUILD the MSP430_USCIA model self-initialises */
 }
 
 /* ------------------------------------------------------------------ */
@@ -111,12 +115,20 @@ static int uart_read(uint8_t *buf, uint16_t len, void *ctx)
 {
     (void)ctx;
     uint16_t n = 0;
+#ifdef RENODE_BUILD
+    while (n < len) {
+        if (!rx_pop(&buf[n]))
+            break;
+        n++;
+    }
+#else
     while (n < len) {
         if (UART_IFG & UART_RXIFG)
             buf[n++] = UART_RXBUF;
         else
             break;
     }
+#endif
     return (int)n;
 }
 
