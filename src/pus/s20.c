@@ -4,6 +4,7 @@
  */
 
  #include "obsw/pus/s20.h"
+ #include "obsw/util/bytes.h"
 
  /* TC(20,1) user data: param_id(2 BE) | value(4 BE) */
  #define S20_SET_LEN 6U
@@ -15,6 +16,7 @@
  /* Internal helpers                                                    */
  /* ------------------------------------------------------------------ */
  
+ /** Find a parameter by ID in the parameter table; returns NULL if not found. */
  static obsw_s20_param_t *find_param(obsw_s20_ctx_t *s, uint16_t id)
  {
      for (uint8_t i = 0; i < s->table_len; i++) {
@@ -24,6 +26,7 @@
      return NULL;
  }
  
+ /** Emit a TM(20,2) parameter value report for the given param_id and value. */
  static void emit_tm20_2(obsw_s20_ctx_t *s,
                          uint16_t param_id,
                          obsw_s20_value_t val)
@@ -58,13 +61,9 @@
          return -1;
      }
  
-     uint16_t param_id = (uint16_t)(((uint16_t)tc->user_data[0] << 8)
-                                    | tc->user_data[1]);
+     uint16_t param_id = obsw_be16(tc->user_data);
      obsw_s20_value_t val;
-     val.u32 = ((uint32_t)tc->user_data[2] << 24)
-             | ((uint32_t)tc->user_data[3] << 16)
-             | ((uint32_t)tc->user_data[4] <<  8)
-             |  (uint32_t)tc->user_data[5];
+     val.u32 = obsw_be32(tc->user_data + 2);
  
      obsw_s20_param_t *p = find_param(s, param_id);
      if (!p) {
@@ -94,9 +93,8 @@
          return -1;
      }
  
-     uint16_t param_id = (uint16_t)(((uint16_t)tc->user_data[0] << 8)
-                                    | tc->user_data[1]);
- 
+     uint16_t param_id = obsw_be16(tc->user_data);
+
      obsw_s20_param_t *p = find_param(s, param_id);
      if (!p) {
          obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);

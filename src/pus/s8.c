@@ -1,4 +1,12 @@
+/**
+ * @file s8.c
+ * @brief PUS-C Service 8 — Function Management implementation.
+ *
+ * TC(8,1) carries a 2-byte function ID and optional argument bytes. A linear
+ * scan of the function table dispatches to the registered callback.
+ */
 #include "obsw/pus/s8.h"
+#include "obsw/util/bytes.h"
 
 /* TC(8,1) user data: function_id(2 BE) | args_len(1) | args(...) */
 #define S8_MIN_LEN 3U
@@ -15,7 +23,7 @@ int obsw_s8_perform(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    uint16_t fn_id      = (uint16_t)(((uint16_t)tc->user_data[0] << 8) | tc->user_data[1]);
+    uint16_t fn_id      = obsw_be16(tc->user_data);
     uint8_t args_len    = tc->user_data[2];
     const uint8_t *args = (args_len > 0U) ? tc->user_data + 3U : NULL;
 

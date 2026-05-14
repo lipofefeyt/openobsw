@@ -1,3 +1,11 @@
+/**
+ * @file adcs.c
+ * @brief ADCS PD attitude controller and quaternion math implementation.
+ *
+ * Provides quaternion normalisation, conjugate, and Hamilton product, plus
+ * the PD control law: τ = -Kp * q_err_vec - Kd * ω. Short-path convention
+ * (q_err.w >= 0) is enforced before computing torque commands.
+ */
 #include "obsw/aocs/adcs.h"
 
 #include <math.h>
