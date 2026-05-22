@@ -18,13 +18,25 @@ from pydantic import BaseModel, field_validator, model_validator
 # ---------------------------------------------------------------------------
 
 class ParameterType(str, Enum):
-    UINT8  = "uint8"
-    UINT16 = "uint16"
-    UINT32 = "uint32"
-    INT8   = "int8"
-    INT16  = "int16"
-    INT32  = "int32"
+    UINT8   = "uint8"
+    UINT16  = "uint16"
+    UINT32  = "uint32"
+    INT8    = "int8"
+    INT16   = "int16"
+    INT32   = "int32"
     FLOAT32 = "float32"
+
+
+# Maps ParameterType → (ptc, pfc) for cross-validation
+_TYPE_TO_PTC_PFC: dict[str, tuple[int, int]] = {
+    "uint8":   (1, 8),
+    "uint16":  (1, 16),
+    "uint32":  (1, 32),
+    "int8":    (2, 8),
+    "int16":   (2, 16),
+    "int32":   (2, 32),
+    "float32": (5, 1),
+}
 
 
 class ConversionType(str, Enum):
@@ -77,12 +89,21 @@ class ParameterLimits(BaseModel):
         return self
 
 
+class EnumEntry(BaseModel):
+    value: int
+    label: str
+
+
 class Parameter(BaseModel):
     id:          int
     name:        str
     description: str
     type:        ParameterType
+    ptc:         int
+    pfc:         int
+    subsystem:   Optional[str] = None
     unit:        Optional[str] = None
+    enumeration: Optional[List[EnumEntry]] = None
     conversion:  Optional[ParameterConversion] = None
     limits:      Optional[ParameterLimits] = None
 
@@ -99,6 +120,32 @@ class Parameter(BaseModel):
         if not v.replace("_", "").isalnum():
             raise ValueError(f"Parameter name '{v}' must be snake_case alphanumeric")
         return v
+
+    @field_validator("ptc")
+    @classmethod
+    def ptc_valid(cls, v: int) -> int:
+        if v not in (1, 2, 5):
+            raise ValueError(f"ptc={v} not supported (use 1=uint, 2=int, 5=float)")
+        return v
+
+    @model_validator(mode="after")
+    def ptc_pfc_consistent_with_type(self) -> "Parameter":
+        expected = _TYPE_TO_PTC_PFC.get(self.type.value)
+        if expected and (self.ptc, self.pfc) != expected:
+            raise ValueError(
+                f"Parameter '{self.name}': type={self.type.value} expects "
+                f"ptc={expected[0]}, pfc={expected[1]} but got "
+                f"ptc={self.ptc}, pfc={self.pfc}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def enum_only_for_integer(self) -> "Parameter":
+        if self.enumeration and self.ptc not in (1, 2):
+            raise ValueError(
+                f"Parameter '{self.name}': enumeration requires ptc=1 or ptc=2"
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +189,9 @@ class HKSet(BaseModel):
     id:                     int
     name:                   str
     description:            str
-    parameters:             List[str]   # parameter names — validated by loader
+    parameters:             List[str]
     default_interval_ticks: int
+    spid:                   Optional[int] = None
 
     @field_validator("id")
     @classmethod

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Union
 
 from .model import (
+    EnumEntry,
     Event,
     HKSet,
     Parameter,
@@ -52,7 +53,8 @@ def _export_parameters(srdb: SRDB, path: Path) -> None:
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow([
-            "id_hex", "name", "description", "type", "unit",
+            "id_hex", "name", "description", "type", "ptc", "pfc",
+            "subsystem", "unit", "enumeration",
             "conv_type", "conv_slope", "conv_offset",
             "limit_soft_low", "limit_soft_high",
             "limit_hard_low", "limit_hard_high",
@@ -60,9 +62,15 @@ def _export_parameters(srdb: SRDB, path: Path) -> None:
         for p in srdb.parameters:
             c = p.conversion
             lim = p.limits
+            enum_str = ";".join(
+                f"{e.value}:{e.label}" for e in p.enumeration
+            ) if p.enumeration else ""
             w.writerow([
                 f"0x{p.id:04X}", p.name, p.description, p.type.value,
+                p.ptc, p.pfc,
+                p.subsystem or "",
                 p.unit or "",
+                enum_str,
                 c.type.value if c else "",
                 c.slope if c else "",
                 c.offset if c else "",
@@ -112,12 +120,13 @@ def _export_hk_sets(srdb: SRDB, path: Path) -> None:
         w = csv.writer(f)
         w.writerow([
             "id", "name", "description",
-            "parameters", "default_interval_ticks",
+            "parameters", "default_interval_ticks", "spid",
         ])
         for h in srdb.hk_sets:
             w.writerow([
                 h.id, h.name, h.description,
                 ";".join(h.parameters), h.default_interval_ticks,
+                h.spid if h.spid is not None else "",
             ])
 
 
@@ -166,12 +175,23 @@ def _import_parameters(path: Path) -> list[Parameter]:
                     hard_low=_parse_optional_float(row["limit_hard_low"]),
                     hard_high=_parse_optional_float(row["limit_hard_high"]),
                 )
+            enum = None
+            if row.get("enumeration"):
+                enum = [
+                    EnumEntry(value=int(v), label=l)
+                    for item in row["enumeration"].split(";")
+                    for v, l in [item.split(":", 1)]
+                ]
             params.append(Parameter(
                 id=int(row["id_hex"], 16),
                 name=row["name"],
                 description=row["description"],
                 type=ParameterType(row["type"]),
-                unit=row["unit"] or None,
+                ptc=int(row["ptc"]),
+                pfc=int(row["pfc"]),
+                subsystem=row.get("subsystem") or None,
+                unit=row.get("unit") or None,
+                enumeration=enum,
                 conversion=conv,
                 limits=lim,
             ))
@@ -229,11 +249,13 @@ def _import_hk_sets(path: Path) -> list[HKSet]:
     hk_sets = []
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
+            spid_raw = row.get("spid", "")
             hk_sets.append(HKSet(
                 id=int(row["id"]),
                 name=row["name"],
                 description=row["description"],
                 parameters=row["parameters"].split(";"),
                 default_interval_ticks=int(row["default_interval_ticks"]),
+                spid=int(spid_raw) if spid_raw.strip() else None,
             ))
     return hk_sets

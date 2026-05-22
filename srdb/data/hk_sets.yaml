@@ -6,10 +6,12 @@
 #   description           Human-readable description
 #   parameters            Ordered list of parameter names (must exist in parameters.yaml)
 #   default_interval_ticks  Default collection interval (0 = disabled at boot)
+#   spid                  Spacecraft Packet ID — unique identifier for XTCE/SCOS-2K tools
 
 hk_sets:
   - id: 1
     name: nominal_hk
+    spid: 1001
     description: "Nominal housekeeping — thermal, power, uptime"
     parameters:
       - obc_temperature
@@ -20,9 +22,24 @@ hk_sets:
 
   - id: 2
     name: fdir_hk
+    spid: 1002
     description: "FDIR housekeeping — safe mode and watchdog statistics"
     parameters:
       - safe_mode_entry_count
       - watchdog_kick_count
       - watchdog_ticks_remaining
     default_interval_ticks: 60
+
+  - id: 3
+    name: dhs_obc_hk
+    spid: 1003
+    description: "DHS OBC housekeeping — mode, OBT, watchdog, health, resources"
+    parameters:
+      - obc_mode
+      - obc_obt
+      - obc_watchdog_status
+      - obc_memory_used_pct
+      - obc_health
+      - obc_reset_count
+      - obc_cpu_load
+    default_interval_ticks: 10

@@ -82,6 +82,15 @@ static uint16_t param_uptime_s         = 0;
 static uint16_t param_safe_entry_count = 0;
 static uint32_t param_wd_kick_count    = 0;
 
+/* DHS OBC HK — reported in TM(3,25) set_id=3, consumed by opensvf */
+static uint8_t  param_obc_mode        = 0;   /* 0=SAFE, 1=NOMINAL            */
+static uint32_t param_obc_obt         = 0;   /* on-board time [s]            */
+static uint8_t  param_obc_wd_status   = 0;   /* 0=nominal, 1=expired         */
+static uint8_t  param_obc_mem_pct     = 0;   /* mass-memory fill % (stub)    */
+static uint8_t  param_obc_health      = 0;   /* 0=nominal (stub)             */
+static uint16_t param_obc_reset_count = 0;   /* reset counter (stub = 0)     */
+static uint8_t  param_obc_cpu_load    = 0;   /* CPU utilisation % (stub)     */
+
 static obsw_s3_param_t nominal_hk_params[] = {
     {.ptr = &param_uptime_s, .size = OBSW_S3_PARAM_U16},
 };
@@ -89,11 +98,22 @@ static obsw_s3_param_t fdir_hk_params[] = {
     {.ptr = &param_safe_entry_count, .size = OBSW_S3_PARAM_U16},
     {.ptr = &param_wd_kick_count,    .size = OBSW_S3_PARAM_U32},
 };
+static obsw_s3_param_t dhs_obc_hk_params[] = {
+    {.ptr = &param_obc_mode,        .size = OBSW_S3_PARAM_U8},
+    {.ptr = &param_obc_obt,         .size = OBSW_S3_PARAM_U32},
+    {.ptr = &param_obc_wd_status,   .size = OBSW_S3_PARAM_U8},
+    {.ptr = &param_obc_mem_pct,     .size = OBSW_S3_PARAM_U8},
+    {.ptr = &param_obc_health,      .size = OBSW_S3_PARAM_U8},
+    {.ptr = &param_obc_reset_count, .size = OBSW_S3_PARAM_U16},
+    {.ptr = &param_obc_cpu_load,    .size = OBSW_S3_PARAM_U8},
+};
 static obsw_s3_set_t hk_sets[] = {
     {.set_id = SRDB_HK_NOMINAL_HK, .params = nominal_hk_params,
      .param_count = 1, .interval_ticks = 10, .countdown = 10, .enabled = true},
     {.set_id = SRDB_HK_FDIR_HK, .params = fdir_hk_params,
      .param_count = 2, .interval_ticks = 60, .countdown = 60, .enabled = true},
+    {.set_id = SRDB_HK_DHS_OBC_HK, .params = dhs_obc_hk_params,
+     .param_count = 7, .interval_ticks = 10, .countdown = 10, .enabled = true},
 };
 
 /* ------------------------------------------------------------------ */
@@ -330,7 +350,12 @@ obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
 
                 s20_params[3].value.u32 = (uint32_t)sensor.sim_time;         /* obc_uptime */
                 s20_params[4].value.u32 = (uint32_t)param_safe_entry_count;  /* safe_mode_entry_count */
-                s20_params[5].value.u32 = param_wd_kick_count;               /* watchdog_kick_count */            
+                s20_params[5].value.u32 = param_wd_kick_count;               /* watchdog_kick_count */
+
+                /* DHS OBC HK — live state for TM(3,25) set_id=3 */
+                param_obc_mode      = obsw_fsm_is_safe(&fsm_ctx) ? 0U : 1U;
+                param_obc_obt       = (uint32_t)sensor.sim_time;
+                param_obc_wd_status = 0U;   /* nominal — watchdog kicked each tick */
 
                 obsw_wd_kick(&wd_ctx);
                 obsw_s3_tick(&s3_ctx);

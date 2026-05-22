@@ -5,7 +5,11 @@
 #   name        Snake_case identifier — used in HK sets and code generation
 #   description Human-readable description
 #   type        C-compatible type: uint8, uint16, uint32, int8, int16, int32, float32
+#   ptc         ECSS PUS parameter type code (1=uint, 2=int, 5=float)
+#   pfc         ECSS PUS parameter format code (bit-width for ptc 1/2; 1=32b for ptc 5)
+#   subsystem   Logical subsystem path for XTCE SpaceSystem hierarchy
 #   unit        Engineering unit string (optional)
+#   enumeration Discrete state table (optional, ptc 1/2 only)
 #   conversion  Raw → engineering conversion (optional)
 #   limits      Soft and hard limits in engineering units (optional)
 
@@ -16,6 +20,9 @@ parameters:
     name: obc_temperature
     description: "OBC board temperature (internal sensor)"
     type: int16
+    ptc: 2
+    pfc: 16
+    subsystem: DHS/OBC
     unit: degC
     conversion:
       type: linear
@@ -33,6 +40,9 @@ parameters:
     name: obc_voltage_3v3
     description: "OBC 3.3V rail voltage"
     type: uint16
+    ptc: 1
+    pfc: 16
+    subsystem: DHS/OBC
     unit: mV
     limits:
       soft_low: 3100.0
@@ -44,6 +54,9 @@ parameters:
     name: obc_voltage_5v
     description: "OBC 5V rail voltage"
     type: uint16
+    ptc: 1
+    pfc: 16
+    subsystem: DHS/OBC
     unit: mV
     limits:
       soft_low: 4750.0
@@ -57,6 +70,9 @@ parameters:
     name: obc_uptime
     description: "OBC uptime since last boot"
     type: uint32
+    ptc: 1
+    pfc: 32
+    subsystem: DHS/OBC
     unit: s
 
   # ---- FDIR / safe mode --------------------------------------------------
@@ -65,27 +81,102 @@ parameters:
     name: safe_mode_entry_count
     description: "Number of safe mode transitions since boot"
     type: uint16
+    ptc: 1
+    pfc: 16
+    subsystem: DHS/FDIR
     unit: count
 
   - id: 0x0006
     name: watchdog_kick_count
     description: "Total watchdog kick count since boot"
     type: uint32
+    ptc: 1
+    pfc: 32
+    subsystem: DHS/FDIR
     unit: count
 
   - id: 0x0007
     name: watchdog_ticks_remaining
     description: "Ticks remaining before watchdog expiry"
     type: uint32
+    ptc: 1
+    pfc: 32
+    subsystem: DHS/FDIR
     unit: ticks
 
-# AOCS b-dot controller parameters
-bdot_gain:
-  description: "B-dot controller gain (Am2.s/T)"
-  value: 1.0e4
-  dtype: float
+  # ---- DHS OBC housekeeping (consumed by opensvf OBCEmulatorAdapter) ----
+  #
+  # These seven parameters form the canonical DHS OBC telemetry set.
+  # opensvf parses them from TM(3,25) set_id=3 (SPID 1003) and maps
+  # them to its internal port variables for simulation step.
 
-bdot_max_dipole:
-  description: "Maximum MTQ dipole moment (Am2)"
-  value: 10.0
-  dtype: float
+  - id: 0x0010
+    name: obc_mode
+    description: "OBC operational mode"
+    type: uint8
+    ptc: 1
+    pfc: 8
+    subsystem: DHS/OBC
+    enumeration:
+      - {value: 0, label: SAFE}
+      - {value: 1, label: NOMINAL}
+      - {value: 2, label: PAYLOAD}
+
+  - id: 0x0011
+    name: obc_obt
+    description: "On-board time"
+    type: uint32
+    ptc: 1
+    pfc: 32
+    subsystem: DHS/OBC
+    unit: s
+
+  - id: 0x0012
+    name: obc_watchdog_status
+    description: "Software watchdog status"
+    type: uint8
+    ptc: 1
+    pfc: 8
+    subsystem: DHS/OBC
+    enumeration:
+      - {value: 0, label: NOMINAL}
+      - {value: 1, label: EXPIRED}
+
+  - id: 0x0013
+    name: obc_memory_used_pct
+    description: "Mass memory fill percentage"
+    type: uint8
+    ptc: 1
+    pfc: 8
+    subsystem: DHS/OBC
+    unit: '%'
+
+  - id: 0x0014
+    name: obc_health
+    description: "OBC health status"
+    type: uint8
+    ptc: 1
+    pfc: 8
+    subsystem: DHS/OBC
+    enumeration:
+      - {value: 0, label: NOMINAL}
+      - {value: 1, label: DEGRADED}
+      - {value: 2, label: FAILED}
+
+  - id: 0x0015
+    name: obc_reset_count
+    description: "OBC reset counter since first boot"
+    type: uint16
+    ptc: 1
+    pfc: 16
+    subsystem: DHS/OBC
+    unit: count
+
+  - id: 0x0016
+    name: obc_cpu_load
+    description: "OBC CPU utilisation"
+    type: uint8
+    ptc: 1
+    pfc: 8
+    subsystem: DHS/OBC
+    unit: '%'
