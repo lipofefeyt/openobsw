@@ -1,32 +1,122 @@
 """
-codegen.py — Generate srdb_generated.h from the SRDB YAML data.
+codegen.py — Generate srdb_generated.h and mission.xtce from SRDB YAML data.
 
-This script is called by CMake at build time to produce:
-    build/include/obsw/srdb_generated.h
+Called by CMake at build time:
+    python3 -m obsw_srdb.codegen --data-dir srdb/data --output <path>/srdb_generated.h
+    python3 -m obsw_srdb.codegen --data-dir srdb/data --xtce-output <path>/mission.xtce
 
-The generated header provides named C constants for parameter IDs,
-event IDs, and HK set IDs — eliminating magic numbers in C code.
-
-Usage (CLI):
-    python3 codegen.py --data-dir srdb/data --output build/include/obsw/srdb_generated.h
-
-Usage (Python API):
-    from obsw_srdb.codegen import generate_header
-    header = generate_header(srdb)
+Python API:
+    from obsw_srdb.codegen import generate_header, generate_xtce
 """
 
 from __future__ import annotations
 
 import argparse
-import os
+import datetime
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import Optional
 
 from .loader import SRDBLoader
-from .model import SRDB
+from .model import Parameter, SRDB
+
+# ---------------------------------------------------------------------------
+# XTCE namespace constant
+# ---------------------------------------------------------------------------
+
+_XTCE_NS  = "http://www.omg.org/space/xtce"
+_XSI_NS   = "http://www.w3.org/2001/XMLSchema-instance"
+_SCHEMA   = ("http://www.omg.org/space/xtce "
+             "https://www.omg.org/spec/XTCE/20180204/SpaceSystem.xsd")
+
+# PUS-C TM packet bit offsets (from pus_tm.c + space_packet.c)
+# Primary header: 48 bits
+# Secondary header: 88 bits (starts at bit 48)
+_OFF_PUS_VERSION   = 48
+_OFF_SERVICE       = 56
+_OFF_SUBSERVICE    = 64
+_OFF_MSG_COUNTER   = 72
+_OFF_DEST_ID       = 88
+_OFF_TIMESTAMP     = 104
+# Application data starts at bit 136
+_OFF_APP_DATA      = 136
 
 
 # ---------------------------------------------------------------------------
-# Generator
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _t(name: str) -> str:
+    return f"{{{_XTCE_NS}}}{name}"
+
+
+def _param_bits(p: Parameter) -> int:
+    """Bit width of a parameter's raw encoding from its PTC/PFC."""
+    if p.ptc in (1, 2):
+        return p.pfc
+    if p.ptc == 5:
+        return 32 if p.pfc == 1 else 64
+    return p.pfc
+
+
+def _tc_param_bits(ptype: str) -> int:
+    """Bit width for a TC argument type string."""
+    return {"uint8": 8, "uint16": 16, "uint32": 32,
+            "int8": 8, "int16": 16, "int32": 32, "float32": 32}.get(ptype, 8)
+
+
+def _type_name(p: Parameter) -> str:
+    """XTCE ParameterType name for a mission parameter."""
+    if p.enumeration or p.conversion or p.limits:
+        return f"{p.name.upper()}_t"
+    if p.ptc == 1:
+        return f"uint{p.pfc}_t"
+    if p.ptc == 2:
+        return f"int{p.pfc}_t"
+    return f"float{32 if p.pfc == 1 else 64}_t"
+
+
+def _fixed_loc(parent: ET.Element, bit: int) -> None:
+    loc = ET.SubElement(parent, _t("LocationInContainerInBits"))
+    loc.set("referenceLocation", "containerStart")
+    ET.SubElement(loc, _t("FixedValue")).text = str(bit)
+
+
+def _add_unit_set(parent: ET.Element, unit: Optional[str]) -> None:
+    us = ET.SubElement(parent, _t("UnitSet"))
+    if unit:
+        ET.SubElement(us, _t("Unit")).text = unit
+
+
+def _add_integer_encoding(parent: ET.Element, bits: int, signed: bool) -> ET.Element:
+    enc = ET.SubElement(parent, _t("IntegerDataEncoding"))
+    enc.set("sizeInBits", str(bits))
+    enc.set("encoding", "twosComplement" if signed else "unsigned")
+    return enc
+
+
+def _add_float_encoding(parent: ET.Element, bits: int) -> ET.Element:
+    enc = ET.SubElement(parent, _t("FloatDataEncoding"))
+    enc.set("sizeInBits", str(bits))
+    enc.set("encoding", "IEEE754_1985")
+    return enc
+
+
+def _ref_entry(parent: ET.Element, param_ref: str, bit_offset: int) -> None:
+    e = ET.SubElement(parent, _t("ParameterRefEntry"))
+    e.set("parameterRef", param_ref)
+    _fixed_loc(e, bit_offset)
+
+
+def _comparison(parent: ET.Element, ref: str, value: int | str) -> None:
+    c = ET.SubElement(parent, _t("Comparison"))
+    c.set("parameterRef", ref)
+    c.set("value", str(value))
+    c.set("comparisonOperator", "==")
+
+
+# ---------------------------------------------------------------------------
+# C header generator (unchanged from previous version)
 # ---------------------------------------------------------------------------
 
 def generate_header(srdb: SRDB) -> str:
@@ -49,7 +139,6 @@ def generate_header(srdb: SRDB) -> str:
         "",
     ]
 
-    # ---- Mission identity --------------------------------------------------
     lines += [
         "/* ---------------------------------------------------------------- */",
         "/* Mission                                                          */",
@@ -62,7 +151,6 @@ def generate_header(srdb: SRDB) -> str:
         "",
     ]
 
-    # ---- Parameters --------------------------------------------------------
     lines += [
         "/* ---------------------------------------------------------------- */",
         "/* Parameter IDs                                                    */",
@@ -74,7 +162,6 @@ def generate_header(srdb: SRDB) -> str:
         lines.append(f"#define {macro:<40s} 0x{p.id:04X}U  /**< {p.description} */")
     lines.append("")
 
-    # ---- Events ------------------------------------------------------------
     lines += [
         "/* ---------------------------------------------------------------- */",
         "/* Event IDs                                                        */",
@@ -90,7 +177,6 @@ def generate_header(srdb: SRDB) -> str:
         )
     lines.append("")
 
-    # ---- HK set IDs --------------------------------------------------------
     lines += [
         "/* ---------------------------------------------------------------- */",
         "/* HK Set IDs                                                       */",
@@ -99,13 +185,13 @@ def generate_header(srdb: SRDB) -> str:
     ]
     for h in srdb.hk_sets:
         macro = f"SRDB_HK_{h.name.upper()}"
+        spid_note = f", SPID {h.spid}" if h.spid is not None else ""
         lines.append(
             f"#define {macro:<40s} {h.id}U"
-            f"  /**< {h.description} (default interval: {h.default_interval_ticks} ticks) */"
+            f"  /**< {h.description} (interval: {h.default_interval_ticks} ticks{spid_note}) */"
         )
     lines.append("")
 
-    # ---- Safe-trigger event ID array (C99 compound literal helper) ---------
     safe_ids = srdb.safe_trigger_event_ids()
     lines += [
         "/* ---------------------------------------------------------------- */",
@@ -123,7 +209,6 @@ def generate_header(srdb: SRDB) -> str:
             "",
         ]
 
-    # ---- Telecommand routing helpers ---------------------------------------
     lines += [
         "/* ---------------------------------------------------------------- */",
         "/* Telecommand routing                                              */",
@@ -147,50 +232,401 @@ def generate_header(srdb: SRDB) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CLI entry point (called by CMake)
+# XTCE generator
+# ---------------------------------------------------------------------------
+
+def generate_xtce(srdb: SRDB) -> str:
+    """Return a complete XTCE 1.2 SpaceSystem XML string for this SRDB."""
+    ET.register_namespace("", _XTCE_NS)
+    ET.register_namespace("xsi", _XSI_NS)
+
+    sc_name = srdb.spacecraft.name.replace(" ", "_")
+
+    root = ET.Element(_t("SpaceSystem"))
+    root.set("name", sc_name)
+    root.set(f"{{{_XSI_NS}}}schemaLocation", _SCHEMA)
+    root.set("shortDescription",
+             f"{srdb.spacecraft.name} — auto-generated by openobsw SRDB codegen")
+
+    hdr = ET.SubElement(root, _t("Header"))
+    hdr.set("date", datetime.date.today().isoformat())
+    hdr.set("version", "0.1.0")
+    hdr.set("classification", "Not classified")
+
+    _build_tm_metadata(root, srdb)
+    _build_cmd_metadata(root, srdb)
+
+    ET.indent(root, space="  ")
+    body = ET.tostring(root, encoding="unicode", xml_declaration=False)
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + body + "\n"
+
+
+# ---------------------------------------------------------------------------
+# TelemetryMetaData
+# ---------------------------------------------------------------------------
+
+def _build_tm_metadata(root: ET.Element, srdb: SRDB) -> None:
+    tm = ET.SubElement(root, _t("TelemetryMetaData"))
+    _build_parameter_type_set(tm, srdb)
+    _build_parameter_set(tm, srdb)
+    _build_container_set(tm, srdb)
+
+
+def _build_parameter_type_set(parent: ET.Element, srdb: SRDB) -> None:
+    pts = ET.SubElement(parent, _t("ParameterTypeSet"))
+
+    # --- Header / system types (fixed set required by ContainerSet) ---
+    _uint_type(pts, "uint1_t",  1)
+    _uint_type(pts, "uint2_t",  2)
+    _uint_type(pts, "uint3_t",  3)
+    _uint_type(pts, "uint8_t",  8)
+    _uint_type(pts, "uint11_t", 11)
+    _uint_type(pts, "uint14_t", 14)
+    _uint_type(pts, "uint16_t", 16)
+    _uint_type(pts, "uint32_t", 32)
+
+    # --- Mission parameter types (one per parameter) ---
+    emitted: set[str] = set()
+    for p in srdb.parameters:
+        tname = _type_name(p)
+        if tname in emitted:
+            continue
+        emitted.add(tname)
+        _mission_param_type(pts, p, tname)
+
+
+def _uint_type(parent: ET.Element, name: str, bits: int) -> None:
+    el = ET.SubElement(parent, _t("IntegerParameterType"))
+    el.set("name", name)
+    ET.SubElement(el, _t("UnitSet"))
+    _add_integer_encoding(el, bits, signed=False)
+
+
+def _mission_param_type(parent: ET.Element, p: Parameter, tname: str) -> None:
+    if p.enumeration:
+        el = ET.SubElement(parent, _t("EnumeratedParameterType"))
+        el.set("name", tname)
+        el.set("shortDescription", p.description)
+        _add_unit_set(el, p.unit)
+        _add_integer_encoding(el, p.pfc, signed=(p.ptc == 2))
+        enum_list = ET.SubElement(el, _t("EnumerationList"))
+        for entry in p.enumeration:
+            e = ET.SubElement(enum_list, _t("Enumeration"))
+            e.set("value", str(entry.value))
+            e.set("label", entry.label)
+    elif p.ptc == 5:
+        el = ET.SubElement(parent, _t("FloatParameterType"))
+        el.set("name", tname)
+        el.set("shortDescription", p.description)
+        _add_unit_set(el, p.unit)
+        enc = _add_float_encoding(el, _param_bits(p))
+        if p.conversion:
+            _add_polynomial_calibrator(enc, p.conversion)
+    else:
+        el = ET.SubElement(parent, _t("IntegerParameterType"))
+        el.set("name", tname)
+        el.set("shortDescription", p.description)
+        _add_unit_set(el, p.unit)
+        enc = _add_integer_encoding(el, p.pfc, signed=(p.ptc == 2))
+        if p.conversion:
+            _add_polynomial_calibrator(enc, p.conversion)
+
+    if p.limits:
+        _add_alarm_conditions(el, p)
+
+
+def _add_polynomial_calibrator(enc_el: ET.Element, conv) -> None:
+    cal = ET.SubElement(enc_el, _t("DefaultCalibrator"))
+    poly = ET.SubElement(cal, _t("PolynomialCalibrator"))
+    t1 = ET.SubElement(poly, _t("Term"))
+    t1.set("coefficient", str(conv.slope))
+    t1.set("exponent", "1")
+    t0 = ET.SubElement(poly, _t("Term"))
+    t0.set("coefficient", str(conv.offset))
+    t0.set("exponent", "0")
+
+
+def _add_alarm_conditions(type_el: ET.Element, p: Parameter) -> None:
+    lim = p.limits
+    alarm = ET.SubElement(type_el, _t("DefaultAlarm"))
+    static = ET.SubElement(alarm, _t("StaticAlarmRanges"))
+    if lim.hard_low is not None or lim.hard_high is not None:
+        cr = ET.SubElement(static, _t("CriticalRange"))
+        if lim.hard_low is not None:
+            cr.set("minInclusive", str(lim.hard_low))
+        if lim.hard_high is not None:
+            cr.set("maxInclusive", str(lim.hard_high))
+    if lim.soft_low is not None or lim.soft_high is not None:
+        wr = ET.SubElement(static, _t("WarningRange"))
+        if lim.soft_low is not None:
+            wr.set("minInclusive", str(lim.soft_low))
+        if lim.soft_high is not None:
+            wr.set("maxInclusive", str(lim.soft_high))
+
+
+def _build_parameter_set(parent: ET.Element, srdb: SRDB) -> None:
+    ps = ET.SubElement(parent, _t("ParameterSet"))
+
+    # Header parameters — referenced by ContainerSet for discrimination
+    _sys_param(ps, "PKT_VERSION",   "uint3_t",  "CCSDS packet version")
+    _sys_param(ps, "PKT_TYPE",      "uint1_t",  "0=TM, 1=TC")
+    _sys_param(ps, "SEC_HDR_FLAG",  "uint1_t",  "Secondary header present flag")
+    _sys_param(ps, "APID",          "uint11_t", "Application process identifier")
+    _sys_param(ps, "SEQ_FLAGS",     "uint2_t",  "Sequence flags")
+    _sys_param(ps, "SEQ_COUNT",     "uint14_t", "Packet sequence count")
+    _sys_param(ps, "PKT_DATA_LEN",  "uint16_t", "Packet data length field (total octets - 7)")
+    _sys_param(ps, "PUS_VERSION",   "uint8_t",  "PUS version + spare nibble")
+    _sys_param(ps, "SERVICE_TYPE",  "uint8_t",  "PUS service type")
+    _sys_param(ps, "SERVICE_SUBTYPE", "uint8_t", "PUS service subtype")
+    _sys_param(ps, "MSG_COUNTER",   "uint16_t", "Per-service message counter")
+    _sys_param(ps, "DEST_ID",       "uint16_t", "Destination application ID")
+    _sys_param(ps, "TIMESTAMP",     "uint32_t", "Mission elapsed time (CUC, 4 bytes)")
+    _sys_param(ps, "HK_SID",        "uint8_t",  "S3 housekeeping structure ID")
+
+    # Mission parameters
+    for p in srdb.parameters:
+        el = ET.SubElement(ps, _t("Parameter"))
+        el.set("name", p.name.upper())
+        el.set("parameterTypeRef", _type_name(p))
+        el.set("shortDescription", p.description)
+        if p.subsystem:
+            ld = ET.SubElement(el, _t("LongDescription"))
+            ld.text = f"Subsystem: {p.subsystem} | ID: 0x{p.id:04X}"
+
+
+def _sys_param(parent: ET.Element, name: str, type_ref: str, desc: str) -> None:
+    el = ET.SubElement(parent, _t("Parameter"))
+    el.set("name", name)
+    el.set("parameterTypeRef", type_ref)
+    el.set("shortDescription", desc)
+
+
+# ---------------------------------------------------------------------------
+# ContainerSet
+# ---------------------------------------------------------------------------
+
+def _build_container_set(parent: ET.Element, srdb: SRDB) -> None:
+    cs = ET.SubElement(parent, _t("ContainerSet"))
+
+    # ---- CCSDSPacket (abstract base — primary header) --------------------
+    ccsds = ET.SubElement(cs, _t("SequenceContainer"))
+    ccsds.set("name", "CCSDSPacket")
+    ccsds.set("abstract", "true")
+    ccsds.set("shortDescription", "CCSDS Space Packet primary header")
+    el = ET.SubElement(ccsds, _t("EntryList"))
+    _ref_entry(el, "PKT_VERSION",  0)
+    _ref_entry(el, "PKT_TYPE",     3)
+    _ref_entry(el, "SEC_HDR_FLAG", 4)
+    _ref_entry(el, "APID",         5)
+    _ref_entry(el, "SEQ_FLAGS",    16)
+    _ref_entry(el, "SEQ_COUNT",    18)
+    _ref_entry(el, "PKT_DATA_LEN", 32)
+
+    # ---- PUSPacket (abstract — adds PUS-C TM secondary header) ----------
+    pus = ET.SubElement(cs, _t("SequenceContainer"))
+    pus.set("name", "PUSPacket")
+    pus.set("abstract", "true")
+    pus.set("shortDescription", "PUS-C TM packet — CCSDS + 11-byte secondary header")
+    base = ET.SubElement(pus, _t("BaseContainer"))
+    base.set("containerRef", "CCSDSPacket")
+    rc = ET.SubElement(base, _t("RestrictionCriteria"))
+    _comparison(rc, "PKT_TYPE", 0)   # TM = 0
+    el = ET.SubElement(pus, _t("EntryList"))
+    _ref_entry(el, "PUS_VERSION",    _OFF_PUS_VERSION)
+    _ref_entry(el, "SERVICE_TYPE",   _OFF_SERVICE)
+    _ref_entry(el, "SERVICE_SUBTYPE",_OFF_SUBSERVICE)
+    _ref_entry(el, "MSG_COUNTER",    _OFF_MSG_COUNTER)
+    _ref_entry(el, "DEST_ID",        _OFF_DEST_ID)
+    _ref_entry(el, "TIMESTAMP",      _OFF_TIMESTAMP)
+
+    # ---- S1 verification reports -----------------------------------------
+    for subsvc, label in ((1, "Acceptance_Success"), (7, "Completion_Success")):
+        _simple_pus_container(cs, f"TM_1_{subsvc}", "PUSPacket",
+                              1, subsvc, f"TM(1,{subsvc}) — {label.replace('_',' ')}")
+
+    # ---- TM(3,25) base (abstract — adds HK_SID discriminant field) ------
+    tm325 = ET.SubElement(cs, _t("SequenceContainer"))
+    tm325.set("name", "TM_3_25")
+    tm325.set("abstract", "true")
+    tm325.set("shortDescription", "TM(3,25) HK report — discriminated by HK_SID")
+    base = ET.SubElement(tm325, _t("BaseContainer"))
+    base.set("containerRef", "PUSPacket")
+    rc = ET.SubElement(base, _t("RestrictionCriteria"))
+    cl = ET.SubElement(rc, _t("ComparisonList"))
+    _comparison(cl, "SERVICE_TYPE",    3)
+    _comparison(cl, "SERVICE_SUBTYPE", 25)
+    el = ET.SubElement(tm325, _t("EntryList"))
+    _ref_entry(el, "HK_SID", _OFF_APP_DATA)
+
+    # ---- Per-HK-set containers -------------------------------------------
+    for hk in srdb.hk_sets:
+        con = ET.SubElement(cs, _t("SequenceContainer"))
+        con.set("name", f"TM_3_25_{hk.name.upper()}")
+        if hk.spid is not None:
+            con.set("shortDescription",
+                    f"SPID {hk.spid} — {hk.description}")
+        base = ET.SubElement(con, _t("BaseContainer"))
+        base.set("containerRef", "TM_3_25")
+        rc = ET.SubElement(base, _t("RestrictionCriteria"))
+        _comparison(rc, "HK_SID", hk.id)
+
+        el = ET.SubElement(con, _t("EntryList"))
+        bit = _OFF_APP_DATA + 8   # after the 8-bit HK_SID
+        for pname in hk.parameters:
+            p = srdb.parameter_by_name(pname)
+            if p is None:
+                continue
+            _ref_entry(el, p.name.upper(), bit)
+            bit += _param_bits(p)
+
+    # ---- S5 event reports (one container per severity level) ------------
+    for subsvc, label in (
+        (1, "INFO"), (2, "LOW"), (3, "MEDIUM"), (4, "HIGH")
+    ):
+        _simple_pus_container(cs, f"TM_5_{subsvc}", "PUSPacket",
+                              5, subsvc, f"TM(5,{subsvc}) — S5 event report ({label})")
+
+    # ---- S17 ping response -----------------------------------------------
+    _simple_pus_container(cs, "TM_17_2", "PUSPacket",
+                          17, 2, "TM(17,2) — Are-you-alive response")
+
+    # ---- S20 parameter get response --------------------------------------
+    _simple_pus_container(cs, "TM_20_2", "PUSPacket",
+                          20, 2, "TM(20,2) — Parameter get response")
+
+
+def _simple_pus_container(cs: ET.Element, name: str, base_ref: str,
+                           svc: int, subsvc: int, desc: str) -> None:
+    con = ET.SubElement(cs, _t("SequenceContainer"))
+    con.set("name", name)
+    con.set("shortDescription", desc)
+    base = ET.SubElement(con, _t("BaseContainer"))
+    base.set("containerRef", base_ref)
+    rc = ET.SubElement(base, _t("RestrictionCriteria"))
+    cl = ET.SubElement(rc, _t("ComparisonList"))
+    _comparison(cl, "SERVICE_TYPE",    svc)
+    _comparison(cl, "SERVICE_SUBTYPE", subsvc)
+    ET.SubElement(con, _t("EntryList"))
+
+
+# ---------------------------------------------------------------------------
+# CommandMetaData
+# ---------------------------------------------------------------------------
+
+def _build_cmd_metadata(root: ET.Element, srdb: SRDB) -> None:
+    cmd = ET.SubElement(root, _t("CommandMetaData"))
+    _build_argument_type_set(cmd, srdb)
+    _build_metacommand_set(cmd, srdb)
+
+
+def _build_argument_type_set(parent: ET.Element, srdb: SRDB) -> None:
+    ats = ET.SubElement(parent, _t("ArgumentTypeSet"))
+    # Collect unique TC argument types
+    seen: set[str] = set()
+    for tc in srdb.telecommands:
+        for arg in tc.parameters:
+            bits = _tc_param_bits(arg.type.value)
+            signed = arg.type.value.startswith("int")
+            tname = f"{'int' if signed else 'uint'}{bits}_arg_t"
+            if tname in seen:
+                continue
+            seen.add(tname)
+            el = ET.SubElement(ats, _t("IntegerArgumentType"))
+            el.set("name", tname)
+            ET.SubElement(el, _t("UnitSet"))
+            enc = ET.SubElement(el, _t("IntegerDataEncoding"))
+            enc.set("sizeInBits", str(bits))
+            enc.set("encoding", "twosComplement" if signed else "unsigned")
+
+
+def _build_metacommand_set(parent: ET.Element, srdb: SRDB) -> None:
+    mcs = ET.SubElement(parent, _t("MetaCommandSet"))
+
+    # Abstract PUS TC base
+    base_mc = ET.SubElement(mcs, _t("MetaCommand"))
+    base_mc.set("name", "PUSCommand")
+    base_mc.set("abstract", "true")
+    base_mc.set("shortDescription", "PUS-C TC base — CCSDS primary header + 5-byte secondary header")
+
+    for tc in srdb.telecommands:
+        mc = ET.SubElement(mcs, _t("MetaCommand"))
+        mc.set("name", f"TC_{tc.service}_{tc.subservice}_{tc.name.upper()}")
+        mc.set("shortDescription", tc.description)
+
+        base = ET.SubElement(mc, _t("BaseMetaCommand"))
+        base.set("metaCommandRef", "PUSCommand")
+        asgn = ET.SubElement(base, _t("ArgumentAssignmentList"))
+        for name, val in (("SERVICE_TYPE", tc.service),
+                          ("SERVICE_SUBTYPE", tc.subservice),
+                          ("APID", tc.apid)):
+            a = ET.SubElement(asgn, _t("ArgumentAssignment"))
+            a.set("argumentName", name)
+            a.set("argumentValue", str(val))
+
+        if tc.parameters:
+            al = ET.SubElement(mc, _t("ArgumentList"))
+            for arg in tc.parameters:
+                bits = _tc_param_bits(arg.type.value)
+                signed = arg.type.value.startswith("int")
+                tname = f"{'int' if signed else 'uint'}{bits}_arg_t"
+                a = ET.SubElement(al, _t("Argument"))
+                a.set("name", arg.name.upper())
+                a.set("argumentTypeRef", tname)
+                if arg.description:
+                    a.set("shortDescription", arg.description)
+
+
+# ---------------------------------------------------------------------------
+# CLI entry points
 # ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Generate srdb_generated.h from SRDB YAML data."
+        description="Generate srdb_generated.h and/or mission.xtce from SRDB YAML data."
     )
-    parser.add_argument(
-        "--data-dir", required=True,
-        help="Path to srdb/data/ directory containing YAML files"
-    )
-    parser.add_argument(
-        "--output", required=True,
-        help="Output path for srdb_generated.h"
-    )
+    parser.add_argument("--data-dir", required=True,
+                        help="Path to srdb/data/ directory")
+    parser.add_argument("--output",
+                        help="Output path for srdb_generated.h")
+    parser.add_argument("--xtce-output",
+                        help="Output path for mission.xtce")
     args = parser.parse_args()
 
+    if not args.output and not args.xtce_output:
+        parser.error("At least one of --output or --xtce-output is required")
+
     srdb = SRDBLoader.load(args.data_dir)
-    header = generate_header(srdb)
 
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if args.output:
+        out = Path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(generate_header(srdb), encoding="utf-8")
+        print(f"[srdb codegen] wrote {out}")
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(header)
-
-    print(f"[srdb codegen] wrote {output_path}")
+    if args.xtce_output:
+        out = Path(args.xtce_output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(generate_xtce(srdb), encoding="utf-8")
+        print(f"[srdb codegen] wrote {out}")
 
 
 def export_main() -> None:
     """CLI entry point: obsw-srdb-export --data-dir srdb/data --output-dir srdb/export"""
-    import argparse
-    from obsw_srdb.loader import SRDBLoader
-    from obsw_srdb.csv_io import export_csv
-
-    parser = argparse.ArgumentParser(description="Export SRDB to CSV")
+    parser = argparse.ArgumentParser(description="Export SRDB to CSV and XTCE")
     parser.add_argument("--data-dir", default="srdb/data",
                         help="Path to SRDB YAML data directory")
     parser.add_argument("--output-dir", default="srdb/export",
-                        help="Output directory for CSV files")
+                        help="Output directory for generated files")
     args = parser.parse_args()
 
+    from obsw_srdb.csv_io import export_csv
     srdb = SRDBLoader.load(args.data_dir)
     export_csv(srdb, args.output_dir)
+
+    xtce_path = Path(args.output_dir) / "mission.xtce"
+    xtce_path.parent.mkdir(parents=True, exist_ok=True)
+    xtce_path.write_text(generate_xtce(srdb), encoding="utf-8")
+
     print(f"Exported {len(srdb.parameters)} parameters, "
           f"{len(srdb.telecommands)} TCs, "
           f"{len(srdb.events)} events, "

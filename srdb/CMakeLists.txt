@@ -16,8 +16,17 @@ set(SRDB_PKG_DIR    "${CMAKE_CURRENT_SOURCE_DIR}")
 set(SRDB_DATA_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/data")
 set(SRDB_GENERATED_DIR "${CMAKE_BINARY_DIR}/include/obsw")
 set(SRDB_GENERATED_H   "${SRDB_GENERATED_DIR}/srdb_generated.h")
+set(SRDB_XTCE_DIR   "${CMAKE_BINARY_DIR}/xtce")
+set(SRDB_XTCE_FILE  "${SRDB_XTCE_DIR}/mission.xtce")
 
 file(GLOB SRDB_YAML_FILES "${SRDB_DATA_DIR}/*.yaml")
+
+set(_SRDB_CODEGEN_DEPS
+    ${SRDB_YAML_FILES}
+    "${SRDB_PKG_DIR}/obsw_srdb/codegen.py"
+    "${SRDB_PKG_DIR}/obsw_srdb/loader.py"
+    "${SRDB_PKG_DIR}/obsw_srdb/model.py"
+)
 
 add_custom_command(
     OUTPUT "${SRDB_GENERATED_H}"
@@ -25,17 +34,24 @@ add_custom_command(
             "${Python3_EXECUTABLE}" -m obsw_srdb.codegen
             --data-dir "${SRDB_DATA_DIR}"
             --output   "${SRDB_GENERATED_H}"
-    DEPENDS
-        ${SRDB_YAML_FILES}
-        "${SRDB_PKG_DIR}/obsw_srdb/codegen.py"
-        "${SRDB_PKG_DIR}/obsw_srdb/loader.py"
-        "${SRDB_PKG_DIR}/obsw_srdb/model.py"
+    DEPENDS ${_SRDB_CODEGEN_DEPS}
     COMMENT "[srdb] Generating srdb_generated.h"
     VERBATIM
 )
 
+add_custom_command(
+    OUTPUT "${SRDB_XTCE_FILE}"
+    COMMAND "${CMAKE_COMMAND}" -E env "PYTHONPATH=${SRDB_PKG_DIR}"
+            "${Python3_EXECUTABLE}" -m obsw_srdb.codegen
+            --data-dir    "${SRDB_DATA_DIR}"
+            --xtce-output "${SRDB_XTCE_FILE}"
+    DEPENDS ${_SRDB_CODEGEN_DEPS}
+    COMMENT "[srdb] Generating mission.xtce"
+    VERBATIM
+)
+
 add_custom_target(srdb_codegen ALL
-    DEPENDS "${SRDB_GENERATED_H}"
+    DEPENDS "${SRDB_GENERATED_H}" "${SRDB_XTCE_FILE}"
 )
 
 add_library(obsw_srdb_generated INTERFACE)
