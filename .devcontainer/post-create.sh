@@ -24,6 +24,7 @@ sudo apt-get install -y \
     dfu-util \
     qemu-user \
     libusb-1.0-0-dev \
+    screen \
     2>/dev/null
 echo "[1/5] System packages installed"
 
@@ -54,7 +55,24 @@ fi
 source "$REPO/.venv/bin/activate"
 pip install -q pydantic pyyaml pytest
 pip install -q -e "$REPO/srdb/"
-echo "[4/5] Python venv ready"
+echo "[4/6] Python venv ready"
+
+# ── Renode ────────────────────────────────────────────────────────────
+# Use the portable tarball: bundles its own .NET/Mono runtime so it works
+# on Ubuntu 24.04 which dropped the mono-* and gtk-sharp2 packages that
+# the .deb version depends on.
+RENODE_VERSION="1.15.2"
+RENODE_DIR="/opt/renode"
+if ! command -v renode &>/dev/null; then
+    echo "    Downloading Renode ${RENODE_VERSION} (portable)..."
+    wget -q "https://github.com/renode/renode/releases/download/v${RENODE_VERSION}/renode-${RENODE_VERSION}.linux-portable.tar.gz" \
+        -O /tmp/renode-portable.tar.gz
+    sudo mkdir -p "$RENODE_DIR"
+    sudo tar -xf /tmp/renode-portable.tar.gz -C "$RENODE_DIR" --strip-components=1
+    sudo ln -sf "$RENODE_DIR/renode" /usr/local/bin/renode
+    rm /tmp/renode-portable.tar.gz
+fi
+echo "[5/6] Renode ready ($(renode --version 2>/dev/null | head -1))"
 
 # ── Build + test ──────────────────────────────────────────────────────
 cmake -S "$REPO" -B "$REPO/build" \
@@ -68,7 +86,7 @@ cmake -S "$REPO" -B "$REPO/build" \
 cmake --build "$REPO/build" -j$(nproc) 2>&1 | tail -3
 cd "$REPO/build" && ctest --output-on-failure -q 2>&1 | tail -3
 cd "$REPO"
-echo "[5/5] Build and tests complete"
+echo "[6/6] Build and tests complete"
 
 # ── Aliases ───────────────────────────────────────────────────────────
 echo "source $REPO/scripts/activate.sh" >> ~/.bashrc

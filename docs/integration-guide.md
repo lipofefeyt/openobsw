@@ -305,15 +305,29 @@ no internet connection required.
 
 ### Renode socket mode
 
-```bash
-# In openobsw: build bare-metal binary
-baremetal-build
+Two targets are supported. Both expose UART as a TCP socket on port 3456.
 
-# Start Renode
+**ZynqMP (aarch64 bare-metal):**
+```bash
+cmake -S . -B build_zynqmp_baremetal \
+    -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-none-elf.cmake \
+    -DOBSW_BUILD_ZYNQMP=ON -DOBSW_BUILD_TESTS=OFF -DOBSW_BUILD_SIM=OFF
+cmake --build build_zynqmp_baremetal
 renode renode/zynqmp_obsw.resc &
 sleep 5
 ```
 
+**STM32H750 (Cortex-M7 bare-metal):**
+```bash
+cmake -S targets/stm32h7 -B build_stm32h7_renode \
+    -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/stm32h7-toolchain.cmake \
+    -DOBSW_ROOT=$(pwd) -DOBSW_RENODE=ON
+cmake --build build_stm32h7_renode -j$(nproc)
+renode renode/stm32h750_obsw.resc &
+sleep 5
+```
+
+Both targets use the same SVF socket config:
 ```yaml
 obsw:
   type: socket

@@ -59,7 +59,9 @@ alias stm32h7-size='arm-none-eabi-size $OPENOBSW_REPO/build_stm32h7/obsw_stm32h7
 
 # ── Renode ────────────────────────────────────────────────────────────
 alias renode-zynqmp='renode $OPENOBSW_REPO/renode/zynqmp_obsw.resc'
-alias renode-ping='python3 $OPENOBSW_REPO/renode/test_ping_zynqmp.py'
+alias renode-ping-zynqmp='python3 $OPENOBSW_REPO/renode/test_ping_zynqmp.py'
+alias renode-stm32h7='renode $OPENOBSW_REPO/renode/stm32h750_obsw.resc'
+alias renode-ping-stm32h7='python3 $OPENOBSW_REPO/renode/test_ping_stm32h7.py'
 
 echo "[openobsw] activated — repo: $REPO"
-echo "[openobsw] aliases: host-build host-test host-sim | aarch64-build | zynqbare-build | stm32h7-build stm32h7-flash | renode-zynqmp"
+echo "[openobsw] aliases: host-build host-test host-sim | aarch64-build | zynqbare-build | stm32h7-build stm32h7-flash | renode-zynqmp renode-stm32h7"

@@ -110,7 +110,7 @@ parameters:
   # opensvf parses them from TM(3,25) set_id=3 (SPID 1003) and maps
   # them to its internal port variables for simulation step.
 
-  - id: 0x0010
+  - id: 0x4001
     name: obc_mode
     description: "OBC operational mode"
     type: uint8
@@ -122,7 +122,7 @@ parameters:
       - {value: 1, label: NOMINAL}
       - {value: 2, label: PAYLOAD}
 
-  - id: 0x0011
+  - id: 0x4003
     name: obc_obt
     description: "On-board time"
     type: uint32
@@ -131,7 +131,7 @@ parameters:
     subsystem: DHS/OBC
     unit: s
 
-  - id: 0x0012
+  - id: 0x4004
     name: obc_watchdog_status
     description: "Software watchdog status"
     type: uint8
@@ -142,7 +142,7 @@ parameters:
       - {value: 0, label: NOMINAL}
       - {value: 1, label: EXPIRED}
 
-  - id: 0x0013
+  - id: 0x4006
     name: obc_memory_used_pct
     description: "Mass memory fill percentage"
     type: uint8
@@ -151,7 +151,7 @@ parameters:
     subsystem: DHS/OBC
     unit: '%'
 
-  - id: 0x0014
+  - id: 0x4008
     name: obc_health
     description: "OBC health status"
     type: uint8
@@ -163,7 +163,7 @@ parameters:
       - {value: 1, label: DEGRADED}
       - {value: 2, label: FAILED}
 
-  - id: 0x0015
+  - id: 0x4009
     name: obc_reset_count
     description: "OBC reset counter since first boot"
     type: uint16
@@ -172,7 +172,7 @@ parameters:
     subsystem: DHS/OBC
     unit: count
 
-  - id: 0x0016
+  - id: 0x400A
     name: obc_cpu_load
     description: "OBC CPU utilisation"
     type: uint8

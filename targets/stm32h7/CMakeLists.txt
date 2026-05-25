@@ -8,6 +8,8 @@ cmake_minimum_required(VERSION 3.14)
 
 project(openobsw_stm32h7 C ASM)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Force usage of ARM toolchain
 set(CMAKE_ASM_COMPILER arm-none-eabi-gcc)
 set(CMAKE_ASM_FLAGS "-mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -x assembler-with-cpp")
@@ -15,6 +17,13 @@ set(CMAKE_ASM_FLAGS "-mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard -x 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+
+# Pass -DOBSW_RENODE=ON to build a Renode-compatible ELF that skips
+# system_clock_init() (stub RCC in the platform model can't satisfy
+# the HSERDY/PLLRDY spin-waits).
+option(OBSW_RENODE "Build for Renode emulation (skip PLL clock init)" OFF)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # ── SRDB code generation ──────────────────────────────────────────────
 set(SRDB_GENERATED_H "${CMAKE_BINARY_DIR}/include/obsw/srdb_generated.h")
@@ -58,6 +67,10 @@ target_include_directories(obsw_stm32h7 PUBLIC
 )
 
 target_link_libraries(obsw_stm32h7 PUBLIC obsw_srdb_generated_stm32h7)
+
+if(OBSW_RENODE)
+    target_compile_definitions(obsw_stm32h7 PUBLIC OBSW_RENODE)
+endif()
 
 set_target_properties(obsw_stm32h7 PROPERTIES
     C_STANDARD 11
