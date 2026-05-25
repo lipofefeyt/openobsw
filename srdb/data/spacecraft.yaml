@@ -8,4 +8,4 @@ spacecraft:
   name: "Demo Satellite"
   description: "openobsw reference mission configuration"
   scid: 0x001 # placeholder — mission-assigned
-  apid_default: 0x010 # default TC target APID
+  apid_default: 0x103 # OBC TM source APID (and default TC target APID)

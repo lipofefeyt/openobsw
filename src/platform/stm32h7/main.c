@@ -7,9 +7,8 @@
  * main loop — same protocol as the host sim and ZynqMP target.
  *
  * Clock configuration:
- *   HSI (64MHz) → PLL1 → SYSCLK 480MHz, APB1 120MHz
- *   (Full PLL config coming in v0.8 — currently runs on HSI 64MHz
- *    with APB1 = 32MHz, BRR adjusted accordingly)
+ *   HSE 25 MHz → PLL1 → SYSCLK 480 MHz, APB1 120 MHz
+ *   BRR = 120000000 / 115200 = 1041
  *
  * UART: USART3 on PD8/PD9, 115200 baud.
  */
@@ -49,6 +48,7 @@
 #define PWR_D3CR        (*(volatile uint32_t *)(0x58024800UL + 0x018))
 #define SYSCFG_PWRCR    (*(volatile uint32_t *)(0x58000400UL + 0x004))
 
+ #ifndef OBSW_RENODE
  /**
  * STM32H750 System Clock Configuration
  *
@@ -101,12 +101,11 @@ static void system_clock_init(void)
                  | ((3U)   << 16) /* DIVQ1 */
                  | ((1U)   << 24);/* DIVR1 */
 
-    /* Enable PLL1 fractional and wide-range VCO */
-    RCC_PLLCFGR = (1U << 0)   /* DIVPEN — enable P output */
-                | (1U << 1)   /* DIVQEN — enable Q output */
-                | (1U << 2)   /* DIVREN — enable R output */
-                | (3U << 2)   /* PLL1RGE: input 4-8 MHz range */
-                | (1U << 4);  /* PLL1VCOSEL: wide VCO 192-836 MHz */
+    /* Enable PLL1 P/Q/R outputs; PLL1RGE=10 (4-8 MHz input); VCOSEL=0 (wide VCO, default) */
+    RCC_PLLCFGR = (1U << 0)   /* DIVP1EN */
+                | (1U << 1)   /* DIVQ1EN */
+                | (1U << 2)   /* DIVR1EN */
+                | (2U << 4);  /* PLL1RGE bits[5:4] = 0b10 → 4-8 MHz range (ref = 5 MHz) */
 
     /* 5. Enable PLL1 */
     RCC_CR |= (1U << 24);          /* PLL1ON */
@@ -130,7 +129,8 @@ static void system_clock_init(void)
     while (((RCC_CFGR >> 3) & 0x7U) != 3U) /* Wait SWS = PLL1 */
         ;
 }
- 
+ #endif /* OBSW_RENODE */
+
  /* ------------------------------------------------------------------ */
  /* External symbols from startup.S and HAL                             */
  /* ------------------------------------------------------------------ */
@@ -138,6 +138,15 @@ static void system_clock_init(void)
  extern obsw_io_ops_t obsw_uart_ops;
  extern void          obsw_uart_init(void);
  
+ /* ------------------------------------------------------------------ */
+ /* No-op responder (required by dispatcher_init; S1 sends its own TM) */
+ /* ------------------------------------------------------------------ */
+
+ static void noop_responder(uint8_t flag, const obsw_tc_t *tc, void *ctx)
+ {
+     (void)flag; (void)tc; (void)ctx;
+ }
+
  /* ------------------------------------------------------------------ */
  /* OBSW context                                                         */
  /* ------------------------------------------------------------------ */
@@ -210,8 +219,10 @@ static void system_clock_init(void)
  
  int main(void)
  {
-     /* Init the clock */
-     //system_clock_init();
+     /* Init the clock — skipped under Renode (stub RCC would spin on ready bits) */
+ #ifndef OBSW_RENODE
+     system_clock_init();
+ #endif
 
      /* Peripheral init */
      obsw_uart_init();
@@ -240,7 +251,7 @@ static void system_clock_init(void)
      obsw_tc_dispatcher_init(&dispatcher,
                              routes,
                              sizeof(routes) / sizeof(routes[0]),
-                             NULL, NULL);
+                             noop_responder, NULL);
  
      /* Boot banner — visible on UART terminal */
      const char *banner =

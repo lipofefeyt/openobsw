@@ -12,6 +12,11 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true
             }
+        },
+        {
+            "name": "STM32H7",
+            "compileCommands": "${workspaceFolder}/build_stm32h7/compile_commands.json",
+            "intelliSenseMode": "linux-gcc-arm"
         }
     ],
     "version": 4

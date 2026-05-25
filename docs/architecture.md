@@ -499,6 +499,90 @@ and MSP430 register names correctly. See the README for the configuration.
 
 ---
 
+## STM32H750VBT6 target
+
+### Overview
+
+The STM32H750VBT6 (WeAct board) is the **high-performance OBC** target —
+Cortex-M7 at 480 MHz, 128 KB internal flash, 512 KB AXI SRAM. It runs the
+same wire protocol v3 stack as the host sim and ZynqMP target.
+
+| Resource | Value |
+|---|---|
+| Architecture | ARM Cortex-M7, FPU |
+| SYSCLK | 480 MHz (HSE 25 MHz → PLL1) |
+| APB1 | 120 MHz |
+| Flash | 128 KB @ 0x08000000 |
+| RAM | 512 KB AXI SRAM @ 0x20000000 |
+| Toolchain | arm-none-eabi-gcc 13.2 |
+
+### Clock configuration
+
+`src/platform/stm32h7/main.c` configures the full PLL1 chain at boot:
+HSE 25 MHz → `/5` ref → PLL1 VCO 960 MHz → `/2` SYSCLK 480 MHz, APB1 120 MHz.
+`system_clock_init()` is compiled out when `OBSW_RENODE=ON` because the
+stub RCC peripheral in the Renode platform model cannot satisfy the HSERDY/PLLRDY
+spin-waits.
+
+### HAL UART (USART3)
+
+`src/hal/stm32h7/uart.c` implements `obsw_io_ops_t` using USART3 on PD8 (TX) /
+PD9 (RX), 115200 baud. BRR = 120 000 000 / 115 200 = **1041**.
+
+### Build outputs
+
+```
+build_stm32h7/          — real hardware (OBSW_RENODE=OFF, default)
+  obsw_stm32h7.elf      — ELF for GDB / OpenOCD
+  obsw_stm32h7.bin      — flat binary for OpenOCD program command
+
+build_stm32h7_renode/   — Renode emulation (OBSW_RENODE=ON)
+  obsw_stm32h7.elf      — ELF loaded by stm32h750_obsw.resc
+```
+
+### Cross-compilation
+
+```bash
+# Real hardware
+cmake -S targets/stm32h7 -B build_stm32h7 \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/stm32h7-toolchain.cmake \
+    -DOBSW_ROOT=$(pwd)
+cmake --build build_stm32h7 -j$(nproc)
+
+# Renode emulation (skips PLL spin-waits)
+cmake -S targets/stm32h7 -B build_stm32h7_renode \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/stm32h7-toolchain.cmake \
+    -DOBSW_ROOT=$(pwd) -DOBSW_RENODE=ON
+cmake --build build_stm32h7_renode -j$(nproc)
+```
+
+### Flashing
+
+```bash
+# Via OpenOCD + ST-Link V2 (run from WSL2 if USB not passed through to container)
+openocd -f interface/stlink.cfg -f target/stm32h7x.cfg \
+    -c "program /absolute/path/to/build_stm32h7/obsw_stm32h7.bin 0x08000000 verify reset exit"
+```
+
+Note: tilde (`~`) is not expanded inside the OpenOCD `-c` string — use the
+absolute path. The `stm32h7-flash` alias in `scripts/activate.sh` handles this.
+
+### Renode emulation
+
+```bash
+renode renode/stm32h750_obsw.resc   # alias: renode-stm32h7
+python3 renode/test_ping_stm32h7.py # alias: renode-ping-stm32h7
+```
+
+The platform model (`renode/stm32h750.repl`) wires USART3 to a TCP socket
+terminal on port 3456. UART output and wire-protocol v3 frames are exchanged
+over that socket. RCC and GPIOD are stub memories that absorb `obsw_uart_init()`
+register writes without faulting.
+
+---
+
 ## AOCS — Attitude and Orbit Control
 
 ### Overview

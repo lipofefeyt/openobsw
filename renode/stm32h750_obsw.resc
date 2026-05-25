@@ -1,0 +1,20 @@
+# Build the Renode-compatible ELF before loading:
+#   cmake -S targets/stm32h7 -B build_stm32h7 \
+#         -DCMAKE_TOOLCHAIN_FILE=cmake/stm32h7-toolchain.cmake \
+#         -DOBSW_ROOT=$(pwd) -DOBSW_RENODE=ON
+#   cmake --build build_stm32h7 -j$(nproc)
+
+using sysbus
+
+mach create "stm32h750"
+machine LoadPlatformDescription @renode/stm32h750.repl
+
+sysbus LoadELF @build_stm32h7_renode/obsw_stm32h7.elf
+
+emulation CreateServerSocketTerminal 3456 "term" false
+connector Connect usart3 term
+
+machine StartGdbServer 3333
+
+logLevel 3
+start
