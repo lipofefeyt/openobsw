@@ -62,7 +62,7 @@ typedef struct {
 /* Context                                                             */
 /* ------------------------------------------------------------------ */
 
-typedef struct {
+typedef struct obsw_fsm_ctx {
     obsw_fsm_mode_t mode;
     obsw_fsm_config_t config;
     uint32_t safe_entry_count;

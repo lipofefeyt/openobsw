@@ -274,13 +274,14 @@ static void system_clock_init(void)
 
  #ifdef OBSW_FREERTOS
      /* FreeRTOS path — create tasks then hand control to the scheduler.
-      * TMTC must be initialised first so its queue handle is available for PUS. */
+      * Init order matters: TMTC (queue), then FDIR (FSM), then PUS (needs both). */
      obsw_tmtc_task_init(&obsw_uart_ops, &tm_store);
+     obsw_fdir_task_init(&tm_store);
      obsw_pus_task_init(&tm_store,
                         obsw_tmtc_get_tc_queue(),
-                        obsw_tmtc_get_handle());
+                        obsw_tmtc_get_handle(),
+                        obsw_fdir_get_fsm());
      obsw_aocs_task_init();
-     obsw_fdir_task_init();
      vTaskStartScheduler();
      /* Never reached */
      for (;;);
