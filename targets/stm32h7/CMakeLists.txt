@@ -25,6 +25,29 @@ option(OBSW_RENODE "Build for Renode emulation (skip PLL clock init)" OFF)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+# Pass -DOBSW_FREERTOS=ON to build with the FreeRTOS task architecture
+# (TMTC / PUS / AOCS / FDIR tasks, static allocation only).
+# When OFF the blocking superloop is used — useful for Renode smoke-tests.
+option(OBSW_FREERTOS "Enable FreeRTOS task architecture" OFF)
+
+# ── FreeRTOS (only when OBSW_FREERTOS=ON) ────────────────────────────
+if(OBSW_FREERTOS)
+    include(FetchContent)
+    FetchContent_Declare(freertos_kernel
+        GIT_REPOSITORY https://github.com/FreeRTOS/FreeRTOS-Kernel.git
+        GIT_TAG        V11.1.0
+        GIT_SHALLOW    TRUE
+    )
+    # freertos_config target provides FreeRTOSConfig.h
+    add_library(freertos_config INTERFACE)
+    target_include_directories(freertos_config INTERFACE
+        "${OBSW_ROOT}/src/platform/stm32h7"
+    )
+    set(FREERTOS_PORT GCC_ARM_CM7 CACHE STRING "" FORCE)
+    # No FREERTOS_HEAP — configSUPPORT_DYNAMIC_ALLOCATION=0, no heap file needed
+    FetchContent_MakeAvailable(freertos_kernel)
+endif()
+
 # ── SRDB code generation ──────────────────────────────────────────────
 set(SRDB_GENERATED_H "${CMAKE_BINARY_DIR}/include/obsw/srdb_generated.h")
 add_custom_command(
@@ -72,6 +95,17 @@ if(OBSW_RENODE)
     target_compile_definitions(obsw_stm32h7 PUBLIC OBSW_RENODE)
 endif()
 
+if(OBSW_FREERTOS)
+    target_compile_definitions(obsw_stm32h7 PUBLIC OBSW_FREERTOS)
+    target_link_libraries(obsw_stm32h7 PUBLIC freertos_kernel)
+    target_sources(obsw_stm32h7 PRIVATE
+        ${OBSW_ROOT}/src/task/tmtc.c
+        ${OBSW_ROOT}/src/task/pus.c
+        ${OBSW_ROOT}/src/task/aocs.c
+        ${OBSW_ROOT}/src/task/fdir.c
+    )
+endif()
+
 set_target_properties(obsw_stm32h7 PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED ON
@@ -85,6 +119,12 @@ add_executable(obsw_stm32h7_elf
     ${OBSW_ROOT}/src/platform/stm32h7/startup.S
     ${OBSW_ROOT}/src/platform/stm32h7/main.c
 )
+
+if(OBSW_FREERTOS)
+    target_sources(obsw_stm32h7_elf PRIVATE
+        ${OBSW_ROOT}/src/platform/stm32h7/freertos_hooks.c
+    )
+endif()
 
 target_link_libraries(obsw_stm32h7_elf PRIVATE obsw_stm32h7)
 
