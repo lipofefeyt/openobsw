@@ -15,11 +15,11 @@ priority: **owned**, **ordered**, and **wanted**.
 
 ---
 
-## Ordered
+## Ordered / arriving
 
-| Item | Purpose | Link |
-|---|---|---|
-| CP2102 USB-UART adapter (3.3V/5V) | USART3 console on STM32H750 (PD8=TX, PD9=RX) | [Amazon.fr](https://www.amazon.fr/-/en/RUIZHI-Converter-Compatible-Arduino-Download/dp/B0DXL2G5K4/) |
+| Item | Purpose | Expected | Link |
+|---|---|---|---|
+| CP2102 USB-UART adapter (3.3V/5V) | USART3 console on STM32H750 (PD8=TX, PD9=RX) | 2026-05-27 | [Amazon.fr](https://www.amazon.fr/-/en/RUIZHI-Converter-Compatible-Arduino-Download/dp/B0DXL2G5K4/) |
 
 ---
 
