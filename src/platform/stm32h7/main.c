@@ -22,7 +22,16 @@
  #include "obsw/tm/store.h"
  #include "obsw/srdb_generated.h"
  #include "sensor_inject.h"
- 
+
+ #ifdef OBSW_FREERTOS
+ #include "FreeRTOS.h"
+ #include "task.h"
+ #include "obsw/task/tmtc.h"
+ #include "obsw/task/pus.h"
+ #include "obsw/task/aocs.h"
+ #include "obsw/task/fdir.h"
+ #endif
+
  #include <stdint.h>
  #include <string.h>
  #include <stdio.h>
@@ -139,29 +148,29 @@ static void system_clock_init(void)
  extern void          obsw_uart_init(void);
  
  /* ------------------------------------------------------------------ */
- /* No-op responder (required by dispatcher_init; S1 sends its own TM) */
+ /* OBSW context                                                         */
  /* ------------------------------------------------------------------ */
 
+ static obsw_tm_store_t tm_store;
+
+ /* Superloop path owns the dispatcher and PUS contexts directly.
+  * In the FreeRTOS path these live in src/task/pus.c instead. */
+ #ifndef OBSW_FREERTOS
  static void noop_responder(uint8_t flag, const obsw_tc_t *tc, void *ctx)
  {
      (void)flag; (void)tc; (void)ctx;
  }
 
- /* ------------------------------------------------------------------ */
- /* OBSW context                                                         */
- /* ------------------------------------------------------------------ */
- 
- static obsw_tm_store_t tm_store;
  static obsw_s1_ctx_t   s1_ctx  = {0};
  static obsw_s17_ctx_t  s17_ctx = {0};
  static obsw_s20_ctx_t  s20_ctx = {0};
- 
+
  static obsw_s20_param_t s20_params[] = {
      {.param_id = SRDB_PARAM_OBC_UPTIME,           .value = {.u32 = 0}},
      {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT,.value = {.u32 = 0}},
      {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,  .value = {.u32 = 0}},
  };
- 
+
  static obsw_tc_route_t routes[] = {
      {.apid = 0xFFFF, .service = 17, .subservice = 1,
       .handler = obsw_s17_ping,   .ctx = &s17_ctx},
@@ -170,39 +179,38 @@ static void system_clock_init(void)
      {.apid = 0xFFFF, .service = 20, .subservice = 3,
       .handler = obsw_s20_get,    .ctx = &s20_ctx},
  };
+ #endif /* !OBSW_FREERTOS */
  
  /* ------------------------------------------------------------------ */
  /* UART I/O helpers                                                     */
  /* ------------------------------------------------------------------ */
- 
+
+ static void uart_write_buf(const uint8_t *buf, uint16_t len)
+ {
+     obsw_uart_ops.write(buf, len, NULL);
+ }
+
+ /* Superloop-only helpers — in FreeRTOS mode the TMTC task handles I/O. */
+ #ifndef OBSW_FREERTOS
  static uint8_t uart_getc(void)
  {
      uint8_t b;
      obsw_uart_ops.read(&b, 1, NULL);
      return b;
  }
- 
+
  static void uart_putc(uint8_t b)
  {
      obsw_uart_ops.write(&b, 1, NULL);
  }
- 
- static void uart_write_buf(const uint8_t *buf, uint16_t len)
- {
-     obsw_uart_ops.write(buf, len, NULL);
- }
- 
- /* ------------------------------------------------------------------ */
- /* Wire protocol v3 helpers                                             */
- /* ------------------------------------------------------------------ */
- 
+
  static void write_tm_packet(const uint8_t *pkt, uint16_t len)
  {
      uint8_t hdr[3] = {0x04, (uint8_t)(len >> 8), (uint8_t)(len & 0xFF)};
      uart_write_buf(hdr, 3);
      uart_write_buf(pkt, len);
  }
- 
+
  static void flush_tm_store(void)
  {
      uint8_t pkt[OBSW_TM_MAX_PACKET_LEN];
@@ -212,6 +220,7 @@ static void system_clock_init(void)
          write_tm_packet(pkt, plen);
      }
  }
+ #endif /* !OBSW_FREERTOS */
  
  /* ------------------------------------------------------------------ */
  /* Main                                                                 */
@@ -229,67 +238,80 @@ static void system_clock_init(void)
  
      /* OBSW init */
      obsw_tm_store_init(&tm_store);
- 
+
+ #ifndef OBSW_FREERTOS
+     /* Superloop: initialise dispatcher and PUS contexts here.
+      * FreeRTOS path: these are owned by the PUS task in src/task/pus.c. */
      s1_ctx.tm_store    = &tm_store;
      s1_ctx.apid        = SRDB_APID_DEFAULT;
      s1_ctx.msg_counter = 0;
      s1_ctx.timestamp   = 0;
- 
+
      s17_ctx.tm_store    = &tm_store;
      s17_ctx.s1          = &s1_ctx;
      s17_ctx.apid        = SRDB_APID_DEFAULT;
      s17_ctx.msg_counter = 0;
      s17_ctx.timestamp   = 0;
- 
+
      s20_ctx.tm_store    = &tm_store;
      s20_ctx.s1          = &s1_ctx;
      s20_ctx.apid        = SRDB_APID_DEFAULT;
      s20_ctx.table       = s20_params;
      s20_ctx.table_len   = sizeof(s20_params) / sizeof(s20_params[0]);
- 
+
      obsw_tc_dispatcher_t dispatcher;
      obsw_tc_dispatcher_init(&dispatcher,
                              routes,
                              sizeof(routes) / sizeof(routes[0]),
                              noop_responder, NULL);
- 
-     /* Boot banner — visible on UART terminal */
+ #endif /* !OBSW_FREERTOS */
+
+     /* Boot banner */
      const char *banner =
          "\r\n[OBSW] STM32H750 started (type-frame protocol v2).\r\n"
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
- 
-     /* Main loop — wire protocol v3 */
+
+ #ifdef OBSW_FREERTOS
+     /* FreeRTOS path — create tasks then hand control to the scheduler.
+      * TMTC must be initialised first so its queue handle is available for PUS. */
+     obsw_tmtc_task_init(&obsw_uart_ops, &tm_store);
+     obsw_pus_task_init(&tm_store,
+                        obsw_tmtc_get_tc_queue(),
+                        obsw_tmtc_get_handle());
+     obsw_aocs_task_init();
+     obsw_fdir_task_init();
+     vTaskStartScheduler();
+     /* Never reached */
+     for (;;);
+ #else
+     /* Superloop path — wire protocol v3 (used for Renode smoke-tests) */
      uint32_t tick = 0;
      while (1) {
          uint8_t type = uart_getc();
- 
-         /* Read length */
+
          uint8_t hi = uart_getc();
          uint8_t lo = uart_getc();
          uint16_t frame_len = (uint16_t)((hi << 8) | lo);
- 
+
          if (frame_len == 0 || frame_len > 512)
              continue;
- 
-         /* Read frame body */
+
          uint8_t frame[512];
          for (uint16_t i = 0; i < frame_len; i++)
              frame[i] = uart_getc();
- 
+
          if (type == OBSW_FRAME_TC) {
              obsw_tc_dispatcher_feed(&dispatcher, frame, frame_len);
              flush_tm_store();
          } else if (type == OBSW_FRAME_SENSOR) {
-             /* Sensor injection — update S20 uptime param */
              obsw_sensor_frame_t sensor;
-             if (obsw_sim_parse_sensor(frame, frame_len, &sensor)) {
+             if (obsw_sim_parse_sensor(frame, frame_len, &sensor))
                  s20_params[0].value.u32 = (uint32_t)sensor.sim_time;
-             }
              tick++;
          }
- 
-         /* Sync byte after every frame */
+
          uart_putc(0xFF);
      }
+ #endif
  }
