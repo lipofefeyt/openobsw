@@ -78,8 +78,11 @@ add_library(obsw_stm32h7 STATIC
     ${OBSW_ROOT}/src/tm/store.c
     ${OBSW_ROOT}/src/pus/pus_tm.c
     ${OBSW_ROOT}/src/pus/s1.c
+    ${OBSW_ROOT}/src/pus/s5.c
+    ${OBSW_ROOT}/src/pus/s8.c
     ${OBSW_ROOT}/src/pus/s17.c
     ${OBSW_ROOT}/src/pus/s20.c
+    ${OBSW_ROOT}/src/fdir/fsm.c
     ${OBSW_ROOT}/src/hal/stm32h7/uart.c
     ${OBSW_ROOT}/sim/sensor_inject.c
 )
