@@ -34,7 +34,6 @@
 
  #include <stdint.h>
  #include <string.h>
- #include <stdio.h>
 
 /* ------------------------------------------------------------------ */
 /* RCC register map (minimal — only what clock init needs)            */
@@ -268,7 +267,7 @@ static void system_clock_init(void)
 
      /* Boot banner */
      const char *banner =
-         "\r\n[OBSW] STM32H750 started (type-frame protocol v2).\r\n"
+         "\r\n[OBSW] STM32H750 started (wire protocol v3).\r\n"
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
 
@@ -281,7 +280,7 @@ static void system_clock_init(void)
                         obsw_tmtc_get_tc_queue(),
                         obsw_tmtc_get_handle(),
                         obsw_fdir_get_fsm());
-     obsw_aocs_task_init();
+     obsw_aocs_task_init(obsw_fdir_get_fsm());
      vTaskStartScheduler();
      /* Never reached */
      for (;;);

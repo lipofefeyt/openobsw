@@ -106,6 +106,8 @@ if(OBSW_FREERTOS)
         ${OBSW_ROOT}/src/task/pus.c
         ${OBSW_ROOT}/src/task/aocs.c
         ${OBSW_ROOT}/src/task/fdir.c
+        ${OBSW_ROOT}/src/aocs/bdot.c
+        ${OBSW_ROOT}/src/aocs/adcs.c
     )
 endif()
 
@@ -121,6 +123,7 @@ set(LINKER_SCRIPT "${OBSW_ROOT}/src/platform/stm32h7/stm32h750.ld")
 add_executable(obsw_stm32h7_elf
     ${OBSW_ROOT}/src/platform/stm32h7/startup.S
     ${OBSW_ROOT}/src/platform/stm32h7/main.c
+    ${OBSW_ROOT}/src/platform/stm32h7/errno_stub.c
 )
 
 if(OBSW_FREERTOS)
