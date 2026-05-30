@@ -13,6 +13,10 @@
 #include "sensor_inject.h"
 #include "obsw/pus/s20.h"
 
+#ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
+#include "orbitfabric_contract_adapter.h"
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -168,6 +172,8 @@ static const obsw_fsm_tc_entry_t safe_whitelist[] = {
     {SRDB_TC_S8_PERFORM_FUNCTION_SVC, SRDB_TC_S8_PERFORM_FUNCTION_SUBSVC},
 };
 
+#define ROUTE_INDEX_S17_PING 0U
+
 static obsw_tc_route_t routes[] = {
     {.apid = 0xFFFF, .service = 17, .subservice = 1,
      .handler = obsw_s17_ping, .ctx = &s17_ctx},
@@ -182,6 +188,32 @@ static obsw_tc_route_t routes[] = {
     {.apid = 0xFFFF, .service = 20, .subservice = 3,
      .handler = obsw_s20_get, .ctx = &s20_ctx},
 };
+
+#ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
+static void configure_orbitfabric_contract_routes(void)
+{
+    obsw_of_tc_route_t route = {0};
+
+    if (obsw_of_tc_route_for_command(OF_CMD_PING, &route) != 0) {
+        fprintf(stderr,
+                "[OBSW] OrbitFabric contract adapter: OF_CMD_PING not mapped\n");
+        return;
+    }
+
+    routes[ROUTE_INDEX_S17_PING].apid = route.apid;
+    routes[ROUTE_INDEX_S17_PING].service = route.service;
+    routes[ROUTE_INDEX_S17_PING].subservice = route.subservice;
+
+    fprintf(stderr,
+            "[OBSW] OrbitFabric contract adapter: OF_CMD_PING -> TC(%u,%u)\n",
+            (unsigned)route.service,
+            (unsigned)route.subservice);
+}
+#else
+static void configure_orbitfabric_contract_routes(void)
+{
+}
+#endif
 
 
 /* ------------------------------------------------------------------ */
@@ -242,6 +274,8 @@ int main(void)
 obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
 
     /* Dispatcher */
+    configure_orbitfabric_contract_routes();
+
     obsw_tc_dispatcher_t dispatcher;
     obsw_tc_dispatcher_init(&dispatcher,
                             routes, sizeof(routes) / sizeof(routes[0]),
