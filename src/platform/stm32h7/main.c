@@ -7,8 +7,8 @@
  * main loop — same protocol as the host sim and ZynqMP target.
  *
  * Clock configuration:
- *   HSE 25 MHz → PLL1 → SYSCLK 480 MHz, APB1 120 MHz
- *   BRR = 120000000 / 115200 = 1041
+ *   HSI 64 MHz (reset default, no PLL) — HSE crystal not confirmed present
+ *   BRR = 64000000 / 115200 = 556
  *
  * UART: USART3 on PD8/PD9, 115200 baud.
  */
@@ -60,80 +60,16 @@
  /**
  * STM32H750 System Clock Configuration
  *
- * Target: SYSCLK = 480 MHz, APB1 = 120 MHz
- * Source: HSE 25 MHz (WeAct board crystal) → PLL1
- *
- * PLL1 configuration:
- *   HSE = 25 MHz
- *   DIVM1 = 5   → PLL1 input = 5 MHz (ref clock)
- *   DIVN1 = 192 → VCO = 960 MHz
- *   DIVP1 = 2   → SYSCLK = 480 MHz
- *   DIVQ1 = 4   → PLL1Q = 240 MHz (USB, SPI etc.)
- *   DIVR1 = 2   → PLL1R = 480 MHz
- *
- * APB prescalers:
- *   PPRE1 (APB1) = /2 → 120 MHz  ← USART3 BRR = 120000000/115200 = 1041
- *   PPRE2 (APB2) = /2 → 120 MHz
+ * Running on HSI 64 MHz (reset default) — no HSE/PLL.
+ * HSE crystal not confirmed present on this board.
+ * VOS3 at 64 MHz → 0 flash wait states.
+ * USART3 BRR = 64000000 / 115200 = 556
  */
 static void system_clock_init(void)
 {
-    /* 1. Boost VOS to VOS0 (required for 480 MHz) */
-    /* Enable SYSCFG clock */
-    *(volatile uint32_t *)(0x58024400UL + 0x0E4) |= (1U << 1); /* APB4ENR SYSCFGEN */
-    /* Set VOS0 via SYSCFG_PWRCR ODEN bit */
-    SYSCFG_PWRCR |= (1U << 0);
-    /* Wait for VOS ready */
-    while (!(PWR_D3CR & (1U << 13)))
-        ;
-
-    /* 2. Enable HSE */
-    RCC_CR |= (1U << 16);          /* HSEON */
-    while (!(RCC_CR & (1U << 17))) /* Wait HSERDY */
-        ;
-
-    /* 3. Flash latency for 480 MHz (4 wait states + 2 extra = 6 total, VOS0) */
-    FLASH_ACR = (FLASH_ACR & ~0xFU) | 6U;
-    FLASH_ACR |= (1U << 8);   /* ARTEN  */
-    FLASH_ACR |= (1U << 9);   /* ARTRST — not needed but harmless */
-
-    /* 4. Configure PLL1: HSE/5 * 192 / 2 = 480 MHz */
-    /* Select HSE as PLL source, DIVM1=5 */
-    RCC_PLLCKSELR = (2U << 0)    /* PLLSRC = HSE */
-                  | (5U << 4);   /* DIVM1 = 5 */
-
-    /* DIVN1=192-1=191, DIVP1=2-1=1, DIVQ1=4-1=3, DIVR1=2-1=1 */
-    RCC_PLL1DIVR = ((191U) << 0)  /* DIVN1 */
-                 | ((1U)   << 9)  /* DIVP1 */
-                 | ((3U)   << 16) /* DIVQ1 */
-                 | ((1U)   << 24);/* DIVR1 */
-
-    /* Enable PLL1 P/Q/R outputs; PLL1RGE=10 (4-8 MHz input); VCOSEL=0 (wide VCO, default) */
-    RCC_PLLCFGR = (1U << 0)   /* DIVP1EN */
-                | (1U << 1)   /* DIVQ1EN */
-                | (1U << 2)   /* DIVR1EN */
-                | (2U << 4);  /* PLL1RGE bits[5:4] = 0b10 → 4-8 MHz range (ref = 5 MHz) */
-
-    /* 5. Enable PLL1 */
-    RCC_CR |= (1U << 24);          /* PLL1ON */
-    while (!(RCC_CR & (1U << 25))) /* Wait PLL1RDY */
-        ;
-
-    /* 6. Set bus prescalers before switching clock */
-    /* D1CFGR: HPRE=/2 (AHB=240MHz), D1PPRE=/2 (APB3=120MHz) */
-    RCC_D1CFGR = (8U << 0)   /* HPRE = /2 */
-               | (4U << 4);  /* D1PPRE = /2 */
-
-    /* D2CFGR: D2PPRE1=/2 (APB1=120MHz), D2PPRE2=/2 (APB2=120MHz) */
-    RCC_D2CFGR = (4U << 4)   /* D2PPRE1 = /2 → APB1 = 120 MHz */
-               | (4U << 8);  /* D2PPRE2 = /2 → APB2 = 120 MHz */
-
-    /* D3CFGR: D3PPRE=/2 (APB4=120MHz) */
-    RCC_D3CFGR = (4U << 4);
-
-    /* 7. Switch system clock to PLL1P */
-    RCC_CFGR = (RCC_CFGR & ~0x7U) | 3U; /* SW = PLL1 */
-    while (((RCC_CFGR >> 3) & 0x7U) != 3U) /* Wait SWS = PLL1 */
-        ;
+    /* HSI 64 MHz is already active at reset. Just correct flash latency:
+     * reset value of FLASH_ACR.LATENCY is 7 WS; VOS3 at 64 MHz needs 0. */
+    FLASH_ACR = (FLASH_ACR & ~0xFU) | 0U;
 }
  #endif /* OBSW_RENODE */
 
@@ -187,6 +123,17 @@ static void system_clock_init(void)
      obsw_uart_ops.write(buf, len, NULL);
  }
 
+static void uart_print_hex32(uint32_t val)
+{
+    static const char h[] = "0123456789ABCDEF";
+    uint8_t buf[8];
+    for (int i = 7; i >= 0; i--) {
+        buf[i] = (uint8_t)h[val & 0xFU];
+        val >>= 4;
+    }
+    uart_write_buf(buf, 8);
+}
+
  /* Superloop-only helpers — in FreeRTOS mode the TMTC task handles I/O. */
  #ifndef OBSW_FREERTOS
  static uint8_t uart_getc(void)
@@ -225,6 +172,14 @@ static void system_clock_init(void)
  
  int main(void)
  {
+     /* Keep debug interface active during WFI (FreeRTOS idle task) so OpenOCD
+      * can connect while the CPU is in sleep mode. Must be set before the
+      * scheduler starts — do it as early as possible. */
+ #define DBGMCU_CR (*(volatile uint32_t *)(0x5C001000UL + 0x004U))
+     DBGMCU_CR |= (1U << 0)   /* DBGSLEEP_D1 */
+               |  (1U << 1)   /* DBGSTOP_D1  */
+               |  (1U << 2);  /* DBGSTBY_D1  */
+
      /* Init the clock — skipped under Renode (stub RCC would spin on ready bits) */
  #ifndef OBSW_RENODE
      system_clock_init();
@@ -268,6 +223,15 @@ static void system_clock_init(void)
          "\r\n[OBSW] STM32H750 started (wire protocol v3).\r\n"
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
+
+     /* Clock register dump — lets us verify SYSCLK source and APB prescalers.
+      * SWS (bits[5:3] of RCC_CFGR): 3 = PLL1P active.
+      * D2CFGR bits[6:4]=PPREx: 4=/2 → APB1=120 MHz, 5=/4 → APB1=60 MHz. */
+     uart_write_buf((const uint8_t *)"[OBSW] CLK RCC_CFGR=", 20);
+     uart_print_hex32(RCC_CFGR);
+     uart_write_buf((const uint8_t *)" D2CFGR=", 8);
+     uart_print_hex32(RCC_D2CFGR);
+     uart_write_buf((const uint8_t *)"\r\n", 2);
 
  #ifdef OBSW_FREERTOS
      /* FreeRTOS path — create tasks then hand control to the scheduler.

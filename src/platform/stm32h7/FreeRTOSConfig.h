@@ -1,4 +1,4 @@
-/* FreeRTOS configuration for STM32H750VBT6 (Cortex-M7, 480 MHz).
+/* FreeRTOS configuration for STM32H750VBT6 (Cortex-M7, HSI 64 MHz).
  *
  * Static allocation only — configSUPPORT_DYNAMIC_ALLOCATION=0.
  * All tasks, queues, and semaphores must be created with their
@@ -12,7 +12,7 @@
 #define configUSE_PREEMPTION                    1
 #define configUSE_TIME_SLICING                  1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
-#define configCPU_CLOCK_HZ                      480000000UL
+#define configCPU_CLOCK_HZ                      64000000UL
 #define configTICK_RATE_HZ                      1000UL
 #define configMAX_PRIORITIES                    5
 #define configMINIMAL_STACK_SIZE                128U
