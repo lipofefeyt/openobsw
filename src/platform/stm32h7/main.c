@@ -72,10 +72,8 @@
  *   DIVR1 = 2   → PLL1R = 480 MHz
  *
  * APB prescalers:
- *   PPRE1 (APB1) = /4 → 120 MHz  ← USART3 BRR = 120000000/115200 = 1041
- *   PPRE2 (APB2) = /2 → 240 MHz
- *
- * Add this block at the top of main(), before obsw_uart_init():
+ *   PPRE1 (APB1) = /2 → 120 MHz  ← USART3 BRR = 120000000/115200 = 1041
+ *   PPRE2 (APB2) = /2 → 120 MHz
  */
 static void system_clock_init(void)
 {
@@ -125,9 +123,9 @@ static void system_clock_init(void)
     RCC_D1CFGR = (8U << 0)   /* HPRE = /2 */
                | (4U << 4);  /* D1PPRE = /2 */
 
-    /* D2CFGR: D2PPRE1=/4 (APB1=120MHz), D2PPRE2=/2 (APB2=240MHz) */
-    RCC_D2CFGR = (5U << 4)   /* D2PPRE1 = /4 → APB1 = 120 MHz */
-               | (4U << 8);  /* D2PPRE2 = /2 → APB2 = 240 MHz */
+    /* D2CFGR: D2PPRE1=/2 (APB1=120MHz), D2PPRE2=/2 (APB2=120MHz) */
+    RCC_D2CFGR = (4U << 4)   /* D2PPRE1 = /2 → APB1 = 120 MHz */
+               | (4U << 8);  /* D2PPRE2 = /2 → APB2 = 120 MHz */
 
     /* D3CFGR: D3PPRE=/2 (APB4=120MHz) */
     RCC_D3CFGR = (4U << 4);
