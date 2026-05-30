@@ -108,8 +108,8 @@ WeAct GND               →  CP2102 GND
 
 Connect from WSL2 (after usbipd attach):
 ```bash
-screen /dev/ttyUSB0 115200
-# exit: Ctrl-A then K
+picocom -b 115200 /dev/ttyUSB0
+# exit: Ctrl-A then Ctrl-X
 ```
 
 ---

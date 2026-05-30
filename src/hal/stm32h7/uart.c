@@ -80,8 +80,8 @@ void obsw_uart_init(void)
     USART3_CR2 = 0;
     USART3_CR3 = 0;
  
-    /* APB1 = 120 MHz after PLL1 → BRR = 120000000 / 115200 = 1041 */
-    USART3_BRR = 1041U;
+    /* HSI 64 MHz (no PLL) → BRR = 64000000 / 115200 = 556 */
+    USART3_BRR = 556U;
  
     /* Enable TX, RX, USART */
     USART3_CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
