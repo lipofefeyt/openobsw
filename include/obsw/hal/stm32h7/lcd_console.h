@@ -21,4 +21,8 @@ void lcd_console_clear(void);
 void lcd_console_puts(const char *s);
 void lcd_console_set_colours(uint16_t fg, uint16_t bg);
 
+/* Row LCD_ROWS-1 (row 9) is a fixed status bar — never scrolled over.
+ * The string is padded / truncated to exactly LCD_COLS characters. */
+void lcd_console_set_status(const char *s, uint16_t fg, uint16_t bg);
+
 #endif /* OBSW_HAL_STM32H7_LCD_CONSOLE_H */

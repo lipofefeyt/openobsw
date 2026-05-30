@@ -32,6 +32,11 @@
  #include "obsw/task/fdir.h"
  #endif
 
+ #ifndef OBSW_RENODE
+ #include "obsw/hal/stm32h7/spi.h"
+ #include "obsw/hal/stm32h7/lcd_console.h"
+ #endif
+
  #include <stdint.h>
  #include <string.h>
 
@@ -123,6 +128,14 @@ static void system_clock_init(void)
      obsw_uart_ops.write(buf, len, NULL);
  }
 
+#ifndef OBSW_RENODE
+static void lcd_fmt_hex32(char *buf8, uint32_t val)
+{
+    static const char h[] = "0123456789ABCDEF";
+    for (int i = 7; i >= 0; i--) { buf8[i] = h[val & 0xFU]; val >>= 4; }
+}
+#endif
+
 static void uart_print_hex32(uint32_t val)
 {
     static const char h[] = "0123456789ABCDEF";
@@ -187,6 +200,11 @@ static void uart_print_hex32(uint32_t val)
 
      /* Peripheral init */
      obsw_uart_init();
+ #ifndef OBSW_RENODE
+     obsw_spi4_init();
+     lcd_init();
+     lcd_console_init();
+ #endif
  
      /* OBSW init */
      obsw_tm_store_init(&tm_store);
@@ -218,20 +236,30 @@ static void uart_print_hex32(uint32_t val)
                              noop_responder, NULL);
  #endif /* !OBSW_FREERTOS */
 
-     /* Boot banner */
+     /* Boot banner — UART */
      const char *banner =
          "\r\n[OBSW] STM32H750 started (wire protocol v3).\r\n"
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
 
-     /* Clock register dump — lets us verify SYSCLK source and APB prescalers.
-      * SWS (bits[5:3] of RCC_CFGR): 3 = PLL1P active.
-      * D2CFGR bits[6:4]=PPREx: 4=/2 → APB1=120 MHz, 5=/4 → APB1=60 MHz. */
+     /* Clock register dump — UART */
      uart_write_buf((const uint8_t *)"[OBSW] CLK RCC_CFGR=", 20);
      uart_print_hex32(RCC_CFGR);
      uart_write_buf((const uint8_t *)" D2CFGR=", 8);
      uart_print_hex32(RCC_D2CFGR);
      uart_write_buf((const uint8_t *)"\r\n", 2);
+
+ #ifndef OBSW_RENODE
+     /* Boot banner — LCD */
+     lcd_console_puts("openobsw v" SRDB_VERSION "\n");
+     lcd_console_puts("STM32H750 HSI 32MHz\n");
+     { char ln[25]; /* "CLK:XXXXXXXX D2:YYYYYYYY" */
+       memcpy(ln,      "CLK:", 4); lcd_fmt_hex32(ln +  4, RCC_CFGR);
+       memcpy(ln + 12, " D2:", 4); lcd_fmt_hex32(ln + 16, RCC_D2CFGR);
+       ln[24] = '\0';
+       lcd_console_puts(ln); lcd_console_puts("\n"); }
+     lcd_console_puts("FreeRTOS starting...\n");
+ #endif
 
  #ifdef OBSW_FREERTOS
      /* FreeRTOS path — create tasks then hand control to the scheduler.

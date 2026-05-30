@@ -26,6 +26,11 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#ifndef OBSW_RENODE
+#include "obsw/hal/stm32h7/lcd_console.h"
+#include "obsw/hal/stm32h7/lcd.h"
+#endif
+
 /* ── IWDG registers (STM32H750, D3 domain) ───────────────────────── */
 
 #define IWDG_BASE  0x58004800UL
@@ -96,12 +101,14 @@ static void fdir_task(void *param)
     bool boot_sent = false;
     obsw_fsm_mode_t last_mode = OBSW_FSM_NOMINAL;
     TickType_t last_wake = xTaskGetTickCount();
+    uint32_t kick_count = 0;
 
     for (;;) {
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(1000));
 
         /* 1. Kick IWDG — must happen every tick; if we don't run, chip resets. */
         iwdg_kick();
+        kick_count++;
 
         /* 2. Boot event on first tick. */
         if (!boot_sent) {
@@ -123,6 +130,29 @@ static void fdir_task(void *param)
             }
             last_mode = cur_mode;
         }
+
+#ifndef OBSW_RENODE
+        /* 4. Update LCD status bar: "FDIR:NOMINAL  WDG:00000042" (26 chars) */
+        {
+            static const char h[] = "0123456789";
+            char s[27];
+            /* mode field — 7 chars, space-padded */
+            if (cur_mode == OBSW_FSM_NOMINAL) {
+                __builtin_memcpy(s,     "FDIR:NOMINAL  WDG:", 18);
+            } else {
+                __builtin_memcpy(s,     "FDIR:SAFE     WDG:", 18);
+            }
+            /* 8-digit decimal kick counter */
+            uint32_t k = kick_count;
+            for (int8_t i = 7; i >= 0; i--) {
+                s[18 + i] = h[k % 10U]; k /= 10U;
+            }
+            s[26] = '\0';
+            uint16_t fg = (cur_mode == OBSW_FSM_NOMINAL) ? LCD_BLACK : LCD_WHITE;
+            uint16_t bg = (cur_mode == OBSW_FSM_NOMINAL) ? LCD_GREEN  : LCD_RED;
+            lcd_console_set_status(s, fg, bg);
+        }
+#endif
     }
 }
 

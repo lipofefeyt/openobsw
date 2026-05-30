@@ -2,7 +2,7 @@
  * @file src/hal/stm32h7/lcd_console.c
  * @brief Scrolling text console for the ST7735R LCD (160×80).
  *
- * State: a static LCD_ROWS × LCD_COLS character buffer mirrors exactly
+ * State: a static LCD_CONSOLE_ROWS × LCD_COLS character buffer mirrors exactly
  * what is on screen. On scroll, the buffer shifts up one row and the
  * last row is blanked; the screen is then redrawn from the buffer.
  *
@@ -27,11 +27,15 @@
 #  define CON_UNLOCK() ((void)0)
 #endif
 
+/* Scrolling area: rows 0 .. LCD_CONSOLE_ROWS-1.
+ * Row LCD_ROWS-1 is the status bar — never touched by the scroll logic. */
+#define LCD_CONSOLE_ROWS (LCD_ROWS - 1U)
+
 /* ------------------------------------------------------------------ */
 /* State                                                                */
 /* ------------------------------------------------------------------ */
 
-static char     g_buf[LCD_ROWS][LCD_COLS];
+static char     g_buf[LCD_CONSOLE_ROWS][LCD_COLS];
 static uint8_t  g_row;
 static uint8_t  g_col;
 static uint16_t g_fg;
@@ -53,15 +57,15 @@ static void draw_char_locked(uint8_t col, uint8_t row, char ch)
 static void console_scroll(void)
 {
     /* Shift buffer up one row, blank the last row */
-    memmove(g_buf[0], g_buf[1], (LCD_ROWS - 1U) * LCD_COLS);
-    memset(g_buf[LCD_ROWS - 1U], ' ', LCD_COLS);
+    memmove(g_buf[0], g_buf[1], (LCD_CONSOLE_ROWS - 1U) * LCD_COLS);
+    memset(g_buf[LCD_CONSOLE_ROWS - 1U], ' ', LCD_COLS);
 
     /* Redraw from buffer — each char individually locked */
-    for (uint8_t r = 0; r < LCD_ROWS; r++)
+    for (uint8_t r = 0; r < LCD_CONSOLE_ROWS; r++)
         for (uint8_t c = 0; c < LCD_COLS; c++)
             draw_char_locked(c, r, g_buf[r][c]);
 
-    g_row = LCD_ROWS - 1U;
+    g_row = LCD_CONSOLE_ROWS - 1U;
     g_col = 0;
 }
 
@@ -81,7 +85,7 @@ static void console_putchar(char ch)
         }
         g_col = 0;
         g_row++;
-        if (g_row >= LCD_ROWS)
+        if (g_row >= LCD_CONSOLE_ROWS)
             console_scroll();
         return;
     }
@@ -90,7 +94,7 @@ static void console_putchar(char ch)
     if (g_col >= LCD_COLS) {
         g_col = 0;
         g_row++;
-        if (g_row >= LCD_ROWS)
+        if (g_row >= LCD_CONSOLE_ROWS)
             console_scroll();
     }
 
@@ -103,6 +107,19 @@ static void console_putchar(char ch)
 /* Public API                                                           */
 /* ------------------------------------------------------------------ */
 
+void lcd_console_set_status(const char *s, uint16_t fg, uint16_t bg)
+{
+    const uint8_t STATUS_ROW = LCD_ROWS - 1U;
+    for (uint8_t c = 0; c < LCD_COLS; c++) {
+        char ch = (*s) ? *s++ : ' ';
+        CON_LOCK();
+        lcd_draw_char((uint16_t)(c * LCD_CHAR_W),
+                      (uint16_t)(STATUS_ROW * LCD_CHAR_H),
+                      ch, fg, bg);
+        CON_UNLOCK();
+    }
+}
+
 void lcd_console_init(void)
 {
     g_fg  = LCD_GREEN;
@@ -111,6 +128,8 @@ void lcd_console_init(void)
     g_col = 0;
     memset(g_buf, ' ', sizeof(g_buf));
     lcd_clear(g_bg);
+    /* Draw a grey placeholder in the status bar row */
+    lcd_console_set_status("FDIR starting...", LCD_BLACK, LCD_GREY);
 }
 
 void lcd_console_clear(void)
