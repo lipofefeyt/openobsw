@@ -104,13 +104,19 @@ def run(port: str, count: int, timeout: float) -> bool:
             ser.write(uplink)
             ser.flush()
 
-            # Read until we see 0xFF (end-of-tick) or timeout
+            # The TMTC task sends 0xFF immediately after queuing the TC,
+            # before PUS has flushed TM.  Read past the first 0xFF with a
+            # short extra window to catch the TM packets that follow.
             raw = b''
             deadline = time.monotonic() + timeout
+            eot_seen_at = None
             while time.monotonic() < deadline:
                 chunk = ser.read(ser.in_waiting or 1)
                 raw += chunk
-                if b'\xff' in raw:
+                if eot_seen_at is None and b'\xff' in raw:
+                    eot_seen_at = time.monotonic()
+                # 300 ms after first 0xFF is plenty for PUS to flush TM
+                if eot_seen_at and (time.monotonic() - eot_seen_at) > 0.3:
                     break
 
             packets = decode_tm_packets(raw)
