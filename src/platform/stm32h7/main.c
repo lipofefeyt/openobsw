@@ -185,14 +185,6 @@ static void uart_print_hex32(uint32_t val)
  
  int main(void)
  {
-     /* Keep debug interface active during WFI (FreeRTOS idle task) so OpenOCD
-      * can connect while the CPU is in sleep mode. Must be set before the
-      * scheduler starts — do it as early as possible. */
- #define DBGMCU_CR (*(volatile uint32_t *)(0x5C001000UL + 0x004U))
-     DBGMCU_CR |= (1U << 0)   /* DBGSLEEP_D1 */
-               |  (1U << 1)   /* DBGSTOP_D1  */
-               |  (1U << 2);  /* DBGSTBY_D1  */
-
      /* Init the clock — skipped under Renode (stub RCC would spin on ready bits) */
  #ifndef OBSW_RENODE
      system_clock_init();
@@ -200,12 +192,7 @@ static void uart_print_hex32(uint32_t val)
 
      /* Peripheral init */
      obsw_uart_init();
- #ifndef OBSW_RENODE
-     obsw_spi4_init();
-     lcd_init();
-     lcd_console_init();
- #endif
- 
+
      /* OBSW init */
      obsw_tm_store_init(&tm_store);
 
@@ -236,24 +223,43 @@ static void uart_print_hex32(uint32_t val)
                              noop_responder, NULL);
  #endif /* !OBSW_FREERTOS */
 
-     /* Boot banner — UART */
+     /* DBGMCU: keep SWD alive during WFI — placed after uart_init so a fault
+      * here is visible on UART rather than causing a silent early hang. */
+ #define DBGMCU_CR (*(volatile uint32_t *)(0x5C001000UL + 0x004U))
+     DBGMCU_CR |= (1U << 0) | (1U << 1) | (1U << 2);
+
+     /* Boot banner — UART first, always, before any LCD init that might hang */
      const char *banner =
          "\r\n[OBSW] STM32H750 started (wire protocol v3).\r\n"
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
 
-     /* Clock register dump — UART */
-     uart_write_buf((const uint8_t *)"[OBSW] CLK RCC_CFGR=", 20);
-     uart_print_hex32(RCC_CFGR);
-     uart_write_buf((const uint8_t *)" D2CFGR=", 8);
-     uart_print_hex32(RCC_D2CFGR);
-     uart_write_buf((const uint8_t *)"\r\n", 2);
-
  #ifndef OBSW_RENODE
-     /* Boot banner — LCD */
+     /* Configure IWDG to 4 s BEFORE lcd_init() (~400 ms of SPI delays).
+      * If the board has hardware watchdog (IWDG_SW=0 option byte), the
+      * IWDG starts at boot with a ~512 ms default timeout that expires
+      * before obsw_fdir_task_init() is reached.  Writing 0xCCCC first
+      * forces the LSI on so PVU/RVU can clear in the update loop. */
+     {
+         volatile uint32_t *kR  = (volatile uint32_t *)0x58004800UL; /* KR  */
+         volatile uint32_t *pR  = (volatile uint32_t *)0x58004804UL; /* PR  */
+         volatile uint32_t *rLR = (volatile uint32_t *)0x58004808UL; /* RLR */
+         volatile uint32_t *sR  = (volatile uint32_t *)0x5800480CUL; /* SR  */
+         *kR = 0xCCCCU;          /* enable IWDG + force LSI ON */
+         *kR = 0x5555U;          /* unlock PR / RLR             */
+         *pR = 5U;               /* /128 prescaler → 250 Hz     */
+         *rLR = 1000U;           /* 1000 × 4 ms = 4 s           */
+         while (*sR & 0x3U) {}  /* wait for LSI-domain update   */
+         *kR = 0xAAAAU;          /* kick — load new 4 s count   */
+     }
+
+     obsw_spi4_init();
+     lcd_init();
+     lcd_console_init();
+
      lcd_console_puts("openobsw v" SRDB_VERSION "\n");
      lcd_console_puts("STM32H750 HSI 32MHz\n");
-     { char ln[25]; /* "CLK:XXXXXXXX D2:YYYYYYYY" */
+     { char ln[25];
        memcpy(ln,      "CLK:", 4); lcd_fmt_hex32(ln +  4, RCC_CFGR);
        memcpy(ln + 12, " D2:", 4); lcd_fmt_hex32(ln + 16, RCC_D2CFGR);
        ln[24] = '\0';
