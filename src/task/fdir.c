@@ -48,7 +48,7 @@
 
 /* ── Task parameters ──────────────────────────────────────────────── */
 
-#define FDIR_STACK_DEPTH 256U
+#define FDIR_STACK_DEPTH 512U
 #define FDIR_PRIORITY    3U   /* Med-high — preempts AOCS, yields to TMTC */
 
 /* ── TC whitelist for SAFE mode ───────────────────────────────────── */
@@ -78,13 +78,17 @@ static obsw_s5_ctx_t  s_s5;
 
 static void iwdg_init(void)
 {
+    /* 0xCCCC must come first: it starts the IWDG and forces the LSI
+     * oscillator ON.  PVU/RVU in IWDG_SR can only clear once LSI is
+     * running, so writing 0x5555 before 0xCCCC leaves the while-loop
+     * below deadlocked in software-watchdog mode. */
+    IWDG_KR  = IWDG_KEY_START;   /* enable IWDG + force LSI ON */
     IWDG_KR  = IWDG_KEY_UNLOCK;
     IWDG_PR  = IWDG_PR_DIV128;
     IWDG_RLR = IWDG_RELOAD_4S;
-    while (IWDG_SR & 0x3U)   /* wait for PVU and RVU to clear */
+    while (IWDG_SR & 0x3U)       /* wait for PVU and RVU to clear */
         ;
-    IWDG_KR = IWDG_KEY_REFRESH;
-    IWDG_KR = IWDG_KEY_START;
+    IWDG_KR = IWDG_KEY_REFRESH;  /* reload to new 4 s value */
 }
 
 static void iwdg_kick(void)
