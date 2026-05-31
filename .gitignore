@@ -44,6 +44,13 @@ msp430-gcc-support-files/
 
 # OS
 .DS_Store
-Thumbs.dbsrdb/obsw_srdb.egg-info/
+Thumbs.db
+
+# Claude Code context files (local only — lives in ~/.claude-global on host)
+CLAUDE.md
+opensvf-context.md
+.devcontainer/claude-global/
+
+srdb/obsw_srdb.egg-info/
 __pycache__/
 *.pyc
