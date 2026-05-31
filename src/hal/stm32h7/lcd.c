@@ -37,10 +37,9 @@
 #define CS_HIGH     PE_SET(11)
 #define DC_CMD      PE_CLR(13)
 #define DC_DATA     PE_SET(13)
-#define RST_LOW     PE_CLR(3)
-#define RST_HIGH    PE_SET(3)
 #define BL_ON       PE_SET(10)
 #define BL_OFF      PE_CLR(10)
+/* PE3 is the USER LED, not LCD RST. LCD RST is tied to board NRST. */
 
 /* ------------------------------------------------------------------ */
 /* ST7735R command bytes                                                */
@@ -227,22 +226,23 @@ static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 
 static void lcd_gpio_init(void)
 {
-    /* PE3 (RST), PE10 (BL), PE11 (CS), PE13 (DC) → GPIO output.
-     * GPIOE clock already enabled by obsw_spi4_init(). */
-    GPIOE_MODER &= ~((3U <<  6) | (3U << 20) | (3U << 22) | (3U << 26));
-    GPIOE_MODER |=  ((1U <<  6) | (1U << 20) | (1U << 22) | (1U << 26));
-    GPIOE_OSPEEDR |= (3U << 20) | (3U << 22) | (3U << 26); /* high speed CS/DC/BL */
+    /* PE10 (BL), PE11 (CS), PE13 (DC) → GPIO output.
+     * GPIOE clock already enabled by obsw_spi4_init().
+     * PE3 is the USER LED — not touched here. LCD RST = board NRST. */
+    GPIOE_MODER &= ~((3U << 20) | (3U << 22) | (3U << 26));
+    GPIOE_MODER |=  ((1U << 20) | (1U << 22) | (1U << 26));
+    GPIOE_OSPEEDR |= (3U << 20) | (3U << 22) | (3U << 26);
 
-    CS_HIGH; DC_DATA; RST_HIGH; BL_OFF;
+    CS_HIGH; DC_DATA; BL_OFF;
 }
 
 void lcd_init(void)
 {
     lcd_gpio_init();
 
-    /* Hardware reset */
-    RST_LOW;  lcd_delay_ms(10);
-    RST_HIGH; lcd_delay_ms(120);
+    /* No software RST pin — LCD RST is board NRST (hardware reset on power-on).
+     * Brief delay to let the panel stabilise after power-up. */
+    lcd_delay_ms(120);
 
     /* Software reset (twice, as per WeAct BSP) */
     lcd_cmd(ST_SWRESET); lcd_delay_ms(120);
