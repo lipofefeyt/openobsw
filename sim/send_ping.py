@@ -12,17 +12,24 @@ import struct
 import subprocess
 
 
-FRAME  = bytes.fromhex("1801c0000003201101" + "00")
-PACKET = struct.pack(">H", len(FRAME)) + FRAME
+# TC(17,1) space packet — 11 bytes
+# Primary header: APID=0x001, seq=standalone, data_len=4 (→ payload_len=5)
+# PUS-C secondary: ver+ack=0x11, service=17, subservice=1, src_id=0x0000
+FRAME  = bytes([0x18,0x01, 0xC0,0x00, 0x00,0x04, 0x11, 0x11, 0x01, 0x00,0x00])
+PACKET = b'\x01' + struct.pack(">H", len(FRAME)) + FRAME
 
 
 def parse_response(data: bytes):
     offset, count = 0, 0
     while offset < len(data):
-        if data[offset] == 0xFF:
-            print("  0xFF — sync byte ✓")
+        b = data[offset]
+        if b == 0xFF:
             offset += 1
             continue
+        if b != 0x04:       # skip unexpected bytes
+            offset += 1
+            continue
+        offset += 1         # consume type byte 0x04
         if offset + 2 > len(data): break
         length = struct.unpack(">H", data[offset:offset+2])[0]
         offset += 2
@@ -35,6 +42,7 @@ def parse_response(data: bytes):
                 (1, 1):  "TM(1,1)  acceptance ✓",
                 (17, 2): "TM(17,2) pong ✓",
                 (1, 7):  "TM(1,7)  completion ✓",
+                (1, 8):  "TM(1,8)  completion FAIL",
                 (5, 1):  "TM(5,1)  event info",
             }.get((svc, subsvc), f"TM({svc},{subsvc})")
             print(f"  {label}")
