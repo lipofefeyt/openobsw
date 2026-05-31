@@ -10,6 +10,29 @@ option(OBSW_BUILD_TESTS  "Build unit tests"        ON)
 option(OBSW_BUILD_SIM    "Build host simulation"   ON)
 option(OBSW_ENABLE_ASAN  "Enable AddressSanitizer" OFF)
 
+option(
+    OBSW_ENABLE_ORBITFABRIC_CONTRACT
+    "Enable optional OrbitFabric flight contract adapter (host sim only)"
+    OFF
+)
+
+set(
+    ORBITFABRIC_CONTRACT_DIR
+    "${PROJECT_SOURCE_DIR}/../orbitfabric-openobsw-poc/generated_artifacts/flight_software"
+    CACHE PATH
+    "Directory containing generated OrbitFabric flight contract headers"
+)
+
+if(OBSW_ENABLE_ORBITFABRIC_CONTRACT)
+    if(NOT EXISTS "${ORBITFABRIC_CONTRACT_DIR}/mission_contract.h")
+        message(
+            FATAL_ERROR
+            "mission_contract.h not found in ORBITFABRIC_CONTRACT_DIR: "
+            "${ORBITFABRIC_CONTRACT_DIR}"
+        )
+    endif()
+endif()
+
 # Strict warnings
 add_compile_options(
     -Wall -Wextra -Wpedantic

@@ -13,6 +13,10 @@
 #include "sensor_inject.h"
 #include "obsw/pus/s20.h"
 
+#ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
+#include "orbitfabric_contract_adapter.h"
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -183,6 +187,33 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s20_get, .ctx = &s20_ctx},
 };
 
+#ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
+static void configure_orbitfabric_contract_routes(void)
+{
+    obsw_of_tc_route_t of_route = {0};
+
+    if (obsw_of_tc_route_for_command(OF_CMD_PING, &of_route) != 0) {
+        fprintf(stderr, "[OBSW] OrbitFabric: OF_CMD_PING not mapped\n");
+        return;
+    }
+
+    size_t n = sizeof(routes) / sizeof(routes[0]);
+    for (size_t i = 0; i < n; i++) {
+        if (routes[i].service == 17U && routes[i].subservice == 1U) {
+            routes[i].apid       = of_route.apid;
+            routes[i].service    = of_route.service;
+            routes[i].subservice = of_route.subservice;
+            fprintf(stderr, "[OBSW] OrbitFabric: OF_CMD_PING -> TC(%u,%u)\n",
+                    (unsigned)of_route.service, (unsigned)of_route.subservice);
+            return;
+        }
+    }
+
+    fprintf(stderr, "[OBSW] OrbitFabric: TC(17,1) route not found in table\n");
+}
+#else
+static void configure_orbitfabric_contract_routes(void) {}
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Main                                                                */
@@ -239,9 +270,10 @@ int main(void)
     s20_ctx.table_len   = sizeof(s20_params) / sizeof(s20_params[0]);
 
     /* Watchdog */
-obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
+    obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
 
     /* Dispatcher */
+    configure_orbitfabric_contract_routes();
     obsw_tc_dispatcher_t dispatcher;
     obsw_tc_dispatcher_init(&dispatcher,
                             routes, sizeof(routes) / sizeof(routes[0]),

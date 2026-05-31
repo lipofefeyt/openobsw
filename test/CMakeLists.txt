@@ -103,3 +103,18 @@ add_executable(test_s20 unit/test_s20.c)
 target_link_libraries(test_s20 PRIVATE obsw unity)
 target_compile_options(test_s20 PRIVATE ${TEST_SUPPRESS})
 add_test(NAME s20 COMMAND test_s20)
+
+if(OBSW_ENABLE_ORBITFABRIC_CONTRACT)
+    add_executable(test_orbitfabric_contract_adapter
+        unit/test_orbitfabric_contract_adapter.c
+        ../sim/orbitfabric_contract_adapter.c
+    )
+    target_link_libraries(test_orbitfabric_contract_adapter PRIVATE unity)
+    target_include_directories(test_orbitfabric_contract_adapter PRIVATE
+        ${PROJECT_SOURCE_DIR}/sim
+        ${ORBITFABRIC_CONTRACT_DIR}
+    )
+    target_compile_options(test_orbitfabric_contract_adapter PRIVATE ${TEST_SUPPRESS})
+    add_test(NAME orbitfabric_contract_adapter
+             COMMAND test_orbitfabric_contract_adapter)
+endif()

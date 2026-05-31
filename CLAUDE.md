@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+@/home/vscode/.claude-global/contexts/openobsw-opensvf.md
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Build commands
