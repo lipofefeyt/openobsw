@@ -136,16 +136,6 @@ static void lcd_fmt_hex32(char *buf8, uint32_t val)
 }
 #endif
 
-static void uart_print_hex32(uint32_t val)
-{
-    static const char h[] = "0123456789ABCDEF";
-    uint8_t buf[8];
-    for (int i = 7; i >= 0; i--) {
-        buf[i] = (uint8_t)h[val & 0xFU];
-        val >>= 4;
-    }
-    uart_write_buf(buf, 8);
-}
 
  /* Superloop-only helpers — in FreeRTOS mode the TMTC task handles I/O. */
  #ifndef OBSW_FREERTOS
@@ -255,10 +245,11 @@ static void uart_print_hex32(uint32_t val)
 
      obsw_spi4_init();
      lcd_init();
+     lcd_backlight_on();
      lcd_console_init();
 
      lcd_console_puts("openobsw v" SRDB_VERSION "\n");
-     lcd_console_puts("STM32H750 HSI 32MHz\n");
+     lcd_console_puts("STM32H750 HSI 64MHz\n");
      { char ln[25];
        memcpy(ln,      "CLK:", 4); lcd_fmt_hex32(ln +  4, RCC_CFGR);
        memcpy(ln + 12, " D2:", 4); lcd_fmt_hex32(ln + 16, RCC_D2CFGR);

@@ -297,7 +297,13 @@ void lcd_init(void)
 
     /* Display on */
     lcd_cmd(ST_DISPON); lcd_delay_ms(100);
+    /* Backlight NOT driven here — caller decides when to enable BL_ON
+     * so that re-init from a FreeRTOS task doesn't toggle the backlight
+     * and cause a current spike that re-triggers the power supervisor. */
+}
 
+void lcd_backlight_on(void)
+{
     BL_ON;
 }
 

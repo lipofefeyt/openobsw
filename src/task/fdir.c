@@ -116,6 +116,17 @@ static void fdir_task(void *param)
 
         /* 2. Boot event on first tick. */
         if (!boot_sent) {
+#ifndef OBSW_RENODE
+            /* The ST7735R power supervisor fires during the FreeRTOS startup
+             * current spike, clearing GRAM and resetting config registers.
+             * lcd_init() no longer toggles BL, so re-running it here is safe:
+             * backlight stays on throughout, no new current spike. */
+            lcd_init();
+            lcd_console_init();
+            lcd_console_puts("openobsw v" SRDB_VERSION "\n");
+            lcd_console_puts("STM32H750 HSI 64MHz\n");
+            lcd_console_puts("FDIR alive\n");
+#endif
             obsw_s5_report(&s_s5, OBSW_S5_INFO,
                            SRDB_EVENT_BOOT_COMPLETE, NULL, 0);
             boot_sent = true;

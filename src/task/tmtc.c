@@ -104,6 +104,7 @@ static void tmtc_task(void *param)
         if (flen == 0 || flen > OBSW_TC_FRAME_MAX) {
             flush_tm();
             uart_write(&EOT, 1);
+            taskYIELD();
             continue;
         }
 
@@ -117,6 +118,7 @@ static void tmtc_task(void *param)
 
         flush_tm();
         uart_write(&EOT, 1);
+        taskYIELD(); /* give FDIR and other lower-priority tasks a scheduling slot */
     }
 }
 

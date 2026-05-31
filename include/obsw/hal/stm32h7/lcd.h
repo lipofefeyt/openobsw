@@ -41,7 +41,12 @@
 #define LCD_COLS   (LCD_W / LCD_CHAR_W)   /* 26 chars/line */
 #define LCD_ROWS   (LCD_H / LCD_CHAR_H)   /* 10 lines       */
 
+/* lcd_init() configures the ST7735R but does NOT enable the backlight.
+ * Call lcd_backlight_on() once after the first lcd_init() from main().
+ * FDIR re-init calls lcd_init() without touching BL to avoid the current
+ * spike that would re-trigger the ST7735R internal power supervisor. */
 void lcd_init(void);
+void lcd_backlight_on(void);
 void lcd_clear(uint16_t colour);
 void lcd_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t colour);
 void lcd_draw_char(uint16_t x, uint16_t y, char c, uint16_t fg, uint16_t bg);

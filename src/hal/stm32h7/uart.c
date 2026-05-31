@@ -31,6 +31,7 @@
 /* GPIOD */
 #define GPIOD_MODER     (*(volatile uint32_t *)(GPIOD_BASE + 0x00))
 #define GPIOD_OSPEEDR   (*(volatile uint32_t *)(GPIOD_BASE + 0x08))
+#define GPIOD_PUPDR     (*(volatile uint32_t *)(GPIOD_BASE + 0x0C))
 #define GPIOD_AFRH      (*(volatile uint32_t *)(GPIOD_BASE + 0x24))
  
 /* USART3 */
@@ -70,7 +71,11 @@ void obsw_uart_init(void)
  
     /* OSPEEDR: high speed */
     GPIOD_OSPEEDR |= (3U << 16) | (3U << 18);
- 
+
+    /* PUPDR: pull-up on PD9 (RX) — keeps line high when no transmitter
+     * is connected, preventing false RXNE events from a floating pin. */
+    GPIOD_PUPDR = (GPIOD_PUPDR & ~(3U << 18)) | (1U << 18);
+
     /* AFRH: AF7 for PD8 (bits [3:0]) and PD9 (bits [7:4]) */
     GPIOD_AFRH &= ~(0xFFU);
     GPIOD_AFRH |=  (7U << 0) | (7U << 4);
