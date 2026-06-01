@@ -29,7 +29,6 @@ priority: **owned**, **ordered**, and **wanted**.
 
 | Item | ~Price | Purpose | Notes |
 |---|---|---|---|
-| USB logic analyzer (8ch, 24 MHz) | €10–15 | Debug UART/I2C/SPI without a scope | Any Cypress FX2-based clone works with Sigrok/PulseView on Linux |
 | MPU-6050 gyro + accel (GY-521) | €3–5 | NOMINAL mode ADCS gyro path | Only useful once a star tracker is also available — low priority for now |
 
 ---

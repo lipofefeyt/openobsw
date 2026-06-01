@@ -62,6 +62,19 @@ types are silently discarded.
 `obsw_tm_store_t` and outputs each TM packet as `[0x04][len_hi][len_lo][bytes]`.
 Writes `0xFF` end-of-tick after each inbound frame.
 
+> **Timing:** `0xFF` is sent immediately after the TC is queued — before PUS
+> has processed it. Ground tools must read for ~300 ms after the first `0xFF`
+> to catch the TM response that arrives via the PUS notification path.
+
+**UART RX pull-up:** `uart_init()` enables the STM32H7 internal pull-up on
+PD9 (RX). Without it a floating/disconnected RX line generates continuous
+false RXNE events; TMTC spins at priority 4 and starves FDIR, halting the
+IWDG kick and causing a 4 s reset loop.
+
+**`taskYIELD()` after each frame:** Inserted after every frame (valid or
+invalid) to guarantee FDIR and lower-priority tasks get a scheduling slot
+even under continuous UART traffic.
+
 ---
 
 ### PUS Task — `task/pus.c`
@@ -134,9 +147,19 @@ Each 1 s tick:
 
 1. **Kick IWDG** (`IWDG_KR = 0xAAAA`) — 4 s timeout (prescaler /128 from
    LSI ≈ 32 kHz, reload 1000).
-2. **Boot event** — on first tick only, emits `SRDB_EVENT_BOOT_COMPLETE` (INFO).
-3. **Mode change detection** — if FSM mode changed since last tick, emits
+2. **LCD re-init (first tick only):** The ST7735R internal power supervisor
+   fires during the FreeRTOS startup current spike (~1 s after boot), clearing
+   GRAM and resetting the controller state. FDIR re-runs `lcd_init()` +
+   `lcd_console_init()` at tick 1 to restore the display. `lcd_init()` no
+   longer drives the backlight (`BL_ON` is called once from `main()` via
+   `lcd_backlight_on()`); FDIR re-init never touches the backlight line,
+   avoiding a second current spike that would re-trigger the power supervisor.
+3. **Boot event** — on first tick only (after LCD re-init), emits
+   `SRDB_EVENT_BOOT_COMPLETE` (INFO).
+4. **Mode change detection** — if FSM mode changed since last tick, emits
    `SRDB_EVENT_SAFE_MODE_ENTRY` (HIGH) or `SRDB_EVENT_SAFE_MODE_EXIT` (INFO).
+5. **LCD status bar update** — draws `FDIR:NOMINAL  WDG:XXXXXXXX` (or
+   `FDIR:SAFE`) on the bottom row using `lcd_console_set_status()`.
 
 A stuck FDIR task causes IWDG expiry and hardware reset within 4 s.
 
@@ -165,6 +188,88 @@ TC whitelist in SAFE mode: `{8,1}` (S8 recover), `{17,1}` (ping), `{20,3}`
 | PUS | 3 | TC processing should complete promptly |
 | AOCS | 2 | Fixed-rate control; can be preempted without losing correctness |
 | Idle | 0 | FreeRTOS idle task |
+
+---
+
+## LCD console
+
+The ST7735R LCD driver (`hal/stm32h7/lcd.c`, `hal/stm32h7/lcd_console.c`)
+provides a scrolling text console (160×80, 26×10 chars, 5×7 font).
+
+### Backlight and power supervisor
+
+`lcd_init()` configures the controller but **does not** enable the backlight.
+Call `lcd_backlight_on()` once from `main()` after the first `lcd_init()`.
+Never call it from a task — toggling the backlight after FreeRTOS is running
+causes a current spike that triggers the ST7735R internal power supervisor,
+clearing GRAM and resetting config registers.
+
+### Startup sequence
+
+| Time | Event |
+|---|---|
+| T = 0 ms | MCU boot; `lcd_init()` + `lcd_backlight_on()` in `main()` |
+| T ≈ 350 ms | Boot messages displayed (`openobsw vX.Y.Z`, clock, `FreeRTOS starting...`) |
+| T ≈ 350–1000 ms | ST7735R power supervisor may fire → screen goes black. Backlight stays on. |
+| T = 1000 ms | FDIR tick 1: `lcd_init()` (no BL) + `lcd_console_init()` + messages → display stable |
+| T > 1000 ms | FDIR updates status bar every second |
+
+### Thread safety
+
+`lcd_console_puts()` and `lcd_console_set_status()` wrap each character draw
+in `taskENTER_CRITICAL()` / `taskEXIT_CRITICAL()`. This prevents SysTick
+from preempting mid-SPI-transfer while still allowing inter-character
+scheduling. Only the FDIR task calls LCD functions after the scheduler starts.
+
+---
+
+## Fault handlers
+
+`platform/stm32h7/freertos_hooks.c` overrides the weak default handlers:
+
+| Handler | Behaviour |
+|---|---|
+| `HardFault_Handler` | Naked trampoline — captures MSP/PSP, calls `hard_fault_handler_c()` which prints `PC`, `LR`, `HFSR`, `CFSR`, `MMAR`, `BFAR` to UART then spins (IWDG resets after 4 s) |
+| `vApplicationStackOverflowHook` | Prints task name to UART then spins |
+| `obsw_freertos_assert_fail` | Prints file + line to UART then spins |
+
+All three write directly to USART3 TDR (no driver dependency) so they work
+regardless of scheduler state.
+
+> **Previous bug:** the original `obsw_freertos_assert_fail` executed
+> `bkpt #0`. Without a debugger attached, `bkpt` triggers a HardFault; the
+> old `HardFault_Handler` was `b .` (spin). Any FreeRTOS assert → bkpt →
+> HardFault → spin → FDIR starved → IWDG fires → silent reset loop.
+
+---
+
+## Ground tools
+
+| Tool | Path | Purpose |
+|---|---|---|
+| `ping_uart.py` | `tools/ping_uart.py` | Send TC(17,1) ping over CP2102 UART; decode TM(1,1), TM(17,2), TM(1,7) |
+| `send_ping.py` | `sim/send_ping.py` | Send TC(17,1) ping to host sim subprocess |
+
+```bash
+# Requires: pip install pyserial
+python3 tools/ping_uart.py /dev/ttyUSB0          # 3 pings, auto-parse TM
+python3 tools/ping_uart.py /dev/ttyUSB0 --raw    # raw hex dump for debugging
+```
+
+**Frame format:** the dispatcher receives a raw **PUS-C space packet**
+(11 bytes), not a TC transfer frame. Wire protocol carries space packets
+directly — the TC frame decode layer is only used in the integration test.
+
+```
+18 01  C0 00  00 04  11  11  01  00 00
+  │       │      │   │   │   │    └─ source ID
+  │       │      │   │   │   └─ subservice = 1
+  │       │      │   │   └─ service = 17
+  │       │      │   └─ PUS-C secondary hdr (ver+ack)
+  │       │      └─ data_len = 4  (→ payload_len = 5 ≥ PUS_TC_SEC_HDR_LEN)
+  │       └─ seq: standalone, count 0
+  └─ packet ID: TC, sec_hdr=1, APID=0x001
+```
 
 ---
 
@@ -197,10 +302,13 @@ stub (`platform/stm32h7/errno_stub.c`) because newlib-nano does not provide it.
 
 ## What is not yet wired
 
-| Item | Notes |
-|---|---|
-| QMC5883L magnetometer driver | Hardware arriving; stubs return `mag_valid = false` |
-| MTQ / RW actuator output | AOCS computes commands but does not write to hardware |
-| I2C HAL (`obsw_i2c_ops_t`) | Not yet implemented |
-| INA219 power monitor | Not yet implemented — needed for S3 power HK |
-| S3 housekeeping from AOCS | Not yet implemented |
+| Item | Milestone | Notes |
+|---|---|---|
+| TC/TM end-to-end ping from CP2102 | v0.8 #49 | `tools/ping_uart.py` in progress; TM response debugging ongoing |
+| S3 housekeeping (FreeRTOS path) | v0.8 #51 | PUS task has S1/S8/S17/S20 but not S3; needs FreeRTOS software timers |
+| I2C HAL (`obsw_i2c_ops_t`) | v0.10 #37 | Not yet implemented |
+| QMC5883L magnetometer driver | v0.10 #38 | Hardware owned; stubs return `mag_valid = false` |
+| ICM-42688 gyroscope driver | v0.10 #53 | Not yet implemented |
+| INA219 power monitor | v0.10 #39 | Not yet implemented |
+| MTQ / RW actuator output | v0.10 | AOCS computes commands but does not write to hardware |
+| STM32H750 Renode socket transport for OpenSVF | v0.11 #54 | Renode script exists; OpenSVF integration not yet validated |
