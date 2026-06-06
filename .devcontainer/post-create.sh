@@ -26,13 +26,13 @@ sudo apt-get install -y \
     libusb-1.0-0-dev \
     screen \
     2>/dev/null
-echo "[1/5] System packages installed"
+echo "[1/6] System packages installed"
 
 # ── aarch64 Linux cross-compiler ─────────────────────────────────────
 if ! command -v aarch64-linux-gnu-gcc &>/dev/null; then
     sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 fi
-echo "[2/5] aarch64-linux-gnu toolchain ready"
+echo "[2/6] aarch64-linux-gnu toolchain ready"
 
 # ── aarch64-none-elf bare-metal toolchain ────────────────────────────
 TOOLCHAIN_DIR=/opt/arm-gnu-toolchain
@@ -46,12 +46,13 @@ if [ ! -f "$TOOLCHAIN_DIR/bin/aarch64-none-elf-gcc" ]; then
 fi
 export PATH="$TOOLCHAIN_DIR/bin:$PATH"
 echo "export PATH=$TOOLCHAIN_DIR/bin:\$PATH" >> ~/.bashrc
-echo "[3/5] aarch64-none-elf toolchain ready"
+echo "[3/6] aarch64-none-elf toolchain ready"
 
 # ── Python venv ───────────────────────────────────────────────────────
-if [ ! -f "$REPO/.venv/bin/python3" ]; then
-    python3 -m venv "$REPO/.venv"
-fi
+# Always recreate: venv scripts contain hardcoded shebangs pointing to the
+# path where the venv was created. If the repo was cloned on a different
+# machine (e.g. WSL2 host vs devcontainer), the shebangs break silently.
+python3 -m venv --clear "$REPO/.venv"
 source "$REPO/.venv/bin/activate"
 pip install -q pydantic pyyaml pytest
 pip install -q -e "$REPO/srdb/"
@@ -99,10 +100,17 @@ if [ -z "$(git config --global user.email)" ]; then
 fi
 
 # ── Global CLAUDE.md ──────────────────────────────────────────────────
-mkdir -p /home/vscode/.claude-global
-touch /home/vscode/.claude-global/CLAUDE.md
-ln -sf /home/vscode/.claude-global/CLAUDE.md /home/vscode/.claude/CLAUDE.md
-echo "[+] Global CLAUDE.md linked from WSL2 host"
+CLAUDE_GLOBAL=/home/vscode/.claude-global
+mkdir -p "$CLAUDE_GLOBAL/contexts"
+# Copy staged files to WSL2 host on first use (never overwrite user edits)
+for f in "$REPO/.devcontainer/claude-global/SETUP-NEW-REPO.md" \
+          "$REPO/.devcontainer/claude-global/contexts/openobsw-opensvf.md"; do
+    dest="$CLAUDE_GLOBAL/${f#*claude-global/}"
+    [ -f "$dest" ] || cp "$f" "$dest"
+done
+touch "$CLAUDE_GLOBAL/CLAUDE.md"
+ln -sf "$CLAUDE_GLOBAL/CLAUDE.md" /home/vscode/.claude/CLAUDE.md
+echo "[+] Global CLAUDE.md linked; context files seeded to WSL2 host"
 
 echo ""
 echo "=== openobsw ready ==="
