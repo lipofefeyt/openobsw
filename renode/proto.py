@@ -86,7 +86,8 @@ def _parse(raw):
     i = 0
     while i < len(raw):
         if raw[i] == SYNC_EOT:
-            break
+            i += 1
+            continue
         if raw[i] != FRAME_TM:
             i += 1
             continue

@@ -63,6 +63,17 @@ alias renode-zynqmp='renode $OPENOBSW_REPO/renode/zynqmp_obsw.resc'
 alias renode-ping-zynqmp='python3 $OPENOBSW_REPO/renode/test_ping_zynqmp.py'
 alias renode-stm32h7='renode $OPENOBSW_REPO/renode/stm32h750_obsw.resc'
 alias renode-ping-stm32h7='python3 $OPENOBSW_REPO/renode/test_ping_stm32h7.py'
+alias renode-stm32h7-build='cmake -S $OPENOBSW_REPO/targets/stm32h7 \
+    -B $OPENOBSW_REPO/build_stm32h7_renode \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_TOOLCHAIN_FILE=$OPENOBSW_REPO/cmake/stm32h7-toolchain.cmake \
+    -DPython3_EXECUTABLE=$OPENOBSW_PYTHON \
+    -DOBSW_ROOT=$OPENOBSW_REPO \
+    -DOBSW_RENODE=ON -DOBSW_FREERTOS=ON \
+    && cmake --build $OPENOBSW_REPO/build_stm32h7_renode -j$(nproc)'
+alias renode-stm32h7-clean='rm -rfv $OPENOBSW_REPO/build_stm32h7_renode'
+alias renode-test-leop='python3 $OPENOBSW_REPO/renode/test_leop_stm32h7.py'
+alias renode-test-fdir='python3 $OPENOBSW_REPO/renode/test_fdir_stm32h7.py'
 
 echo "[openobsw] activated — repo: $REPO"
-echo "[openobsw] aliases: host-build host-test host-sim | aarch64-build | zynqbare-build | stm32h7-build stm32h7-flash | renode-zynqmp renode-stm32h7"
+echo "[openobsw] aliases: host-build host-test host-sim | aarch64-build | zynqbare-build | stm32h7-build stm32h7-flash | renode-zynqmp renode-stm32h7 renode-stm32h7-build renode-test-leop renode-test-fdir"
