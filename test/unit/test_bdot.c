@@ -118,6 +118,31 @@ void test_opposing_field_reversal(void)
     TEST_ASSERT_TRUE(out.m_cmd[2] > 0.0f);
 }
 
+void test_runtime_gain_update(void)
+{
+    /* Verify that updating config.gain mid-run changes the output magnitude */
+    obsw_bdot_ctx_t ctx;
+    obsw_bdot_config_t cfg = {.gain = 1.0f, .max_dipole = 1000.0f};
+    obsw_bdot_init(&ctx, &cfg);
+
+    float b0[3] = {0.0f, 0.0f, 0.0f};
+    float b1[3] = {1e-4f, 0.0f, 0.0f}; /* dB/dt = 1e-3 T/s over dt=0.1 */
+    obsw_bdot_output_t out;
+
+    obsw_bdot_step(&ctx, b0, 0.1f, &out); /* init */
+    obsw_bdot_step(&ctx, b1, 0.1f, &out);
+    float m_gain1 = out.m_cmd[0]; /* m = -1 * 1e-3 = -1e-3 */
+
+    /* S20 TC(20,1) runtime update — double the gain */
+    ctx.config.gain = 2.0f;
+    obsw_bdot_reset(&ctx);
+    obsw_bdot_step(&ctx, b0, 0.1f, &out);
+    obsw_bdot_step(&ctx, b1, 0.1f, &out);
+    float m_gain2 = out.m_cmd[0]; /* m = -2 * 1e-3 = -2e-3 */
+
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 2.0f * m_gain1, m_gain2);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -127,5 +152,6 @@ int main(void)
     RUN_TEST(test_saturation);
     RUN_TEST(test_reset_clears_state);
     RUN_TEST(test_opposing_field_reversal);
+    RUN_TEST(test_runtime_gain_update);
     return UNITY_END();
 }

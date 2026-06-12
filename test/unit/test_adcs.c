@@ -183,6 +183,45 @@ void test_null_inputs_return_false(void)
     TEST_ASSERT_FALSE(obsw_adcs_step(&ctx, &q, NULL, &out));
 }
 
+void test_runtime_kd_update(void)
+{
+    /* Run with kd=0, then update to kd=1 and verify derivative term fires */
+    obsw_adcs_ctx_t ctx;
+    obsw_adcs_config_t cfg = {.kp = 0.0f, .kd = 0.0f, .max_torque = 10.0f};
+    obsw_adcs_init(&ctx, &cfg);
+
+    obsw_quat_t q  = identity();
+    float omega[3] = {0.1f, 0.0f, 0.0f};
+    obsw_adcs_output_t out;
+
+    obsw_adcs_step(&ctx, &q, omega, &out);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, out.torque_cmd[0]); /* kd=0: no damping */
+
+    ctx.config.kd = 1.0f;   /* S20 TC(20,1) runtime update */
+    obsw_adcs_step(&ctx, &q, omega, &out);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, -0.1f, out.torque_cmd[0]); /* kd=1: -1.0*0.1 */
+}
+
+void test_runtime_kp_update(void)
+{
+    /* Run with kp=0, then update to kp=1 and verify proportional term fires */
+    obsw_adcs_ctx_t ctx;
+    obsw_adcs_config_t cfg = {.kp = 0.0f, .kd = 0.0f, .max_torque = 10.0f};
+    obsw_adcs_init(&ctx, &cfg);
+
+    float half         = (float)(M_PI / 4.0);
+    obsw_quat_t q_meas = {cosf(half), sinf(half), 0.0f, 0.0f}; /* 90° about X */
+    float omega[3]     = {0.0f, 0.0f, 0.0f};
+    obsw_adcs_output_t out;
+
+    obsw_adcs_step(&ctx, &q_meas, omega, &out);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, out.torque_cmd[0]); /* kp=0: no torque */
+
+    ctx.config.kp = 1.0f;   /* S20 TC(20,1) runtime update */
+    obsw_adcs_step(&ctx, &q_meas, omega, &out);
+    TEST_ASSERT_TRUE(fabsf(out.torque_cmd[0]) > 0.1f); /* kp=1: torque on X */
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -196,5 +235,7 @@ int main(void)
     RUN_TEST(test_torque_saturation);
     RUN_TEST(test_set_target);
     RUN_TEST(test_null_inputs_return_false);
+    RUN_TEST(test_runtime_kd_update);
+    RUN_TEST(test_runtime_kp_update);
     return UNITY_END();
 }

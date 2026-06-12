@@ -40,10 +40,17 @@ An integration test exercises the full uplink/downlink path end-to-end.
 
 ```
  ┌─────────────────────────────────────────────────────────┐
- │                   FDIR                                   │
- │    FSM (safe mode) · Watchdog · Trap handlers            │
+ │               Mode Manager  (task/mode.h)                │
+ │    FSM owner: STANDBY → SAFE → NOMINAL transitions       │
+ │    300 s auto-timeout STANDBY→SAFE on boot               │
  └────────────────────────┬────────────────────────────────┘
-                          │  mode transitions / safe triggers
+                          │  mode transitions
+ ┌────────────────────────▼────────────────────────────────┐
+ │                   FDIR  (task/fdir.h)                    │
+ │    Fault responder: IWDG kick · S5 HIGH → to_safe()     │
+ │    LCD status bar                                        │
+ └────────────────────────┬────────────────────────────────┘
+                          │  fault triggers / safe requests
  ┌────────────────────────▼────────────────────────────────┐
  │              PUS-C Services                              │
  │    S1 · S3 · S5 · S6 (memory) · S8 (functions) · S17   │
@@ -182,9 +189,14 @@ standards-compliant interface.
 
 Key handler: `obsw_s8_perform()`
 
-| Function ID | Name | Effect |
+| Function ID | Constant | Effect |
 |---|---|---|
-| 1 | `OBSW_S8_FN_RECOVER_NOMINAL` | Calls `obsw_fsm_to_nominal()` |
+| 1 | `OBSW_S8_FN_RECOVER_NOMINAL` | Request SAFE → NOMINAL via Mode Manager |
+| 2 | `OBSW_S8_FN_REQUEST_SAFE`    | Request any → SAFE via Mode Manager |
+| 3 | `OBSW_S8_FN_REQUEST_STANDBY` | Request any → STANDBY via Mode Manager |
+
+Handlers call `obsw_mode_request_*()` — they do not touch the FSM directly,
+keeping the FSM ownership in the Mode Manager task.
 
 Additional function IDs are registered by the application in `obsw_s8_entry_t[]`.
 
@@ -275,38 +287,69 @@ flowchart TD
 
 ---
 
-## FDIR
+## Mode Manager and FDIR
 
-### Safe mode FSM — `fdir/fsm.h`
+### Three-state FSM — `fdir/fsm.h` + `task/mode.h`
 
-Two-state mode machine. All state is caller-owned; no globals.
+The mode FSM has three states. All state is caller-owned; no globals.
+The Mode Manager task (`task/mode.h`) is the sole owner of the FSM instance.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> NOMINAL : obsw_fsm_init()
-    NOMINAL --> SAFE : obsw_fsm_to_safe()
-    SAFE --> NOMINAL : obsw_fsm_to_nominal() via TC(8,1)
+    [*] --> STANDBY : obsw_fsm_init()
+    STANDBY --> SAFE : auto-timeout 300 s after boot
+    SAFE --> NOMINAL : obsw_mode_request_nominal() [TC(8,1) fid=1]
+    NOMINAL --> SAFE : obsw_mode_request_safe() [TC(8,1) fid=2 or S5 HIGH]
+    SAFE --> STANDBY : obsw_mode_request_standby() [TC(8,1) fid=3]
+    NOMINAL --> STANDBY : obsw_mode_request_standby() [TC(8,1) fid=3]
 ```
 
+**STANDBY** is the boot state. AOCS is off; TCs are accepted but AOCS
+algorithms do not run. After 300 s the Mode Manager automatically transitions
+to SAFE.
+
+**SAFE** is the fault-containment mode. Only B-dot AOCS runs (magnetometer +
+magnetorquers). A subset of TCs is accepted per the dispatcher TC whitelist.
+
+**NOMINAL** is the full-operations mode. PD quaternion AOCS runs with reaction
+wheels and star tracker.
+
 **Entry/exit hooks** are mission-defined function pointers registered in
-`obsw_fsm_config_t`. On entry to SAFE: disable payload, switch to safe beacon.
-On exit: re-enable nominal operations. Neither hook is mandatory.
+`obsw_fsm_config_t`. On entry to SAFE: switch to safe beacon. On exit to
+NOMINAL: re-enable nominal operations. Neither hook is mandatory.
 
 **TC whitelist** controls which commands are accepted in SAFE mode. All
 others are rejected with `TM(1,2)`. The dispatcher calls
-`obsw_fsm_tc_allowed()` before routing. A typical safe-mode whitelist:
+`obsw_fsm_tc_allowed()` before routing. The whitelist is defined in the
+Mode Manager init (see `src/task/mode.c`).
+
+**Mode Manager public API** (`include/obsw/task/mode.h`):
 
 ```c
-static const obsw_fsm_tc_entry_t safe_whitelist[] = {
-    { .service = 17, .subservice = 1 },  /* S17 ping      */
-    { .service =  1, .subservice = 1 },  /* S1 acceptance */
-    { .service = 128, .subservice = 1 }, /* mission: recover command */
-};
+void obsw_mode_task_init(obsw_tm_store_t *tm_store);
+obsw_fsm_ctx_t *obsw_mode_get_fsm(void);
+void obsw_mode_request_nominal(void);   /* called by S8 fid=1 handler */
+void obsw_mode_request_safe(void);      /* called by S8 fid=2 handler */
+void obsw_mode_request_standby(void);   /* called by S8 fid=3 handler */
 ```
 
-**Recovery** is ground-commanded only. `obsw_fsm_recover()` is a TC handler
-the application registers at a mission-defined APID/svc/subsvc. It emits
-`TM(1,1)` and `TM(1,7)` via S1 and transitions the FSM back to NOMINAL.
+Request flags are `volatile bool` — single-byte atomic on single-core ARM,
+safe to set from any task or interrupt context. The Mode Manager task polls
+and acts on them each tick.
+
+### FDIR task — `task/fdir.h`
+
+FDIR is a **pure fault responder**. It does not own the FSM; it calls
+`obsw_mode_get_fsm()` to obtain a pointer to the Mode Manager's FSM when it
+needs to request SAFE mode in response to a fault.
+
+Responsibilities:
+- IWDG hardware watchdog kick each tick (hardware deadline)
+- S5 HIGH event emission for temperature and power faults, which automatically
+  calls `obsw_fsm_to_safe()` via the `s5_ctx.fsm` coupling
+- LCD status bar update (STANDBY=yellow, SAFE=red, NOMINAL=green)
+
+Only public API: `void obsw_fdir_task_init(obsw_tm_store_t *tm_store);`
 
 ---
 
@@ -359,18 +402,21 @@ If `fsm` is NULL, S5 behaves exactly as in v0.3 — no breaking change.
 
 ```mermaid
 flowchart TD
-    WD["Watchdog expiry"]
-    TRAP["Trap handler"]
-    S5["S5 HIGH event"]
+    WD["IWDG kick (FDIR task)"]
+    S5HIGH["S5 HIGH event\n(temp / power fault)"]
+    TC81_1["TC(8,1) fid=2\nGround command → SAFE"]
+    TC81_2["TC(8,1) fid=1\nGround command → NOMINAL"]
 
-    WD   --> SAFE["obsw_fsm_to_safe()"]
-    TRAP --> SAFE
-    S5   --> SAFE
+    S5HIGH --> SAFERQ["obsw_mode_request_safe()\nor obsw_fsm_to_safe() via s5.fsm"]
+    TC81_1 --> SAFERQ
+    SAFERQ --> MM["Mode Manager task\napplies transition"]
+    MM --> HOOK["on_enter_safe / on_exit_safe hook"]
+    MM --> TM["S5 event report TM(5,x)"]
 
-    SAFE --> HOOK["on_enter_safe hook"]
-    SAFE --> TM["S5 event report"]
+    TC81_2 --> NOMRQ["obsw_mode_request_nominal()"]
+    NOMRQ --> MM
 
-    RECOVER["Ground TC(8,1)"] --> NOM["NOMINAL mode"]
+    WD --> IWDG["Hardware IWDG reloaded\n(prevents MCU reset)"]
 ```
 
 ---
@@ -587,15 +633,16 @@ register writes without faulting.
 
 ### Overview
 
-openobsw implements a two-mode AOCS control law that runs as part of the
-main control cycle in `sim/main.c` (host sim) and will run as a dedicated
-task in the FreeRTOS target (v0.7).
+openobsw implements a three-mode-gated AOCS control law. The AOCS task reads
+the current FSM mode each tick from the Mode Manager and selects the
+appropriate algorithm — or idles if in STANDBY.
 
 ```
-FSM mode       Sensors used          Algorithm       Actuators
-─────────────────────────────────────────────────────────────────
-SAFE           Magnetometer          B-dot            Magnetorquers
-NOMINAL        Star tracker + Gyro   PD quaternion    Reaction wheels
+FSM mode    AOCS action       Sensors used          Actuators
+──────────────────────────────────────────────────────────────
+STANDBY     off (no-op)       —                     —
+SAFE        B-dot             Magnetometer          Magnetorquers
+NOMINAL     PD quaternion     Star tracker + Gyro   Reaction wheels
 ```
 
 ### B-dot controller (`aocs/bdot.c`)
@@ -618,6 +665,7 @@ Key properties:
 - First step always outputs zero (no derivative available)
 - Dipole commands saturated at configurable `max_dipole`
 - `obsw_bdot_reset()` clears state on mode re-entry
+- Gain `k` is S20-tunable at runtime via SRDB parameter `bdot_gain` (ID `0x20A0`)
 
 ### PD attitude controller (`aocs/adcs.c`)
 
@@ -638,6 +686,23 @@ Key properties:
 - Torque saturated at configurable `max_torque`
 - Quaternion utilities: normalise, conjugate, multiply
 - Returns `false` if measured quaternion has near-zero norm
+- Gains `Kp` and `Kd` are S20-tunable at runtime via SRDB parameters
+  `adcs_kp` (ID `0x20A1`) and `adcs_kd` (ID `0x20A2`)
+
+### S20-tunable AOCS gains
+
+Both AOCS controllers read their gains from the PUS S20 parameter table each
+tick via `obsw_pus_s20_get_float()`. Ground operators can update gains
+in-flight using `TC(20,1)` without reloading firmware.
+
+| SRDB parameter | ID     | Default | Unit       | Controller |
+|---|---|---|---|---|
+| `bdot_gain`    | 0x20A0 | 1.0e4   | A·m²·s/T   | B-dot      |
+| `adcs_kp`      | 0x20A1 | 0.5     | N·m/rad    | PD         |
+| `adcs_kd`      | 0x20A2 | 0.1     | N·m·s/rad  | PD         |
+
+The AOCS HK set (`aocs_hk`, SPID 1004, S3 set ID 4) reports all three gains
+at 5-tick intervals so ground can confirm the update took effect.
 
 ### Sensor injection protocol (simulation only)
 
