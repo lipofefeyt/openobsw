@@ -139,6 +139,48 @@ void test_safe_blocks_non_whitelisted_tc(void)
     TEST_ASSERT_FALSE(obsw_fsm_tc_allowed(&fsm, 99, 1));
 }
 
+void test_standby_whitelist_enforced(void)
+{
+    /* Whitelist applies in STANDBY as well as SAFE. */
+    obsw_fsm_ctx_t fsm = make_fsm();
+    TEST_ASSERT_EQUAL_INT(OBSW_FSM_STANDBY, obsw_fsm_mode(&fsm));
+    TEST_ASSERT_TRUE(obsw_fsm_tc_allowed(&fsm, 17, 1));   /* whitelisted */
+    TEST_ASSERT_TRUE(obsw_fsm_tc_allowed(&fsm, 1, 1));    /* whitelisted */
+    TEST_ASSERT_FALSE(obsw_fsm_tc_allowed(&fsm, 3, 5));   /* not on whitelist */
+    TEST_ASSERT_FALSE(obsw_fsm_tc_allowed(&fsm, 20, 1));  /* not on whitelist */
+}
+
+void test_standby_to_nominal_skips_exit_hook(void)
+{
+    /* obsw_fsm_to_nominal() from STANDBY transitions but does NOT fire
+     * on_exit_safe — there was no SAFE mode to exit from. */
+    obsw_fsm_ctx_t fsm = make_fsm();
+    obsw_fsm_to_nominal(&fsm);
+    TEST_ASSERT_EQUAL_INT(OBSW_FSM_NOMINAL, obsw_fsm_mode(&fsm));
+    TEST_ASSERT_EQUAL_INT(0, exit_safe_calls);
+    TEST_ASSERT_EQUAL_INT(0, enter_safe_calls);
+}
+
+void test_standby_safe_nominal_chain(void)
+{
+    /* Full auto-timeout path at FSM level:
+     *   STANDBY → obsw_fsm_to_safe() [timeout fires]
+     *          → obsw_fsm_to_nominal() [ground TC(8,1) fid=1]
+     * on_enter_safe fires once; on_exit_safe fires once. */
+    obsw_fsm_ctx_t fsm = make_fsm();
+
+    obsw_fsm_to_safe(&fsm);
+    TEST_ASSERT_EQUAL_INT(OBSW_FSM_SAFE, obsw_fsm_mode(&fsm));
+    TEST_ASSERT_EQUAL_INT(1, enter_safe_calls);
+    TEST_ASSERT_EQUAL_INT(0, exit_safe_calls);
+    TEST_ASSERT_EQUAL_UINT32(1, fsm.safe_entry_count);
+
+    obsw_fsm_to_nominal(&fsm);
+    TEST_ASSERT_EQUAL_INT(OBSW_FSM_NOMINAL, obsw_fsm_mode(&fsm));
+    TEST_ASSERT_EQUAL_INT(1, enter_safe_calls);
+    TEST_ASSERT_EQUAL_INT(1, exit_safe_calls);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -153,5 +195,8 @@ int main(void)
     RUN_TEST(test_nominal_allows_all_tc);
     RUN_TEST(test_safe_allows_whitelisted_tc);
     RUN_TEST(test_safe_blocks_non_whitelisted_tc);
+    RUN_TEST(test_standby_whitelist_enforced);
+    RUN_TEST(test_standby_to_nominal_skips_exit_hook);
+    RUN_TEST(test_standby_safe_nominal_chain);
     return UNITY_END();
 }
