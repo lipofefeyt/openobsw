@@ -216,6 +216,16 @@ static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_BDOT_GAIN,               .value = {.f32 = 1.0e4f}},
     {.param_id = SRDB_PARAM_ADCS_KP,                 .value = {.f32 = 0.5f}},
     {.param_id = SRDB_PARAM_ADCS_KD,                 .value = {.f32 = 0.1f}},
+    /* Orbit and dynamics configuration (#68) — readable via TC(20,3) */
+    {.param_id = SRDB_PARAM_ORBIT_ALTITUDE_KM,        .value = {.f32 = 550.0f}},
+    {.param_id = SRDB_PARAM_ORBIT_INCLINATION_DEG,    .value = {.f32 = 97.4f}},
+    {.param_id = SRDB_PARAM_SC_INERTIA_XX,            .value = {.f32 = 2.0e-3f}},
+    {.param_id = SRDB_PARAM_SC_INERTIA_YY,            .value = {.f32 = 2.5e-3f}},
+    {.param_id = SRDB_PARAM_SC_INERTIA_ZZ,            .value = {.f32 = 1.5e-3f}},
+    {.param_id = SRDB_PARAM_MTQ_MAX_DIPOLE,           .value = {.f32 = 10.0f}},
+    {.param_id = SRDB_PARAM_SC_OMEGA_X0,              .value = {.f32 = 0.5f}},
+    {.param_id = SRDB_PARAM_SC_OMEGA_Y0,              .value = {.f32 = 0.5f}},
+    {.param_id = SRDB_PARAM_SC_OMEGA_Z0,              .value = {.f32 = 0.5f}},
 };
 
 static float s20_get_f32(uint16_t param_id, float default_val)
@@ -412,14 +422,15 @@ int main(void)
                 act.sim_time   = sensor.sim_time;
                 act.controller = 0;
 
-                bool in_nominal = !obsw_fsm_is_safe(&fsm_ctx);
+                /* Three-state mode gate: STANDBY=off, SAFE=bdot, NOMINAL=PD ADCS */
+                obsw_fsm_mode_t cur_mode = obsw_fsm_mode(&fsm_ctx);
 
                 /* Sync S20-tunable AOCS gains before each control step */
                 adcs_ctx.config.kp   = s20_get_f32(SRDB_PARAM_ADCS_KP,   0.5f);
                 adcs_ctx.config.kd   = s20_get_f32(SRDB_PARAM_ADCS_KD,   0.1f);
                 bdot_ctx.config.gain = s20_get_f32(SRDB_PARAM_BDOT_GAIN, 1.0e4f);
 
-                if (in_nominal && sensor.st_valid && sensor.gyro_valid) {
+                if (cur_mode == OBSW_FSM_NOMINAL && sensor.st_valid && sensor.gyro_valid) {
                     obsw_quat_t q_meas = {
                         sensor.st_q_w, sensor.st_q_x,
                         sensor.st_q_y, sensor.st_q_z
@@ -437,7 +448,7 @@ int main(void)
                             "[OBSW] adcs tau=[%.3e,%.3e,%.3e] Nm\n",
                             act.rw_torque_x, act.rw_torque_y, act.rw_torque_z);
                     }
-                } else if (sensor.mag_valid) {
+                } else if (cur_mode == OBSW_FSM_SAFE && sensor.mag_valid) {
                     float b[3] = {sensor.mag_x, sensor.mag_y, sensor.mag_z};
                     obsw_bdot_output_t bdot_out;
                     obsw_bdot_step(&bdot_ctx, b, dt, &bdot_out);

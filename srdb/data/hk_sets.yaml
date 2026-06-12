@@ -53,3 +53,16 @@ hk_sets:
       - obc_reset_count
       - obc_cpu_load
     default_interval_ticks: 10
+
+  - id: 5
+    name: aocs_orbit_hk
+    spid: 1005
+    description: "AOCS orbit and dynamics configuration — altitude, inclination, inertia tensor, MTQ limits"
+    parameters:
+      - orbit_altitude_km
+      - orbit_inclination_deg
+      - sc_inertia_xx
+      - sc_inertia_yy
+      - sc_inertia_zz
+      - mtq_max_dipole
+    default_interval_ticks: 0
