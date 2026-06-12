@@ -1,18 +1,21 @@
 /**
  * @file fsm.h
- * @brief FDIR Safe Mode FSM.
+ * @brief Satellite mode FSM.
  *
- * Two-state mode machine: NOMINAL ↔ SAFE.
+ * Three-state mode machine: STANDBY → SAFE ↔ NOMINAL.
  *
- * Transitions into SAFE are triggered by:
- *   - obsw_fsm_to_safe()          called directly (watchdog, trap handler)
- *   - obsw_s5_report() HIGH       for configured safe-trigger event IDs
+ *   STANDBY — boot state; AOCS off; minimal subsystems active.
+ *             Auto-transitions to SAFE after a timeout managed by the
+ *             Mode Manager task, or on ground command.
+ *   SAFE    — B-dot detumbling (MAG+MTQ only); TC whitelist enforced.
+ *             Fault-triggered fallback from NOMINAL via FDIR.
+ *   NOMINAL — full AOCS (PD quaternion, ST+GYR+RW); all TCs allowed.
  *
- * Recovery to NOMINAL is ground-commanded via S8 function ID
- * OBSW_S8_FN_RECOVER_NOMINAL (TC(8,1) with function_id=1).
+ * The Mode Manager task owns the FSM context and drives nominal transitions.
+ * FDIR calls obsw_fsm_to_safe() for fault-triggered fallback only.
+ * S5 HIGH events with matching trigger IDs call obsw_fsm_to_safe() directly.
  *
- * In SAFE mode, incoming TCs are filtered against a static whitelist.
- * The dispatcher calls obsw_fsm_tc_allowed() before routing.
+ * TC whitelist is enforced in both STANDBY and SAFE; all TCs pass in NOMINAL.
  */
 #ifndef OBSW_FDIR_FSM_H
 #define OBSW_FDIR_FSM_H
@@ -32,8 +35,9 @@ extern "C" {
 /* ------------------------------------------------------------------ */
 
 typedef enum {
-    OBSW_FSM_NOMINAL = 0,
-    OBSW_FSM_SAFE    = 1,
+    OBSW_FSM_NOMINAL  = 0,
+    OBSW_FSM_SAFE     = 1,
+    OBSW_FSM_STANDBY  = 2,
 } obsw_fsm_mode_t;
 
 /* ------------------------------------------------------------------ */
@@ -78,16 +82,15 @@ int obsw_fsm_init(obsw_fsm_ctx_t *fsm, const obsw_fsm_config_t *config);
 /* Transitions                                                         */
 /* ------------------------------------------------------------------ */
 
-/**
- * Transition to SAFE mode.
- * No-op if already SAFE. Fires on_enter_safe hook.
- */
+/** Transition to STANDBY. No-op if already STANDBY. */
+void obsw_fsm_to_standby(obsw_fsm_ctx_t *fsm);
+
+/** Transition to SAFE. No-op if already SAFE. Fires on_enter_safe hook. */
 void obsw_fsm_to_safe(obsw_fsm_ctx_t *fsm);
 
 /**
- * Transition to NOMINAL mode.
- * No-op if already NOMINAL. Fires on_exit_safe hook.
- * Called by S8 function ID OBSW_S8_FN_RECOVER_NOMINAL.
+ * Transition to NOMINAL. No-op if already NOMINAL.
+ * Fires on_exit_safe hook only when transitioning from SAFE (not STANDBY).
  */
 void obsw_fsm_to_nominal(obsw_fsm_ctx_t *fsm);
 

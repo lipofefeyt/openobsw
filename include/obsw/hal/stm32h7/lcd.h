@@ -7,11 +7,13 @@
  * @file obsw/hal/stm32h7/lcd.h
  * @brief ST7735R LCD driver for WeAct STM32H750 (160×80, RGB565).
  *
- * Pins (GPIOE, all GPIO outputs):
+ * Pins (GPIOE, GPIO outputs):
  *   CS  PE11  (active low)
  *   DC  PE13  (HIGH=data, LOW=command)
- *   RST PE3   (active low)
  *   BL  PE10  (HIGH=backlight on)
+ *
+ * LCD RST = board NRST (hardware reset only — not a software GPIO).
+ * PE3 is the USER LED; this driver does not drive it.
  *
  * Call obsw_spi4_init() before lcd_init().
  */
@@ -47,9 +49,22 @@
  * spike that would re-trigger the ST7735R internal power supervisor. */
 void lcd_init(void);
 void lcd_backlight_on(void);
+void lcd_backlight_off(void);
 void lcd_clear(uint16_t colour);
 void lcd_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t colour);
 void lcd_draw_char(uint16_t x, uint16_t y, char c, uint16_t fg, uint16_t bg);
 void lcd_draw_string(uint16_t x, uint16_t y, const char *s, uint16_t fg, uint16_t bg);
+/* Diagnostic: fill entire 162×132 GRAM (no offset) — confirms DISPON + SPI */
+void lcd_fill_gram_raw(uint16_t colour);
+/* Re-issue SLPOUT+DISPON in case the panel lost its display-on state */
+void lcd_slpout_dispon(void);
+
+#ifdef OBSW_FREERTOS
+/* Like lcd_slpout_dispon() but uses vTaskDelay for the mandatory panel
+ * delays (120+10+100 ms) so the CPU enters WFI instead of DWT-spinning.
+ * Lower system current during init keeps the supply above the ST7735R
+ * power-supervisor threshold.  Must be called from a FreeRTOS task. */
+void lcd_slpout_dispon_yield(void);
+#endif
 
 #endif /* OBSW_HAL_STM32H7_LCD_H */

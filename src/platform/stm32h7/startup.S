@@ -44,9 +44,13 @@ g_pfnVectors:
     .word PendSV_Handler           /* PendSV                */
     .word SysTick_Handler          /* SysTick               */
 
-    /* External interrupts — fill as needed */
-    .rept 150
-    .word Default_Handler
+    /* External interrupts — IRQ 39 = USART3 global interrupt */
+    .rept 39
+    .word Default_Handler       /* IRQs 0-38 */
+    .endr
+    .word USART3_IRQHandler     /* IRQ 39: USART3 */
+    .rept 110
+    .word Default_Handler       /* IRQs 40-149 */
     .endr
 
 /* ------------------------------------------------------------------ */

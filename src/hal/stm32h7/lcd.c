@@ -5,8 +5,10 @@
  * GPIO (GPIOE — clock already enabled by spi.c):
  *   CS  PE11  active-low chip select
  *   DC  PE13  HIGH=data / LOW=command
- *   RST PE3   active-low reset
  *   BL  PE10  HIGH=backlight on
+ *
+ * LCD RST is wired to board NRST (hardware reset) — not a software GPIO.
+ * PE3 is the USER LED and is NOT driven by this driver.
  *
  * Panel offsets (internal GRAM origin):  x+1, y+26
  * MADCTL 0x78: MX+MV+ML+BGR → landscape, 160×80 visible area.
@@ -181,9 +183,18 @@ static const uint8_t font5x7[95][5] = {
 
 static void lcd_delay_ms(uint32_t ms)
 {
-    /* Busy-loop: ~15 k iterations/ms at HSI 32 MHz. */
-    volatile uint32_t n = ms * 15000U;
-    while (n--);
+    /* DWT cycle counter — exact at 64 MHz, no calibration needed.
+     * TRCENA enables the trace unit; CYCCNTENA starts the free-running
+     * counter.  Both are safe to set from software without a debugger. */
+    volatile uint32_t *demcr   = (volatile uint32_t *)0xE000EDFCU;
+    volatile uint32_t *dwtctrl = (volatile uint32_t *)0xE0001000U;
+    volatile uint32_t *cyccnt  = (volatile uint32_t *)0xE0001004U;
+    *demcr   |= (1U << 24);  /* TRCENA */
+    *dwtctrl |= (1U << 0);   /* CYCCNTENA */
+    uint32_t start  = *cyccnt;
+    uint32_t target = ms * 64000U;  /* 64 MHz → 64 000 cycles/ms */
+    while ((*cyccnt - start) < target)
+        ;
 }
 
 static void lcd_cmd(uint8_t cmd)
@@ -226,14 +237,17 @@ static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 
 static void lcd_gpio_init(void)
 {
-    /* PE10 (BL), PE11 (CS), PE13 (DC) → GPIO output.
-     * GPIOE clock already enabled by obsw_spi4_init().
-     * PE3 is the USER LED — not touched here. LCD RST = board NRST. */
+    /* PE10 (BL), PE11 (CS), PE13 (DC) → GPIO outputs.
+     * PE3 is the USER LED — not driven here.
+     * LCD RST = board NRST (hardware), not software-controllable.
+     * GPIOE clock already enabled by obsw_spi4_init(). */
     GPIOE_MODER &= ~((3U << 20) | (3U << 22) | (3U << 26));
     GPIOE_MODER |=  ((1U << 20) | (1U << 22) | (1U << 26));
     GPIOE_OSPEEDR |= (3U << 20) | (3U << 22) | (3U << 26);
 
-    CS_HIGH; DC_DATA; BL_OFF;
+    CS_HIGH; DC_DATA;
+    /* BL (PE10) driven from main() via lcd_backlight_on() before FreeRTOS —
+     * do NOT assert BL_OFF here. */
 }
 
 void lcd_init(void)
@@ -304,7 +318,13 @@ void lcd_init(void)
 
 void lcd_backlight_on(void)
 {
+    GPIOE_MODER = (GPIOE_MODER & ~(3U << 20)) | (1U << 20);
     BL_ON;
+}
+
+void lcd_backlight_off(void)
+{
+    BL_OFF;
 }
 
 /* ------------------------------------------------------------------ */
@@ -333,6 +353,118 @@ void lcd_clear(uint16_t colour)
 {
     lcd_fill_rect(0, 0, LCD_W, LCD_H, colour);
 }
+
+void lcd_fill_gram_raw(uint16_t colour)
+{
+    /* Fill all 162×132 GRAM cells — no offset, ignores MADCTL.
+     * Use this to confirm the panel is alive: if ANY cell is visible,
+     * the panel is in DISPON mode and the SPI link works. */
+    uint8_t d[4];
+    d[0]=0; d[1]=0; d[2]=0; d[3]=161U;
+    lcd_cmd(ST_CASET); lcd_data(d, 4);
+    d[0]=0; d[1]=0; d[2]=0; d[3]=131U;
+    lcd_cmd(ST_RASET); lcd_data(d, 4);
+    lcd_cmd(ST_RAMWR);
+
+    uint8_t hi = (uint8_t)(colour >> 8), lo = (uint8_t)(colour & 0xFFU);
+    uint8_t chunk[32];
+    for (uint8_t i = 0; i < 32U; i += 2U) { chunk[i] = hi; chunk[i+1] = lo; }
+
+    CS_LOW; DC_DATA;
+    uint32_t total = 162U * 132U * 2U;   /* 42768 bytes */
+    while (total >= 32U) { obsw_spi4_write(chunk, 32); total -= 32U; }
+    if (total) obsw_spi4_write(chunk, (uint16_t)total);
+    CS_HIGH;
+}
+
+void lcd_slpout_dispon(void)
+{
+    /* Full re-init after a power-supervisor HWRESET — ALL ST7735R registers (including
+     * PWCTR, VMCTR, FRMCTR, GMCTR) reset to defaults on a PS event, not just COLMOD
+     * and MADCTL.  Skips SWRESET: that command causes an internal panel power-cycle
+     * whose current spike can re-trigger the PS when FreeRTOS tasks are already running.
+     * No INVON: panel is normally-black; INVOFF (PS-reset default) gives correct RGB565
+     * colours (0x07E0 → green, 0x0000 → black).  lcd_init()'s INVON is NOT re-applied. */
+    lcd_cmd(ST_SLPOUT);  lcd_delay_ms(120);
+
+    lcd_cmd(ST_FRMCTR1); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_cmd(ST_FRMCTR2); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_cmd(ST_FRMCTR3);
+    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+
+    lcd_cmd(ST_INVCTR);  lcd_data1(0x07);
+
+    lcd_cmd(ST_PWCTR1);  lcd_data1(0xA2); lcd_data1(0x02); lcd_data1(0x84);
+    lcd_cmd(ST_PWCTR2);  lcd_data1(0xC5);
+    lcd_cmd(ST_PWCTR3);  lcd_data1(0x0A); lcd_data1(0x00);
+    lcd_cmd(ST_PWCTR4);  lcd_data1(0x8A); lcd_data1(0x2A);
+    lcd_cmd(ST_PWCTR5);  lcd_data1(0x8A); lcd_data1(0xEE);
+    lcd_cmd(ST_VMCTR1);  lcd_data1(0x0E);
+
+    lcd_cmd(ST_COLMOD);  lcd_data1(0x05);   /* 16-bit RGB565 */
+    lcd_cmd(ST_MADCTL);  lcd_data1(0x78);   /* landscape MV+MX+BGR */
+
+    lcd_cmd(ST_GMCTRP1);
+    { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
+                            0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10};
+      lcd_data(g, 16); }
+    lcd_cmd(ST_GMCTRN1);
+    { const uint8_t g[] = {0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,
+                            0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10};
+      lcd_data(g, 16); }
+
+    lcd_cmd(ST_NORON);   lcd_delay_ms(10);
+    lcd_cmd(ST_DISPON);  lcd_delay_ms(100);
+}
+
+#ifdef OBSW_FREERTOS
+#include "FreeRTOS.h"
+#include "task.h"
+
+/* Like lcd_slpout_dispon() but replaces every DWT spin with vTaskDelay so the
+ * CPU enters WFI during the mandatory panel delays.  This reduces system
+ * current by ~50 mA during the 120+10+100 ms waits, keeping the supply above
+ * the ST7735R internal power-supervisor threshold that would otherwise reset
+ * all panel registers back to sleep.  Must be called from a FreeRTOS task. */
+void lcd_slpout_dispon_yield(void)
+{
+    lcd_cmd(ST_SLPOUT);
+    vTaskDelay(pdMS_TO_TICKS(120));
+
+    lcd_cmd(ST_FRMCTR1); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_cmd(ST_FRMCTR2); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_cmd(ST_FRMCTR3);
+    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+
+    lcd_cmd(ST_INVCTR);  lcd_data1(0x07);
+
+    lcd_cmd(ST_PWCTR1);  lcd_data1(0xA2); lcd_data1(0x02); lcd_data1(0x84);
+    lcd_cmd(ST_PWCTR2);  lcd_data1(0xC5);
+    lcd_cmd(ST_PWCTR3);  lcd_data1(0x0A); lcd_data1(0x00);
+    lcd_cmd(ST_PWCTR4);  lcd_data1(0x8A); lcd_data1(0x2A);
+    lcd_cmd(ST_PWCTR5);  lcd_data1(0x8A); lcd_data1(0xEE);
+    lcd_cmd(ST_VMCTR1);  lcd_data1(0x0E);
+
+    lcd_cmd(ST_COLMOD);  lcd_data1(0x05);
+    lcd_cmd(ST_MADCTL);  lcd_data1(0x78);
+
+    lcd_cmd(ST_GMCTRP1);
+    { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
+                            0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10};
+      lcd_data(g, 16); }
+    lcd_cmd(ST_GMCTRN1);
+    { const uint8_t g[] = {0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,
+                            0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10};
+      lcd_data(g, 16); }
+
+    lcd_cmd(ST_NORON);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd_cmd(ST_DISPON);
+    vTaskDelay(pdMS_TO_TICKS(100));
+}
+#endif /* OBSW_FREERTOS */
 
 void lcd_draw_char(uint16_t x, uint16_t y, char ch, uint16_t fg, uint16_t bg)
 {

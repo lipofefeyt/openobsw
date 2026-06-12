@@ -30,6 +30,16 @@ hk_sets:
       - watchdog_ticks_remaining
     default_interval_ticks: 60
 
+  - id: 4
+    name: aocs_hk
+    spid: 1004
+    description: "AOCS housekeeping — control gains (S20-tunable)"
+    parameters:
+      - bdot_gain
+      - adcs_kp
+      - adcs_kd
+    default_interval_ticks: 5
+
   - id: 3
     name: dhs_obc_hk
     spid: 1003

@@ -6,10 +6,17 @@ int obsw_fsm_init(obsw_fsm_ctx_t *fsm, const obsw_fsm_config_t *config)
 {
     if (!fsm || !config)
         return -1;
-    fsm->mode             = OBSW_FSM_NOMINAL;
+    fsm->mode             = OBSW_FSM_STANDBY;
     fsm->safe_entry_count = 0;
     fsm->config           = *config;
     return 0;
+}
+
+void obsw_fsm_to_standby(obsw_fsm_ctx_t *fsm)
+{
+    if (!fsm || fsm->mode == OBSW_FSM_STANDBY)
+        return;
+    fsm->mode = OBSW_FSM_STANDBY;
 }
 
 void obsw_fsm_to_safe(obsw_fsm_ctx_t *fsm)
@@ -26,7 +33,8 @@ void obsw_fsm_to_nominal(obsw_fsm_ctx_t *fsm)
 {
     if (!fsm || fsm->mode == OBSW_FSM_NOMINAL)
         return;
-    if (fsm->config.on_exit_safe)
+    /* on_exit_safe fires only when recovering from SAFE, not STANDBY */
+    if (fsm->mode == OBSW_FSM_SAFE && fsm->config.on_exit_safe)
         fsm->config.on_exit_safe(fsm->config.hook_ctx);
     fsm->mode = OBSW_FSM_NOMINAL;
 }
@@ -36,6 +44,7 @@ bool obsw_fsm_tc_allowed(const obsw_fsm_ctx_t *fsm, uint8_t svc, uint8_t subsvc)
     if (!fsm || fsm->mode == OBSW_FSM_NOMINAL)
         return true;
 
+    /* Whitelist enforced in both SAFE and STANDBY */
     const obsw_fsm_tc_entry_t *wl = fsm->config.safe_tc_whitelist;
     uint8_t len                   = fsm->config.whitelist_len;
 

@@ -111,6 +111,16 @@ static obsw_s3_param_t dhs_obc_hk_params[] = {
     {.ptr = &param_obc_reset_count, .size = OBSW_S3_PARAM_U16},
     {.ptr = &param_obc_cpu_load,    .size = OBSW_S3_PARAM_U8},
 };
+/* AOCS HK (set_id=4): gains as big-endian IEEE 754 floats for YAMCS */
+static uint8_t hk_bdot_gain_be[4] = {0};
+static uint8_t hk_adcs_kp_be[4]   = {0};
+static uint8_t hk_adcs_kd_be[4]   = {0};
+static obsw_s3_param_t aocs_hk_params[] = {
+    {.ptr = hk_bdot_gain_be, .size = OBSW_S3_PARAM_U32},
+    {.ptr = hk_adcs_kp_be,   .size = OBSW_S3_PARAM_U32},
+    {.ptr = hk_adcs_kd_be,   .size = OBSW_S3_PARAM_U32},
+};
+
 static obsw_s3_set_t hk_sets[] = {
     {.set_id = SRDB_HK_NOMINAL_HK, .params = nominal_hk_params,
      .param_count = 1, .interval_ticks = 10, .countdown = 10, .enabled = true},
@@ -118,6 +128,8 @@ static obsw_s3_set_t hk_sets[] = {
      .param_count = 2, .interval_ticks = 60, .countdown = 60, .enabled = true},
     {.set_id = SRDB_HK_DHS_OBC_HK, .params = dhs_obc_hk_params,
      .param_count = 7, .interval_ticks = 10, .countdown = 10, .enabled = true},
+    {.set_id = SRDB_HK_AOCS_HK, .params = aocs_hk_params,
+     .param_count = 3, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
 };
 
 /* ------------------------------------------------------------------ */
@@ -132,9 +144,26 @@ static int fn_recover_nominal(const uint8_t *args, uint8_t args_len, void *ctx)
     return 0;
 }
 
+static int fn_request_safe(const uint8_t *args, uint8_t args_len, void *ctx)
+{
+    (void)args; (void)args_len;
+    obsw_fsm_to_safe((obsw_fsm_ctx_t *)ctx);
+    fprintf(stderr, "[OBSW] Ground-commanded to SAFE\n");
+    return 0;
+}
+
+static int fn_request_standby(const uint8_t *args, uint8_t args_len, void *ctx)
+{
+    (void)args; (void)args_len;
+    obsw_fsm_to_standby((obsw_fsm_ctx_t *)ctx);
+    fprintf(stderr, "[OBSW] Ground-commanded to STANDBY\n");
+    return 0;
+}
+
 static obsw_s8_entry_t s8_table[] = {
-    {.function_id = OBSW_S8_FN_RECOVER_NOMINAL,
-     .fn = fn_recover_nominal, .ctx = &fsm_ctx},
+    {.function_id = OBSW_S8_FN_RECOVER_NOMINAL, .fn = fn_recover_nominal, .ctx = &fsm_ctx},
+    {.function_id = OBSW_S8_FN_REQUEST_SAFE,    .fn = fn_request_safe,    .ctx = &fsm_ctx},
+    {.function_id = OBSW_S8_FN_REQUEST_STANDBY, .fn = fn_request_standby, .ctx = &fsm_ctx},
 };
 
 /* ------------------------------------------------------------------------ */
@@ -143,14 +172,26 @@ static obsw_s8_entry_t s8_table[] = {
 /* ------------------------------------------------------------------------ */
 
 static obsw_s20_param_t s20_params[] = {
-    {.param_id = SRDB_PARAM_OBC_TEMPERATURE,      .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_OBC_VOLTAGE_3V3,      .value = {.u32 = 3300}},
-    {.param_id = SRDB_PARAM_OBC_VOLTAGE_5V,       .value = {.u32 = 5000}},
-    {.param_id = SRDB_PARAM_OBC_UPTIME,           .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT,.value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,  .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_WATCHDOG_TICKS_REMAINING, .value = {.u32 = 30}},
+    {.param_id = SRDB_PARAM_OBC_TEMPERATURE,         .value = {.u32 = 0}},
+    {.param_id = SRDB_PARAM_OBC_VOLTAGE_3V3,         .value = {.u32 = 3300}},
+    {.param_id = SRDB_PARAM_OBC_VOLTAGE_5V,          .value = {.u32 = 5000}},
+    {.param_id = SRDB_PARAM_OBC_UPTIME,              .value = {.u32 = 0}},
+    {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT,   .value = {.u32 = 0}},
+    {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,     .value = {.u32 = 0}},
+    {.param_id = SRDB_PARAM_WATCHDOG_TICKS_REMAINING,.value = {.u32 = 30}},
+    {.param_id = SRDB_PARAM_BDOT_GAIN,               .value = {.f32 = 1.0e4f}},
+    {.param_id = SRDB_PARAM_ADCS_KP,                 .value = {.f32 = 0.5f}},
+    {.param_id = SRDB_PARAM_ADCS_KD,                 .value = {.f32 = 0.1f}},
 };
+
+static float s20_get_f32(uint16_t param_id, float default_val)
+{
+    for (size_t i = 0; i < sizeof(s20_params) / sizeof(s20_params[0]); i++) {
+        if (s20_params[i].param_id == param_id)
+            return s20_params[i].value.f32;
+    }
+    return default_val;
+}
 
 /* ------------------------------------------------------------------ */
 /* FDIR                                                                */
@@ -232,6 +273,7 @@ int main(void)
         .whitelist_len     = sizeof(safe_whitelist) / sizeof(safe_whitelist[0]),
     };
     obsw_fsm_init(&fsm_ctx, &fsm_cfg);
+    obsw_fsm_to_safe(&fsm_ctx);   /* sim skips STANDBY auto-timeout; start in SAFE */
 
     /* PUS service contexts */
     s1_ctx.tm_store = &tm_store;
@@ -338,6 +380,11 @@ int main(void)
 
                 bool in_nominal = !obsw_fsm_is_safe(&fsm_ctx);
 
+                /* Sync S20-tunable AOCS gains before each control step */
+                adcs_ctx.config.kp   = s20_get_f32(SRDB_PARAM_ADCS_KP,   0.5f);
+                adcs_ctx.config.kd   = s20_get_f32(SRDB_PARAM_ADCS_KD,   0.1f);
+                bdot_ctx.config.gain = s20_get_f32(SRDB_PARAM_BDOT_GAIN, 1.0e4f);
+
                 if (in_nominal && sensor.st_valid && sensor.gyro_valid) {
                     obsw_quat_t q_meas = {
                         sensor.st_q_w, sensor.st_q_x,
@@ -384,8 +431,25 @@ int main(void)
                 s20_params[4].value.u32 = (uint32_t)param_safe_entry_count;  /* safe_mode_entry_count */
                 s20_params[5].value.u32 = param_wd_kick_count;               /* watchdog_kick_count */
 
+                /* Sync AOCS HK gains as big-endian IEEE 754 for TM(3,25) set_id=4 */
+                {
+                    uint32_t params[3];
+                    memcpy(&params[0], &(float){s20_get_f32(SRDB_PARAM_BDOT_GAIN, 1.0e4f)}, 4);
+                    memcpy(&params[1], &(float){s20_get_f32(SRDB_PARAM_ADCS_KP,   0.5f)},   4);
+                    memcpy(&params[2], &(float){s20_get_f32(SRDB_PARAM_ADCS_KD,   0.1f)},   4);
+                    for (int _i = 0; _i < 4; _i++) {
+                        hk_bdot_gain_be[_i] = (uint8_t)((params[0] >> (24 - 8*_i)) & 0xFFU);
+                        hk_adcs_kp_be[_i]   = (uint8_t)((params[1] >> (24 - 8*_i)) & 0xFFU);
+                        hk_adcs_kd_be[_i]   = (uint8_t)((params[2] >> (24 - 8*_i)) & 0xFFU);
+                    }
+                }
+
                 /* DHS OBC HK — live state for TM(3,25) set_id=3 */
-                param_obc_mode      = obsw_fsm_is_safe(&fsm_ctx) ? 0U : 1U;
+                {
+                    obsw_fsm_mode_t m = obsw_fsm_mode(&fsm_ctx);
+                    param_obc_mode = (m == OBSW_FSM_STANDBY) ? 0U :
+                                     (m == OBSW_FSM_SAFE)    ? 1U : 2U;
+                }
                 param_obc_obt       = (uint32_t)sensor.sim_time;
                 param_obc_wd_status = 0U;   /* nominal — watchdog kicked each tick */
 

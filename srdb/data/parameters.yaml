@@ -118,9 +118,9 @@ parameters:
     pfc: 8
     subsystem: DHS/OBC
     enumeration:
-      - {value: 0, label: SAFE}
-      - {value: 1, label: NOMINAL}
-      - {value: 2, label: PAYLOAD}
+      - {value: 0, label: STANDBY}
+      - {value: 1, label: SAFE}
+      - {value: 2, label: NOMINAL}
 
   - id: 0x4003
     name: obc_obt
@@ -180,3 +180,32 @@ parameters:
     pfc: 8
     subsystem: DHS/OBC
     unit: '%'
+
+  # ---- AOCS control gains (S20 tunable) ----------------------------------
+
+  - id: 0x20A0
+    name: bdot_gain
+    description: "B-dot controller gain k_bdot (m_cmd = -k * B_dot)"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Control
+    unit: 'Am2.s/T'
+
+  - id: 0x20A1
+    name: adcs_kp
+    description: "ADCS PD proportional gain Kp (τ = -Kp*q_err_vec - Kd*ω)"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Control
+    unit: 'N.m/rad'
+
+  - id: 0x20A2
+    name: adcs_kd
+    description: "ADCS PD derivative gain Kd (τ = -Kp*q_err_vec - Kd*ω)"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Control
+    unit: 'N.m.s/rad'

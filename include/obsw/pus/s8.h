@@ -31,7 +31,9 @@ extern "C" {
 /* Well-known function IDs                                             */
 /* ------------------------------------------------------------------ */
 
-#define OBSW_S8_FN_RECOVER_NOMINAL 1U /**< Recover to NOMINAL mode  */
+#define OBSW_S8_FN_RECOVER_NOMINAL  1U /**< SAFE → NOMINAL (ground recovery)  */
+#define OBSW_S8_FN_REQUEST_SAFE     2U /**< any → SAFE (ground safe command)  */
+#define OBSW_S8_FN_REQUEST_STANDBY  3U /**< any → STANDBY (hibernation)       */
 
 /* ------------------------------------------------------------------ */
 /* Function table                                                      */

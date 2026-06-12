@@ -33,6 +33,18 @@ events:
     description: "Recovery to NOMINAL mode completed"
     safe_trigger: false
 
+  - id: 0x0004
+    name: standby_entry
+    severity: INFO
+    description: "Transition to STANDBY mode (operator-commanded or boot)"
+    safe_trigger: false
+
+  - id: 0x0005
+    name: nominal_entry
+    severity: INFO
+    description: "Transition to NOMINAL mode completed"
+    safe_trigger: false
+
   # ---- Watchdog ----------------------------------------------------------
 
   - id: 0x0010

@@ -46,10 +46,10 @@ static obsw_fsm_ctx_t make_fsm(void)
     return fsm;
 }
 
-void test_init_starts_nominal(void)
+void test_init_starts_standby(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
-    TEST_ASSERT_EQUAL_INT(OBSW_FSM_NOMINAL, obsw_fsm_mode(&fsm));
+    TEST_ASSERT_EQUAL_INT(OBSW_FSM_STANDBY, obsw_fsm_mode(&fsm));
     TEST_ASSERT_FALSE(obsw_fsm_is_safe(&fsm));
 }
 
@@ -106,6 +106,9 @@ void test_to_nominal_returns_to_nominal(void)
 void test_to_nominal_from_nominal_is_noop(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
+    obsw_fsm_to_safe(&fsm);      /* STANDBY → SAFE (fires on_enter_safe) */
+    obsw_fsm_to_nominal(&fsm);   /* SAFE → NOMINAL (fires on_exit_safe) */
+    exit_safe_calls = 0;          /* reset; now test NOMINAL → NOMINAL is a noop */
     obsw_fsm_to_nominal(&fsm);
     TEST_ASSERT_EQUAL_INT(OBSW_FSM_NOMINAL, obsw_fsm_mode(&fsm));
     TEST_ASSERT_EQUAL_INT(0, exit_safe_calls);
@@ -114,6 +117,7 @@ void test_to_nominal_from_nominal_is_noop(void)
 void test_nominal_allows_all_tc(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
+    obsw_fsm_to_nominal(&fsm);   /* init starts in STANDBY; reach NOMINAL first */
     TEST_ASSERT_TRUE(obsw_fsm_tc_allowed(&fsm, 3, 5));
     TEST_ASSERT_TRUE(obsw_fsm_tc_allowed(&fsm, 17, 1));
     TEST_ASSERT_TRUE(obsw_fsm_tc_allowed(&fsm, 99, 99));
@@ -138,7 +142,7 @@ void test_safe_blocks_non_whitelisted_tc(void)
 int main(void)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_init_starts_nominal);
+    RUN_TEST(test_init_starts_standby);
     RUN_TEST(test_init_null_returns_error);
     RUN_TEST(test_to_safe_transitions_mode);
     RUN_TEST(test_to_safe_fires_hook);

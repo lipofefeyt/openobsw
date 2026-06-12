@@ -27,6 +27,7 @@
  #include "FreeRTOS.h"
  #include "task.h"
  #include "obsw/task/tmtc.h"
+ #include "obsw/task/mode.h"
  #include "obsw/task/pus.h"
  #include "obsw/task/aocs.h"
  #include "obsw/task/fdir.h"
@@ -34,32 +35,14 @@
 
  #ifndef OBSW_RENODE
  #include "obsw/hal/stm32h7/spi.h"
- #include "obsw/hal/stm32h7/lcd_console.h"
+ #include "obsw/hal/stm32h7/lcd.h"
  #endif
 
  #include <stdint.h>
  #include <string.h>
 
-/* ------------------------------------------------------------------ */
-/* RCC register map (minimal — only what clock init needs)            */
-/* ------------------------------------------------------------------ */
-
-#define RCC_CR          (*(volatile uint32_t *)(0x58024400UL + 0x000))
-#define RCC_CFGR        (*(volatile uint32_t *)(0x58024400UL + 0x010))
-#define RCC_D1CFGR      (*(volatile uint32_t *)(0x58024400UL + 0x018))
-#define RCC_D2CFGR      (*(volatile uint32_t *)(0x58024400UL + 0x01C))
-#define RCC_D3CFGR      (*(volatile uint32_t *)(0x58024400UL + 0x020))
-#define RCC_PLLCKSELR   (*(volatile uint32_t *)(0x58024400UL + 0x028))
-#define RCC_PLLCFGR     (*(volatile uint32_t *)(0x58024400UL + 0x02C))
-#define RCC_PLL1DIVR    (*(volatile uint32_t *)(0x58024400UL + 0x030))
-
-/* Flash latency register */
+/* Flash latency register — used by system_clock_init() */
 #define FLASH_ACR       (*(volatile uint32_t *)(0x52002000UL + 0x000))
-
-/* PWR register — needed to set VOS0 for 480 MHz */
-#define PWR_CR3         (*(volatile uint32_t *)(0x58024800UL + 0x00C))
-#define PWR_D3CR        (*(volatile uint32_t *)(0x58024800UL + 0x018))
-#define SYSCFG_PWRCR    (*(volatile uint32_t *)(0x58000400UL + 0x004))
 
  #ifndef OBSW_RENODE
  /**
@@ -128,13 +111,6 @@ static void system_clock_init(void)
      obsw_uart_ops.write(buf, len, NULL);
  }
 
-#ifndef OBSW_RENODE
-static void lcd_fmt_hex32(char *buf8, uint32_t val)
-{
-    static const char h[] = "0123456789ABCDEF";
-    for (int i = 7; i >= 0; i--) { buf8[i] = h[val & 0xFU]; val >>= 4; }
-}
-#endif
 
 
  /* Superloop-only helpers — in FreeRTOS mode the TMTC task handles I/O. */
@@ -224,50 +200,35 @@ static void lcd_fmt_hex32(char *buf8, uint32_t val)
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
 
+ /* SPI4 init is fast (register config only); LCD init is deferred to the
+  * FDIR task's first tick so FreeRTOS — and the TMTC task — start without
+  * a 400 ms blocking delay.  Without this deferral the UART FIFO fills
+  * during LCD init and the first TC ping is lost.
+  *
+  * BL is turned on here (before FreeRTOS) so it stays on throughout the
+  * FreeRTOS startup current spike and the subsequent FDIR lcd_init() re-run.
+  * Toggling BL from the FDIR task would fire the ST7735R power supervisor. */
  #ifndef OBSW_RENODE
-     /* Configure IWDG to 4 s BEFORE lcd_init() (~400 ms of SPI delays).
-      * If the board has hardware watchdog (IWDG_SW=0 option byte), the
-      * IWDG starts at boot with a ~512 ms default timeout that expires
-      * before obsw_fdir_task_init() is reached.  Writing 0xCCCC first
-      * forces the LSI on so PVU/RVU can clear in the update loop. */
-     {
-         volatile uint32_t *kR  = (volatile uint32_t *)0x58004800UL; /* KR  */
-         volatile uint32_t *pR  = (volatile uint32_t *)0x58004804UL; /* PR  */
-         volatile uint32_t *rLR = (volatile uint32_t *)0x58004808UL; /* RLR */
-         volatile uint32_t *sR  = (volatile uint32_t *)0x5800480CUL; /* SR  */
-         *kR = 0xCCCCU;          /* enable IWDG + force LSI ON */
-         *kR = 0x5555U;          /* unlock PR / RLR             */
-         *pR = 5U;               /* /128 prescaler → 250 Hz     */
-         *rLR = 1000U;           /* 1000 × 4 ms = 4 s           */
-         while (*sR & 0x3U) {}  /* wait for LSI-domain update   */
-         *kR = 0xAAAAU;          /* kick — load new 4 s count   */
-     }
-
      obsw_spi4_init();
-     lcd_init();
-     lcd_backlight_on();
-     lcd_console_init();
-
-     lcd_console_puts("openobsw v" SRDB_VERSION "\n");
-     lcd_console_puts("STM32H750 HSI 64MHz\n");
-     { char ln[25];
-       memcpy(ln,      "CLK:", 4); lcd_fmt_hex32(ln +  4, RCC_CFGR);
-       memcpy(ln + 12, " D2:", 4); lcd_fmt_hex32(ln + 16, RCC_D2CFGR);
-       ln[24] = '\0';
-       lcd_console_puts(ln); lcd_console_puts("\n"); }
-     lcd_console_puts("FreeRTOS starting...\n");
+     lcd_init();           /* cold init with SWRESET — safe here before FreeRTOS starts;
+                            * the PS fires during scheduler startup and resets ALL panel
+                            * registers, so FDIR re-applies the full config at T=1s via
+                            * lcd_slpout_dispon() which skips SWRESET */
+     lcd_backlight_on();   /* BL on before FreeRTOS; lcd_gpio_init never drives BL_OFF
+                            * so FDIR's re-init at T=1s keeps the backlight on */
  #endif
 
  #ifdef OBSW_FREERTOS
      /* FreeRTOS path — create tasks then hand control to the scheduler.
-      * Init order matters: TMTC (queue), then FDIR (FSM), then PUS (needs both). */
+      * Init order: TMTC (queue) → MODE (FSM owner) → FDIR (uses FSM ptr) →
+      *             PUS (uses FSM gate + mode requests) → AOCS (reads mode). */
      obsw_tmtc_task_init(&obsw_uart_ops, &tm_store);
+     obsw_mode_task_init(&tm_store);
      obsw_fdir_task_init(&tm_store);
      obsw_pus_task_init(&tm_store,
                         obsw_tmtc_get_tc_queue(),
-                        obsw_tmtc_get_handle(),
-                        obsw_fdir_get_fsm());
-     obsw_aocs_task_init(obsw_fdir_get_fsm());
+                        obsw_tmtc_get_handle());
+     obsw_aocs_task_init();
      vTaskStartScheduler();
      /* Never reached */
      for (;;);

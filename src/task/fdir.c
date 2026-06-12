@@ -6,11 +6,16 @@
  *      that the scheduler is running). A deadlock or hard fault stops the kick
  *      and the chip resets after the 4s timeout.
  *
- *   2. Mode FSM — owns the NOMINAL↔SAFE state machine. Transitions are driven
- *      by S5 HIGH events (automatic via s5.c) or by S8 TC(8,1) recover command.
+ *   2. Event telemetry — emits TM(5,1) BOOT_COMPLETE on first tick; monitors
+ *      POWER and TEMPERATURE faults and emits TM(5,x) events. S5 HIGH events
+ *      with matching trigger IDs call obsw_fsm_to_safe() on the Mode Manager's
+ *      FSM directly via the s5_ctx.fsm pointer.
  *
- *   3. Event telemetry — emits TM(5,1) BOOT_COMPLETE on first tick; emits
- *      TM(5,x) SAFE_MODE_ENTRY / SAFE_MODE_EXIT when mode changes.
+ *   3. LCD status — updates the status bar each tick with current mode and
+ *      watchdog kick count.
+ *
+ * The mode FSM is owned by the Mode Manager task; FDIR is a pure fault
+ * responder and never initiates nominal-mode transitions.
  *
  * Period: 1000 ms (vTaskDelayUntil — deterministic).
  *
@@ -21,6 +26,8 @@
  */
 
 #include "obsw/task/fdir.h"
+#include "obsw/task/mode.h"
+#include "obsw/task/tmtc.h"
 #include "obsw/pus/s5.h"
 #include "obsw/srdb_generated.h"
 #include "FreeRTOS.h"
@@ -51,28 +58,13 @@
 #define FDIR_STACK_DEPTH 512U
 #define FDIR_PRIORITY    3U   /* Med-high — preempts AOCS, yields to TMTC */
 
-/* ── TC whitelist for SAFE mode ───────────────────────────────────── */
-
-static const obsw_fsm_tc_entry_t s_safe_whitelist[] = {
-    {.service = 8,  .subservice = 1},  /* S8(8,1): recover to NOMINAL  */
-    {.service = 17, .subservice = 1},  /* S17(17,1): ping               */
-    {.service = 20, .subservice = 3},  /* S20(20,3): get parameter      */
-};
-
-/* ── FSM hooks ────────────────────────────────────────────────────── */
-
-/* Mode transition events are reported from the task loop (not from these
- * hooks) so they always run in FDIR task context and can call s5_report. */
-static void on_enter_safe(void *ctx) { (void)ctx; }
-static void on_exit_safe(void *ctx)  { (void)ctx; }
-
 /* ── Static allocation ────────────────────────────────────────────── */
 
 static StaticTask_t  s_tcb;
 static StackType_t   s_stack[FDIR_STACK_DEPTH];
 
-static obsw_fsm_ctx_t s_fsm;
-static obsw_s5_ctx_t  s_s5;
+static obsw_s5_ctx_t   s_s5;   /* FDIR-local S5 context for BOOT_COMPLETE */
+static obsw_tm_log_t  *s_tm_log;
 
 /* ── IWDG ─────────────────────────────────────────────────────────── */
 
@@ -103,7 +95,6 @@ static void fdir_task(void *param)
     (void)param;
 
     bool boot_sent = false;
-    obsw_fsm_mode_t last_mode = OBSW_FSM_NOMINAL;
     TickType_t last_wake = xTaskGetTickCount();
     uint32_t kick_count = 0;
 
@@ -114,15 +105,23 @@ static void fdir_task(void *param)
         iwdg_kick();
         kick_count++;
 
-        /* 2. Boot event on first tick. */
+        /* 2. Boot event — emit TM(5,1) once, and on the same tick wake the LCD.
+         *
+         * lcd_slpout_dispon_yield() uses vTaskDelay for all mandatory panel
+         * delays (120 ms SLPOUT + 10 ms NORON + 100 ms DISPON = 230 ms total).
+         * The CPU enters WFI during those yields, cutting ~50 mA of system
+         * current compared to the DWT-spin path in lcd_slpout_dispon().  Lower
+         * current is critical: on the WeAct board the ST7735R power supervisor
+         * fires whenever instantaneous current exceeds its threshold, resetting
+         * ALL panel registers (COLMOD, MADCTL, PWCTR…) back to sleep defaults.
+         * Previous builds used DWT-spin delays and repeatedly triggered the PS;
+         * the yielding variant keeps supply headroom and lets the panel reach
+         * DISPON cleanly. */
         if (!boot_sent) {
 #ifndef OBSW_RENODE
-            /* The ST7735R power supervisor fires during the FreeRTOS startup
-             * current spike, clearing GRAM and resetting config registers.
-             * lcd_init() no longer toggles BL, so re-running it here is safe:
-             * backlight stays on throughout, no new current spike. */
-            lcd_init();
+            lcd_slpout_dispon_yield();
             lcd_console_init();
+            lcd_console_set_colours(LCD_BLACK, LCD_GREEN);
             lcd_console_puts("openobsw v" SRDB_VERSION "\n");
             lcd_console_puts("STM32H750 HSI 64MHz\n");
             lcd_console_puts("FDIR alive\n");
@@ -130,32 +129,56 @@ static void fdir_task(void *param)
             obsw_s5_report(&s_s5, OBSW_S5_INFO,
                            SRDB_EVENT_BOOT_COMPLETE, NULL, 0);
             boot_sent = true;
-        }
-
-        /* 3. Detect mode transitions and emit events.
-         *    Worst-case detection lag = 1 s (one tick period). */
-        obsw_fsm_mode_t cur_mode = obsw_fsm_mode(&s_fsm);
-        if (cur_mode != last_mode) {
-            if (cur_mode == OBSW_FSM_SAFE) {
-                obsw_s5_report(&s_s5, OBSW_S5_HIGH,
-                               SRDB_EVENT_SAFE_MODE_ENTRY, NULL, 0);
-            } else {
-                obsw_s5_report(&s_s5, OBSW_S5_INFO,
-                               SRDB_EVENT_SAFE_MODE_EXIT, NULL, 0);
-            }
-            last_mode = cur_mode;
+        } else {
+#ifndef OBSW_RENODE
+            /* Subsequent ticks: redraw the header in place so GRAM stays current.
+             * If the panel is in DISPON this refreshes what the user sees.
+             * If PS fired and the panel is sleeping, the GRAM write is still
+             * accepted (the ST7735R allows GRAM access in SLPIN), so when the
+             * supply recovers and the panel auto-wakes it immediately shows the
+             * latest content without needing another slpout_dispon call. */
+            lcd_console_init();
+            lcd_console_set_colours(LCD_BLACK, LCD_GREEN);
+            lcd_console_puts("openobsw v" SRDB_VERSION "\n");
+            lcd_console_puts("STM32H750 HSI 64MHz\n");
+            lcd_console_puts("FDIR alive\n");
+#endif
         }
 
 #ifndef OBSW_RENODE
-        /* 4. Update LCD status bar: "FDIR:NOMINAL  WDG:00000042" (26 chars) */
+        /* 4. Drain TM log and print each new packet to LCD console. */
+        while (s_tm_log->read_idx != s_tm_log->write_idx) {
+            obsw_tm_log_entry_t e =
+                s_tm_log->buf[s_tm_log->read_idx % OBSW_TM_LOG_DEPTH];
+            s_tm_log->read_idx++;
+            char ln[12];
+            uint8_t k = 0;
+            ln[k++] = 'T'; ln[k++] = 'M'; ln[k++] = '(';
+            if (e.svc    >= 10U) ln[k++] = (char)('0' + e.svc    / 10U);
+            ln[k++] = (char)('0' + e.svc    % 10U);
+            ln[k++] = ',';
+            if (e.subsvc >= 10U) ln[k++] = (char)('0' + e.subsvc / 10U);
+            ln[k++] = (char)('0' + e.subsvc % 10U);
+            ln[k++] = ')'; ln[k++] = '\n'; ln[k] = '\0';
+            lcd_console_puts(ln);
+        }
+#endif
+
+        /* 5. Read current mode from Mode Manager for LCD status bar. */
+        obsw_fsm_mode_t cur_mode = obsw_fsm_mode(obsw_mode_get_fsm());
+
+#ifndef OBSW_RENODE
+        /* 6. Update LCD status bar: "FDIR:NOMINAL  WDG:00000042" (26 chars) */
         {
             static const char h[] = "0123456789";
             char s[27];
             /* mode field — 7 chars, space-padded */
             if (cur_mode == OBSW_FSM_NOMINAL) {
-                __builtin_memcpy(s,     "FDIR:NOMINAL  WDG:", 18);
+                __builtin_memcpy(s, "FDIR:NOMINAL  WDG:", 18);
+            } else if (cur_mode == OBSW_FSM_SAFE) {
+                __builtin_memcpy(s, "FDIR:SAFE     WDG:", 18);
             } else {
-                __builtin_memcpy(s,     "FDIR:SAFE     WDG:", 18);
+                __builtin_memcpy(s, "FDIR:STANDBY  WDG:", 18);
             }
             /* 8-digit decimal kick counter */
             uint32_t k = kick_count;
@@ -163,8 +186,10 @@ static void fdir_task(void *param)
                 s[18 + i] = h[k % 10U]; k /= 10U;
             }
             s[26] = '\0';
-            uint16_t fg = (cur_mode == OBSW_FSM_NOMINAL) ? LCD_BLACK : LCD_WHITE;
-            uint16_t bg = (cur_mode == OBSW_FSM_NOMINAL) ? LCD_GREEN  : LCD_RED;
+            uint16_t fg = (cur_mode == OBSW_FSM_NOMINAL) ? LCD_BLACK :
+                          (cur_mode == OBSW_FSM_SAFE)    ? LCD_WHITE : LCD_BLACK;
+            uint16_t bg = (cur_mode == OBSW_FSM_NOMINAL) ? LCD_GREEN :
+                          (cur_mode == OBSW_FSM_SAFE)    ? LCD_RED   : LCD_YELLOW;
             lcd_console_set_status(s, fg, bg);
         }
 #endif
@@ -173,30 +198,14 @@ static void fdir_task(void *param)
 
 /* ── Public API ───────────────────────────────────────────────────── */
 
-obsw_fsm_ctx_t *obsw_fdir_get_fsm(void)
-{
-    return &s_fsm;
-}
-
 void obsw_fdir_task_init(obsw_tm_store_t *tm_store)
 {
-    /* FSM */
-    obsw_fsm_config_t fsm_cfg = {
-        .on_enter_safe      = on_enter_safe,
-        .on_exit_safe       = on_exit_safe,
-        .hook_ctx           = NULL,
-        .safe_tc_whitelist  = s_safe_whitelist,
-        .whitelist_len      = (uint8_t)(sizeof(s_safe_whitelist) /
-                                        sizeof(s_safe_whitelist[0])),
-    };
-    obsw_fsm_init(&s_fsm, &fsm_cfg);
-
-    /* S5 — HIGH events whose IDs appear in safe_trigger_ids auto-call fsm_to_safe */
+    /* S5 — HIGH events with matching IDs call obsw_fsm_to_safe() on Mode Manager's FSM */
     s_s5.tm_store            = tm_store;
     s_s5.apid                = SRDB_APID_DEFAULT;
     s_s5.msg_counter         = 0;
     s_s5.timestamp           = 0;
-    s_s5.fsm                 = &s_fsm;
+    s_s5.fsm                 = obsw_mode_get_fsm();
     s_s5.safe_trigger_ids[0] = SRDB_EVENT_TEMPERATURE_HARD_LIMIT;
     s_s5.safe_trigger_ids[1] = SRDB_EVENT_POWER_FAULT_3V3;
     s_s5.safe_trigger_ids[2] = SRDB_EVENT_POWER_FAULT_5V;
@@ -204,6 +213,8 @@ void obsw_fdir_task_init(obsw_tm_store_t *tm_store)
 
     /* IWDG — arm it now; first kick occurs on the task's first tick (≤ 1 s). */
     iwdg_init();
+
+    s_tm_log = obsw_tmtc_get_tm_log();
 
     xTaskCreateStatic(fdir_task, "FDIR", FDIR_STACK_DEPTH,
                       NULL, FDIR_PRIORITY, s_stack, &s_tcb);

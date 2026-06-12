@@ -53,6 +53,7 @@
 #define USART_CR1_RE    (1U << 2)
 #define USART_CR1_TE    (1U << 3)
 #define USART_CR1_OVER8 (1U << 15)
+#define USART_CR1_FIFOEN (1U << 29)  /* 16-byte RX/TX FIFO; must be set while UE=0 */
  
 /* ------------------------------------------------------------------ */
 /* Initialisation                                                       */
@@ -84,12 +85,18 @@ void obsw_uart_init(void)
     USART3_CR1 = 0;                        /* Disable while configuring */
     USART3_CR2 = 0;
     USART3_CR3 = 0;
- 
+
     /* HSI 64 MHz (HSIDIV=1, reset default) → BRR = 64000000 / 115200 = 556 */
     USART3_BRR = 556U;
- 
+
+    /* Enable 16-byte RX FIFO while UE=0 (RM0433 requirement).
+     * Without FIFO the TMTC task's 1 ms sleep causes overruns: a 14-byte
+     * frame at 115200 baud takes 1.215 ms, so all but the first byte are
+     * lost and the task blocks forever on a garbage flen. */
+    USART3_CR1 = USART_CR1_FIFOEN;
+
     /* Enable TX, RX, USART */
-    USART3_CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
+    USART3_CR1 |= USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
 }
  
 /* ------------------------------------------------------------------ */

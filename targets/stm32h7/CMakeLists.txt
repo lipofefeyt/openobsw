@@ -59,6 +59,9 @@ add_custom_command(
             --output   "${SRDB_GENERATED_H}"
     DEPENDS "${OBSW_ROOT}/srdb/data/parameters.yaml"
             "${OBSW_ROOT}/srdb/data/spacecraft.yaml"
+            "${OBSW_ROOT}/srdb/data/events.yaml"
+            "${OBSW_ROOT}/srdb/data/telecommands.yaml"
+            "${OBSW_ROOT}/srdb/data/hk_sets.yaml"
     COMMENT "Generating SRDB header"
 )
 add_custom_target(srdb_codegen_stm32h7 DEPENDS ${SRDB_GENERATED_H})
@@ -106,6 +109,7 @@ if(OBSW_FREERTOS)
     target_link_libraries(obsw_stm32h7 PUBLIC freertos_kernel)
     target_sources(obsw_stm32h7 PRIVATE
         ${OBSW_ROOT}/src/task/tmtc.c
+        ${OBSW_ROOT}/src/task/mode.c
         ${OBSW_ROOT}/src/task/pus.c
         ${OBSW_ROOT}/src/task/aocs.c
         ${OBSW_ROOT}/src/task/fdir.c

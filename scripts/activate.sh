@@ -50,7 +50,8 @@ alias stm32h7-build='cmake -S $OPENOBSW_REPO/targets/stm32h7 \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_TOOLCHAIN_FILE=$OPENOBSW_REPO/cmake/stm32h7-toolchain.cmake \
     -DPython3_EXECUTABLE=$OPENOBSW_PYTHON \
-    -DOBSW_ROOT=$OPENOBSW_REPO > /dev/null \
+    -DOBSW_ROOT=$OPENOBSW_REPO \
+    -DOBSW_FREERTOS=ON \
     && cmake --build $OPENOBSW_REPO/build_stm32h7 -j$(nproc)'
 alias stm32h7-clean='rm -rfv $OPENOBSW_REPO/build_stm32h7'
 alias stm32h7-flash='openocd -f interface/stlink.cfg -f target/stm32h7x.cfg \

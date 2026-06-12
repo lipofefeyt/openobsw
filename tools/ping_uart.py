@@ -87,7 +87,7 @@ def decode_tm_packets(data: bytes) -> list[tuple[int, int, bytes]]:
     return results
 
 
-def run(port: str, count: int, timeout: float) -> bool:
+def run(port: str, count: int, timeout: float, raw_mode: bool) -> bool:
     try:
         import serial
     except ImportError:
@@ -97,9 +97,26 @@ def run(port: str, count: int, timeout: float) -> bool:
     uplink = frame_tc(TC_PING)
     all_ok = True
 
+    if raw_mode:
+        print(f'Sending ({len(uplink)} bytes): {uplink.hex(" ")}')
+        print(f'Reading for {timeout}s ...\n')
+
     with serial.Serial(port, baudrate=115200, timeout=timeout) as ser:
+        # Flush any stuck TMTC frame read: send enough zero bytes to exhaust
+        # whatever partial frame the task may be blocked on (max 512 B),
+        # then drain the RX buffer.  Without this, a leftover partial frame
+        # from picocom or a previous run causes uart_getc() to block forever.
+        # MUST be a multiple of 3: TMTC reads (type, hi, lo) in 3-byte groups;
+        # a non-multiple leaves a residual byte that gets misread as part of
+        # the next ping's header, corrupting the frame length.
+        ser.write(bytes(519))
+        ser.flush()
+        time.sleep(0.1)
+        ser.reset_input_buffer()
+
         for n in range(1, count + 1):
-            print(f'\n--- ping {n}/{count} ---')
+            if not raw_mode:
+                print(f'\n--- ping {n}/{count} ---')
             ser.reset_input_buffer()
             ser.write(uplink)
             ser.flush()
@@ -115,9 +132,19 @@ def run(port: str, count: int, timeout: float) -> bool:
                 raw += chunk
                 if eot_seen_at is None and b'\xff' in raw:
                     eot_seen_at = time.monotonic()
-                # 300 ms after first 0xFF is plenty for PUS to flush TM
                 if eot_seen_at and (time.monotonic() - eot_seen_at) > 0.3:
                     break
+
+            if raw_mode:
+                print(f'Received ({len(raw)} bytes):')
+                for i in range(0, len(raw), 16):
+                    chunk = raw[i:i+16]
+                    hex_part = ' '.join(f'{b:02x}' for b in chunk)
+                    asc_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
+                    print(f'  {i:04x}  {hex_part:<47}  {asc_part}')
+                if not raw:
+                    print('  (nothing received)')
+                return True
 
             packets = decode_tm_packets(raw)
             if not packets:
@@ -144,10 +171,12 @@ def main():
     parser.add_argument('port', nargs='?', default='/dev/ttyUSB0', help='Serial port (default: /dev/ttyUSB0)')
     parser.add_argument('--count', type=int, default=3, help='Number of pings (default: 3)')
     parser.add_argument('--timeout', type=float, default=2.0, help='Per-ping read timeout in seconds (default: 2.0)')
+    parser.add_argument('--raw', action='store_true', help='Dump raw hex of everything received (for debugging)')
     args = parser.parse_args()
 
-    print(f'Sending {args.count} TC(17,1) ping(s) to {args.port} at 115200 baud')
-    ok = run(args.port, args.count, args.timeout)
+    if not args.raw:
+        print(f'Sending {args.count} TC(17,1) ping(s) to {args.port} at 115200 baud')
+    ok = run(args.port, args.count, args.timeout, args.raw)
     sys.exit(0 if ok else 1)
 
 

@@ -1,7 +1,9 @@
 #include "obsw/task/aocs.h"
+#include "obsw/task/mode.h"
+#include "obsw/task/pus.h"
 #include "obsw/aocs/bdot.h"
 #include "obsw/aocs/adcs.h"
-#include "obsw/fdir/fsm.h"
+#include "obsw/srdb_generated.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -12,7 +14,6 @@
 static StaticTask_t      aocs_tcb;
 static StackType_t       aocs_stack[AOCS_STACK_DEPTH];
 
-static obsw_fsm_ctx_t   *s_fsm;
 static obsw_bdot_ctx_t   s_bdot;
 static obsw_adcs_ctx_t   s_adcs;
 
@@ -20,18 +21,27 @@ static void aocs_task(void *param)
 {
     (void)param;
 
-    obsw_fsm_mode_t last_mode = obsw_fsm_mode(s_fsm);
+    obsw_fsm_mode_t last_mode = obsw_fsm_mode(obsw_mode_get_fsm());
     TickType_t last_wake = xTaskGetTickCount();
 
     for (;;) {
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(100));
 
-        obsw_fsm_mode_t mode = obsw_fsm_mode(s_fsm);
+        obsw_fsm_mode_t mode = obsw_fsm_mode(obsw_mode_get_fsm());
 
-        /* Reset B-dot derivative accumulator on every SAFE entry */
+        /* Reset B-dot derivative accumulator on every SAFE entry from NOMINAL */
         if (mode == OBSW_FSM_SAFE && last_mode == OBSW_FSM_NOMINAL)
             obsw_bdot_reset(&s_bdot);
         last_mode = mode;
+
+        /* STANDBY: AOCS off — actuators hold zero command */
+        if (mode == OBSW_FSM_STANDBY)
+            continue;
+
+        /* Sync S20-tunable gains — reads are atomic (32-bit, single-core ARM) */
+        s_bdot.config.gain = obsw_pus_s20_get_float(SRDB_PARAM_BDOT_GAIN, 1.0e4f);
+        s_adcs.config.kp   = obsw_pus_s20_get_float(SRDB_PARAM_ADCS_KP,   0.5f);
+        s_adcs.config.kd   = obsw_pus_s20_get_float(SRDB_PARAM_ADCS_KD,   0.1f);
 
         /* ---- Sensor read stubs (TODO: wire real I2C/SPI drivers) ---- */
         float b[3]             = {0.0f, 0.0f, 0.0f};
@@ -46,7 +56,7 @@ static void aocs_task(void *param)
             obsw_adcs_output_t out;
             obsw_adcs_step(&s_adcs, &q_meas, omega, &out);
             /* TODO: write out.torque_cmd to RW driver */
-        } else if (mag_valid) {
+        } else if (mode == OBSW_FSM_SAFE && mag_valid) {
             obsw_bdot_output_t out;
             obsw_bdot_step(&s_bdot, b, AOCS_DT_S, &out);
             /* TODO: write out.m_cmd to MTQ driver */
@@ -55,10 +65,8 @@ static void aocs_task(void *param)
     }
 }
 
-void obsw_aocs_task_init(obsw_fsm_ctx_t *fsm)
+void obsw_aocs_task_init(void)
 {
-    s_fsm = fsm;
-
     obsw_bdot_config_t bdot_cfg = {.gain = 1.0e4f, .max_dipole = 10.0f};
     obsw_bdot_init(&s_bdot, &bdot_cfg);
 

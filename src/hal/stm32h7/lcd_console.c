@@ -127,8 +127,10 @@ void lcd_console_init(void)
     g_row = 0;
     g_col = 0;
     memset(g_buf, ' ', sizeof(g_buf));
-    lcd_clear(g_bg);
-    /* Draw a grey placeholder in the status bar row */
+    /* No full-screen lcd_clear here — a 25 600-byte SPI burst triggers the
+     * ST7735R power supervisor reset on the WeAct board.  Character cells
+     * are always drawn with both fg and bg pixels, so no prior clear is
+     * needed; unwritten rows show whatever GRAM held after lcd_init(). */
     lcd_console_set_status("FDIR starting...", LCD_BLACK, LCD_GREY);
 }
 

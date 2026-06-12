@@ -27,10 +27,18 @@
 #define WIRE_TC 0x01U
 #define WIRE_TM 0x04U
 
-/* USART3 ISR register — RXNE bit checked to yield when UART is idle.
- * Polling avoids spinning at maximum priority when no ground traffic arrives. */
-#define USART3_ISR_REG (*(volatile uint32_t *)(0x40004800UL + 0x1CU))
+/* USART3 registers used directly by the TMTC task and its RX ISR */
+#define USART3_BASE    0x40004800UL
+#define USART3_CR1_REG (*(volatile uint32_t *)(USART3_BASE + 0x00U))
+#define USART3_ISR_REG (*(volatile uint32_t *)(USART3_BASE + 0x1CU))
 #define USART_RXNE     (1U << 5)
+#define USART_RXNEIE   (1U << 5) /* same bit position in CR1 */
+
+/* NVIC registers for USART3 (IRQ 39).
+ * IPR9 holds priorities for IRQs 36-39; IRQ 39 = bits [31:24].
+ * ISER1 enables IRQs 32-63; bit 7 = IRQ 39. */
+#define NVIC_ISER1 (*(volatile uint32_t *)0xE000E104UL)
+#define NVIC_IPR9  (*(volatile uint32_t *)0xE000E424UL)
 
 #define TMTC_STACK_DEPTH 512U
 #define TMTC_PRIORITY    4U   /* Highest — owns the physical UART link */
@@ -51,6 +59,7 @@ static uint8_t s_tm_pkt[OBSW_TM_MAX_PACKET_LEN]; /* static — keeps 1 KB off ta
 
 static obsw_io_ops_t   *s_io;
 static obsw_tm_store_t *s_tm_store;
+static obsw_tm_log_t    s_tm_log;
 
 /* ── UART primitives ──────────────────────────────────────────────── */
 
@@ -68,6 +77,24 @@ static void uart_write(const uint8_t *buf, uint16_t len)
 
 /* ── TM downlink ──────────────────────────────────────────────────── */
 
+/* Emit "# TM(svc,subsvc)\r\n" after each binary frame so picocom users
+ * see a human-readable label.  '#' (0x23) is not 0x04 or 0xFF, so wire-
+ * protocol parsers skip it safely (decode_tm_packets skips non-0x04 bytes). */
+static void tm_uart_label(uint8_t svc, uint8_t subsvc)
+{
+    uint8_t buf[16];
+    uint8_t i = 0;
+    buf[i++] = '#'; buf[i++] = ' ';
+    buf[i++] = 'T'; buf[i++] = 'M'; buf[i++] = '(';
+    if (svc    >= 10U) buf[i++] = (uint8_t)('0' + svc    / 10U);
+    buf[i++] = (uint8_t)('0' + svc    % 10U);
+    buf[i++] = ',';
+    if (subsvc >= 10U) buf[i++] = (uint8_t)('0' + subsvc / 10U);
+    buf[i++] = (uint8_t)('0' + subsvc % 10U);
+    buf[i++] = ')'; buf[i++] = '\r'; buf[i++] = '\n';
+    uart_write(buf, i);
+}
+
 static void flush_tm(void)
 {
     uint16_t plen = 0;
@@ -76,6 +103,16 @@ static void flush_tm(void)
         uint8_t hdr[3] = {WIRE_TM, (uint8_t)(plen >> 8), (uint8_t)(plen & 0xFFU)};
         uart_write(hdr, 3);
         uart_write(s_tm_pkt, plen);
+        if (plen >= 9U) {
+            uint8_t svc    = s_tm_pkt[7];
+            uint8_t subsvc = s_tm_pkt[8];
+            /* Log for LCD display (FDIR task reads) */
+            s_tm_log.buf[s_tm_log.write_idx % OBSW_TM_LOG_DEPTH].svc    = svc;
+            s_tm_log.buf[s_tm_log.write_idx % OBSW_TM_LOG_DEPTH].subsvc = subsvc;
+            s_tm_log.write_idx++;
+            /* ASCII label on UART for terminal monitors */
+            tm_uart_label(svc, subsvc);
+        }
     }
 }
 
@@ -88,9 +125,12 @@ static void tmtc_task(void *param)
     static const uint8_t EOT = 0xFF;
 
     for (;;) {
-        /* Yield when UART RX is empty — gives lower-priority tasks CPU time.
-         * PUS notifies this task when TM is ready so drain latency stays low. */
+        /* Sleep when UART RX is empty — gives lower-priority tasks CPU time.
+         * Re-arm the RXNE interrupt before sleeping so the first incoming
+         * byte wakes us within microseconds (the ISR disables it again to
+         * avoid per-byte re-entry).  PUS also notifies via xTaskNotify. */
         if (!(USART3_ISR_REG & USART_RXNE)) {
+            USART3_CR1_REG |= USART_RXNEIE;
             ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(1));
             flush_tm();
             continue;
@@ -122,10 +162,26 @@ static void tmtc_task(void *param)
     }
 }
 
+/* ── USART3 RX interrupt ──────────────────────────────────────────── */
+
+/* Fires on the FIRST byte of an incoming frame.  Disables itself to
+ * prevent re-entry for every subsequent byte (uart_getc() polls RXNE
+ * directly for the rest of the frame).  The task re-enables it when
+ * it goes idle, closing the race: if RXNE is already set at that point
+ * the interrupt fires immediately and the task loops without sleeping. */
+void USART3_IRQHandler(void)
+{
+    USART3_CR1_REG &= ~USART_RXNEIE; /* disable — task re-enables before sleep */
+    BaseType_t hp = pdFALSE;
+    xTaskNotifyFromISR(s_handle, 0, eNoAction, &hp);
+    portYIELD_FROM_ISR(hp);
+}
+
 /* ── Public API ───────────────────────────────────────────────────── */
 
-QueueHandle_t obsw_tmtc_get_tc_queue(void) { return s_tc_queue; }
-TaskHandle_t  obsw_tmtc_get_handle(void)   { return s_handle;   }
+QueueHandle_t  obsw_tmtc_get_tc_queue(void) { return s_tc_queue; }
+TaskHandle_t   obsw_tmtc_get_handle(void)   { return s_handle;   }
+obsw_tm_log_t *obsw_tmtc_get_tm_log(void)  { return &s_tm_log;  }
 
 void obsw_tmtc_task_init(obsw_io_ops_t *io, obsw_tm_store_t *tm_store)
 {
@@ -139,4 +195,13 @@ void obsw_tmtc_task_init(obsw_io_ops_t *io, obsw_tm_store_t *tm_store)
 
     s_handle = xTaskCreateStatic(tmtc_task, "TMTC", TMTC_STACK_DEPTH,
                                  NULL, TMTC_PRIORITY, s_stack, &s_tcb);
+
+    /* Configure USART3 IRQ (39) in NVIC.
+     * Priority must be >= configMAX_SYSCALL_INTERRUPT_PRIORITY so that
+     * xTaskNotifyFromISR() can be called safely from the handler.
+     * IPR9 covers IRQs 36-39; USART3 priority sits in bits [31:24]. */
+    NVIC_IPR9 = (NVIC_IPR9 & ~(0xFFU << 24)) |
+                ((uint32_t)configMAX_SYSCALL_INTERRUPT_PRIORITY << 24);
+    NVIC_ISER1 |= (1U << 7);  /* enable IRQ 39 */
+    /* RXNEIE is NOT enabled here; tmtc_task arms it just before sleeping. */
 }
