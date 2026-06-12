@@ -377,7 +377,7 @@ int main(void)
     obsw_adcs_config_t adcs_cfg = {
         .kp         = 0.5f,
         .kd         = 0.1f,
-        .max_torque = 0.01f,
+        .max_torque = 0.2f,   /* 0.2 Nm matches Kp=0.5 linear regime up to ~47° error */
     };
     obsw_adcs_init(&adcs_ctx, &adcs_cfg);
 

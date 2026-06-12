@@ -75,8 +75,9 @@ alias renode-stm32h7-clean='rm -rfv $OPENOBSW_REPO/build_stm32h7_renode'
 alias renode-test-leop='python3 $OPENOBSW_REPO/renode/test_leop_stm32h7.py'
 alias renode-test-fdir='python3 $OPENOBSW_REPO/renode/test_fdir_stm32h7.py'
 
-# ── B-dot convergence harness (#67) ──────────────────────────────────────
+# ── Physics harnesses (opensvf-kde boundary) ─────────────────────────────
 alias bdot-harness='python3 $OPENOBSW_REPO/sim/bdot_harness.py'
+alias adcs-harness='python3 $OPENOBSW_REPO/sim/adcs_harness.py'
 
 echo "[openobsw] activated — repo: $REPO"
-echo "[openobsw] aliases: host-build host-test host-sim | aarch64-build | zynqbare-build | stm32h7-build stm32h7-flash | renode-zynqmp renode-stm32h7 renode-stm32h7-build renode-test-leop renode-test-fdir | bdot-harness"
+echo "[openobsw] aliases: host-build host-test host-sim | aarch64-build | zynqbare-build | stm32h7-build stm32h7-flash | renode-zynqmp renode-stm32h7 renode-stm32h7-build renode-test-leop renode-test-fdir | bdot-harness adcs-harness"

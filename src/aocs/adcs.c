@@ -78,9 +78,11 @@ bool obsw_adcs_step(obsw_adcs_ctx_t *ctx,
     if (!obsw_quat_normalise(&q_m))
         return false;
 
-    /* Error quaternion: q_err = q_cmd ⊗ q_meas* */
-    obsw_quat_t q_mc  = obsw_quat_conjugate(&q_m);
-    obsw_quat_t q_err = obsw_quat_multiply(&ctx->q_cmd, &q_mc);
+    /* Error quaternion: q_err = q_meas ⊗ q_cmd*  (body-to-ECI convention).
+     * This gives q_err_vec pointing in the direction of needed body rotation;
+     * τ = -Kp·q_err_vec then correctly opposes the error. */
+    obsw_quat_t q_cmd_c = obsw_quat_conjugate(&ctx->q_cmd);
+    obsw_quat_t q_err   = obsw_quat_multiply(&q_m, &q_cmd_c);
     obsw_quat_normalise(&q_err);
 
     /* Ensure short-path rotation (w >= 0) */
