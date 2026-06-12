@@ -120,3 +120,9 @@ SysTick_Handler:      b .
     .type Default_Handler, %function
 Default_Handler:
     b .
+
+    /* USART3 ISR — weak alias so the non-FreeRTOS polling build links
+     * without defining a handler; a strong USART3_IRQHandler in uart.c
+     * overrides this when interrupt-driven RX is enabled. */
+    .weak USART3_IRQHandler
+    .thumb_set USART3_IRQHandler, Default_Handler
