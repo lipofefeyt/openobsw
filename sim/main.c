@@ -17,6 +17,7 @@
 #include "orbitfabric_contract_adapter.h"
 #endif
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -238,6 +239,80 @@ static float s20_get_f32(uint16_t param_id, float default_val)
 }
 
 /* ------------------------------------------------------------------ */
+/* Nadir-pointing target                                               */
+/* ------------------------------------------------------------------ */
+
+/* Compute body-to-ECI quaternion for nadir-pointing circular orbit.
+ * Frame: body +z = zenith (anti-nadir), body -z = nadir (Earth-facing),
+ *        body +x = along-track (velocity), body +y = orbit normal.
+ * Uses Shepperd's method to convert the rotation matrix to quaternion. */
+static void compute_nadir_quat(float t_s,
+                                float alt_km, float inc_deg,
+                                obsw_quat_t *q_out)
+{
+    static const float MU_EARTH  = 3.986004418e14f;  /* m³/s² */
+    static const float R_EARTH   = 6.371e6f;          /* m     */
+    static const float DEG2RAD   = 3.14159265f / 180.0f;
+
+    float r_orbit   = R_EARTH + alt_km * 1.0e3f;
+    float omega_orb = sqrtf(MU_EARTH / (r_orbit * r_orbit * r_orbit));
+    float nu        = omega_orb * t_s;
+    float inc       = inc_deg * DEG2RAD;
+
+    /* Unit radial r̂ and unit velocity v̂ for circular orbit in ECI */
+    float r[3] = { cosf(nu),
+                   sinf(nu) * cosf(inc),
+                   sinf(nu) * sinf(inc) };
+    float v[3] = { -sinf(nu),
+                    cosf(nu) * cosf(inc),
+                    cosf(nu) * sinf(inc) };
+
+    /* Orbit-normal axis: h = r̂ × v̂  (body +y direction in ECI) */
+    float h[3] = { r[1]*v[2] - r[2]*v[1],
+                   r[2]*v[0] - r[0]*v[2],
+                   r[0]*v[1] - r[1]*v[0] };
+    float hn = sqrtf(h[0]*h[0] + h[1]*h[1] + h[2]*h[2]);
+    if (hn > 1e-10f) { h[0] /= hn; h[1] /= hn; h[2] /= hn; }
+
+    /* Rotation matrix R (body→ECI): columns are body axes expressed in ECI
+     * col 0 = body +x = v̂,  col 1 = body +y = h,  col 2 = body +z = r̂ */
+    float R[3][3] = {
+        { v[0], h[0], r[0] },
+        { v[1], h[1], r[1] },
+        { v[2], h[2], r[2] },
+    };
+
+    /* Shepperd's method: R → unit quaternion [w, x, y, z] */
+    float tr = R[0][0] + R[1][1] + R[2][2];
+    float s;
+    if (tr > 0.0f) {
+        s = 0.5f / sqrtf(tr + 1.0f);
+        q_out->w = 0.25f / s;
+        q_out->x = (R[2][1] - R[1][2]) * s;
+        q_out->y = (R[0][2] - R[2][0]) * s;
+        q_out->z = (R[1][0] - R[0][1]) * s;
+    } else if (R[0][0] > R[1][1] && R[0][0] > R[2][2]) {
+        s = 2.0f * sqrtf(1.0f + R[0][0] - R[1][1] - R[2][2]);
+        q_out->w = (R[2][1] - R[1][2]) / s;
+        q_out->x = 0.25f * s;
+        q_out->y = (R[0][1] + R[1][0]) / s;
+        q_out->z = (R[0][2] + R[2][0]) / s;
+    } else if (R[1][1] > R[2][2]) {
+        s = 2.0f * sqrtf(1.0f + R[1][1] - R[0][0] - R[2][2]);
+        q_out->w = (R[0][2] - R[2][0]) / s;
+        q_out->x = (R[0][1] + R[1][0]) / s;
+        q_out->y = 0.25f * s;
+        q_out->z = (R[2][1] + R[1][2]) / s;
+    } else {
+        s = 2.0f * sqrtf(1.0f + R[2][2] - R[0][0] - R[1][1]);
+        q_out->w = (R[1][0] - R[0][1]) / s;
+        q_out->x = (R[0][2] + R[2][0]) / s;
+        q_out->y = (R[2][1] + R[1][2]) / s;
+        q_out->z = 0.25f * s;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* FDIR                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -431,6 +506,15 @@ int main(void)
                 bdot_ctx.config.gain = s20_get_f32(SRDB_PARAM_BDOT_GAIN, 1.0e4f);
 
                 if (cur_mode == OBSW_FSM_NOMINAL && sensor.st_valid && sensor.gyro_valid) {
+                    /* Update nadir target from orbital parameters (runtime-tunable via S20) */
+                    {
+                        float alt_km  = s20_get_f32(SRDB_PARAM_ORBIT_ALTITUDE_KM,     550.0f);
+                        float inc_deg = s20_get_f32(SRDB_PARAM_ORBIT_INCLINATION_DEG,  97.4f);
+                        obsw_quat_t q_nadir;
+                        compute_nadir_quat(sensor.sim_time, alt_km, inc_deg, &q_nadir);
+                        obsw_adcs_set_target(&adcs_ctx, &q_nadir);
+                    }
+
                     obsw_quat_t q_meas = {
                         sensor.st_q_w, sensor.st_q_x,
                         sensor.st_q_y, sensor.st_q_z
@@ -445,7 +529,8 @@ int main(void)
                         act.rw_torque_z = adcs_out.torque_cmd[2];
                         act.controller  = 1;
                         fprintf(stderr,
-                            "[OBSW] adcs tau=[%.3e,%.3e,%.3e] Nm\n",
+                            "[OBSW] adcs err=%.1f° tau=[%.3e,%.3e,%.3e] Nm\n",
+                            adcs_out.angle_err_rad * (180.0f / 3.14159265f),
                             act.rw_torque_x, act.rw_torque_y, act.rw_torque_z);
                     }
                 } else if (cur_mode == OBSW_FSM_SAFE && sensor.mag_valid) {
