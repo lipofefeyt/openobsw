@@ -29,7 +29,7 @@ if [ ! -f "$REPO/.venv/bin/activate" ]; then
     "$VENV_PY" -m venv "$REPO/.venv"
 fi
 source "$REPO/.venv/bin/activate"
-pip install -q pydantic pyyaml pytest numpy matplotlib
+pip install -q pydantic pyyaml pytest numpy matplotlib "imageio[ffmpeg]"
 pip install -q -e "$REPO/srdb/"
 echo "    Python: $(python3 --version)"
 
