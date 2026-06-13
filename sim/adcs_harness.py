@@ -190,6 +190,8 @@ def parse_args():
     p.add_argument('--inertia',   nargs=3, type=float, default=None,
                    metavar=('IXX', 'IYY', 'IZZ'),
                    help='principal moments [kg·m²] (default: read from OBSW S20)')
+    p.add_argument('--plot', metavar='PATH', default=None,
+                   help='save convergence plot to PATH (e.g. adcs_convergence.png)')
     return p.parse_args()
 
 
@@ -282,6 +284,8 @@ def _run(args, proc):
     converged_at = None
     step         = 0
     t            = 0.0
+    history_t    = []
+    history_err  = []
 
     while t <= args.max_t:
         send_sensor(proc, NO_FIELD, q, omega, t,
@@ -299,6 +303,9 @@ def _run(args, proc):
         err_rad = attitude_error_rad(q, q_tgt)
         err_deg = math.degrees(err_rad)
 
+        history_t.append(t)
+        history_err.append(err_deg)
+
         if step % report_every == 0:
             omega_mag = float(np.linalg.norm(omega))
             print(f'  t={t:7.1f} s  err={err_deg:6.2f}°  '
@@ -315,9 +322,42 @@ def _run(args, proc):
         q_tgt   = nadir_quat(t, r_orbit, inc_rad)
         err_rad = attitude_error_rad(q, q_tgt)
         print(f'\n[FAIL] nadir error={math.degrees(err_rad):.2f}° after {t:.0f} s')
-        return 1
 
-    return 0
+    if args.plot:
+        _save_adcs_plot(args.plot, history_t, history_err, converged_at,
+                        PASS_THRESHOLD_DEG, args.max_t)
+
+    return 0 if converged_at is not None else 1
+
+
+def _save_adcs_plot(path, history_t, history_err, converged_at,
+                    threshold_deg, max_t):
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(history_t, history_err, color='steelblue', linewidth=1.5,
+                label='Nadir pointing error')
+        ax.axhline(threshold_deg, color='crimson', linestyle='--', linewidth=1.2,
+                   label=f'{threshold_deg}° pass threshold')
+        if converged_at is not None:
+            ax.axvline(converged_at, color='forestgreen', linestyle='--',
+                       linewidth=1.2, alpha=0.8,
+                       label=f'Converged at {converged_at:.1f} s')
+        ax.set_xlabel('Time [s]')
+        ax.set_ylabel('Error [°]')
+        ax.set_title('ADCS Nadir-Pointing Convergence — openobsw PD Controller')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_xlim(0, max_t)
+        ax.set_ylim(bottom=0)
+        fig.tight_layout()
+        fig.savefig(path, dpi=150)
+        print(f'Plot saved → {path}')
+    except ImportError:
+        print('matplotlib not available — skipping plot')
 
 
 def main():

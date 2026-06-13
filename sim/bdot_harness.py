@@ -113,6 +113,8 @@ def parse_args():
                    metavar=('IXX', 'IYY', 'IZZ'), help='principal moments [kg·m²]')
     p.add_argument('--omega0',   nargs=3, type=float, default=None,
                    metavar=('OX', 'OY', 'OZ'), help='initial angular velocity [rad/s]')
+    p.add_argument('--plot', metavar='PATH', default=None,
+                   help='save convergence plot to PATH (e.g. bdot_convergence.png)')
     return p.parse_args()
 
 
@@ -197,6 +199,8 @@ def _run(args, proc):
     converged_at = None
     step         = 0
     t            = 0.0
+    history_t    = []
+    history_omega = []
 
     while t <= max_t:
         r_eci  = orbit_position(t, r_orbit, inc_rad)
@@ -216,6 +220,9 @@ def _run(args, proc):
 
         omega_mag = float(np.linalg.norm(omega))
 
+        history_t.append(t)
+        history_omega.append(omega_mag)
+
         if step % report_every == 0:
             print(f'  t={t:8.1f} s ({t/T_orbit:.2f}P)  '
                   f'|ω|={omega_mag:.4f} rad/s  '
@@ -231,9 +238,47 @@ def _run(args, proc):
         omega_mag = float(np.linalg.norm(omega))
         print(f'\n[FAIL] |ω|={omega_mag:.4f} rad/s after {t:.0f} s '
               f'({t/T_orbit:.2f} orbital periods)')
-        return 1
 
-    return 0
+    if args.plot:
+        _save_bdot_plot(args.plot, history_t, history_omega, converged_at,
+                        PASS_THRESHOLD, T_orbit)
+
+    return 0 if converged_at is not None else 1
+
+
+def _save_bdot_plot(path, history_t, history_omega, converged_at,
+                    threshold, T_orbit):
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.plot(history_t, history_omega, color='steelblue', linewidth=1.0,
+                label='|ω| angular rate')
+        ax.axhline(threshold, color='crimson', linestyle='--', linewidth=1.2,
+                   label=f'{threshold} rad/s pass threshold')
+        if converged_at is not None:
+            ax.axvline(converged_at, color='forestgreen', linestyle='--',
+                       linewidth=1.2, alpha=0.8,
+                       label=f'Converged at {converged_at:.0f} s '
+                             f'({converged_at/T_orbit:.2f} periods)')
+        # Mark orbital period boundaries
+        n_periods = int(history_t[-1] / T_orbit) + 1
+        for k in range(1, n_periods):
+            ax.axvline(k * T_orbit, color='gray', linestyle=':', linewidth=0.8, alpha=0.5)
+        ax.set_xlabel('Time [s]')
+        ax.set_ylabel('|ω| [rad/s]')
+        ax.set_title('B-dot Detumbling Convergence — openobsw AOCS')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_xlim(0, history_t[-1])
+        ax.set_ylim(bottom=0)
+        fig.tight_layout()
+        fig.savefig(path, dpi=150)
+        print(f'Plot saved → {path}')
+    except ImportError:
+        print('matplotlib not available — skipping plot')
 
 
 def main():

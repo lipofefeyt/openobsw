@@ -14,6 +14,7 @@
 #include "obsw/srdb_generated.h"
 #include "obsw/fdir/fsm.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -74,6 +75,72 @@ static uint8_t read_frame(uint8_t *buf, uint16_t bufsize, uint16_t *out_len)
 
     *out_len = len;
     return type;
+}
+
+/* ------------------------------------------------------------------ */
+/* Nadir-pointing target (mirrors compute_nadir_quat in sim/main.c)   */
+/* ------------------------------------------------------------------ */
+
+/* Orbit defaults — match SRDB parameters.yaml defaults.
+ * Override via TC(20,1) on a target with full S20 context. */
+#define ZYNQMP_ALT_KM   550.0f
+#define ZYNQMP_INC_DEG   97.4f
+
+static void compute_nadir_quat(float t_s, float alt_km, float inc_deg,
+                                obsw_quat_t *q_out)
+{
+    static const float MU_EARTH = 3.986004418e14f;
+    static const float R_EARTH  = 6.371e6f;
+    static const float DEG2RAD  = 3.14159265f / 180.0f;
+
+    float r_orbit   = R_EARTH + alt_km * 1.0e3f;
+    float omega_orb = sqrtf(MU_EARTH / (r_orbit * r_orbit * r_orbit));
+    float nu        = omega_orb * t_s;
+    float inc       = inc_deg * DEG2RAD;
+
+    float r[3] = { cosf(nu), sinf(nu) * cosf(inc), sinf(nu) * sinf(inc) };
+    float v[3] = { -sinf(nu), cosf(nu) * cosf(inc), cosf(nu) * sinf(inc) };
+
+    float h[3] = { r[1]*v[2] - r[2]*v[1],
+                   r[2]*v[0] - r[0]*v[2],
+                   r[0]*v[1] - r[1]*v[0] };
+    float hn = sqrtf(h[0]*h[0] + h[1]*h[1] + h[2]*h[2]);
+    if (hn > 1e-10f) { h[0] /= hn; h[1] /= hn; h[2] /= hn; }
+
+    float R[3][3] = {
+        { v[0], h[0], r[0] },
+        { v[1], h[1], r[1] },
+        { v[2], h[2], r[2] },
+    };
+
+    float tr = R[0][0] + R[1][1] + R[2][2];
+    float s;
+    if (tr > 0.0f) {
+        s = 0.5f / sqrtf(tr + 1.0f);
+        q_out->w = 0.25f / s;
+        q_out->x = (R[2][1] - R[1][2]) * s;
+        q_out->y = (R[0][2] - R[2][0]) * s;
+        q_out->z = (R[1][0] - R[0][1]) * s;
+    } else if (R[0][0] > R[1][1] && R[0][0] > R[2][2]) {
+        s = 2.0f * sqrtf(1.0f + R[0][0] - R[1][1] - R[2][2]);
+        q_out->w = (R[2][1] - R[1][2]) / s;
+        q_out->x = 0.25f * s;
+        q_out->y = (R[0][1] + R[1][0]) / s;
+        q_out->z = (R[0][2] + R[2][0]) / s;
+    } else if (R[1][1] > R[2][2]) {
+        s = 2.0f * sqrtf(1.0f + R[1][1] - R[0][0] - R[2][2]);
+        q_out->w = (R[0][2] - R[2][0]) / s;
+        q_out->x = (R[0][1] + R[1][0]) / s;
+        q_out->y = 0.25f * s;
+        q_out->z = (R[2][1] + R[1][2]) / s;
+    } else {
+        s = 2.0f * sqrtf(1.0f + R[2][2] - R[0][0] - R[1][1]);
+        q_out->w = (R[1][0] - R[0][1]) / s;
+        q_out->x = (R[0][2] + R[2][0]) / s;
+        q_out->y = (R[2][1] + R[1][2]) / s;
+        q_out->z = 0.25f * s;
+    }
+    obsw_quat_normalise(q_out);
 }
 
 /* ------------------------------------------------------------------ */
@@ -192,6 +259,10 @@ int main(void)
 
             obsw_fsm_mode_t cur_mode = obsw_fsm_mode(&fsm_ctx);
             if (cur_mode == OBSW_FSM_NOMINAL && st_valid && gyro_valid) {
+                obsw_quat_t q_nadir;
+                compute_nadir_quat(sim_time, ZYNQMP_ALT_KM, ZYNQMP_INC_DEG, &q_nadir);
+                obsw_adcs_set_target(&adcs_ctx, &q_nadir);
+
                 obsw_quat_t q = { st_qw, st_qx, st_qy, st_qz };
                 float omega[3] = { gx, gy, gz };
                 obsw_adcs_output_t out;

@@ -122,6 +122,16 @@ static obsw_s3_param_t aocs_hk_params[] = {
     {.ptr = hk_adcs_kd_be,   .size = OBSW_S3_PARAM_U32},
 };
 
+/* AOCS state HK (set_id=6): live attitude state as big-endian IEEE 754 */
+static uint8_t  hk_aocs_err_be[4]   = {0};  /* aocs_angle_err_rad */
+static uint8_t  hk_aocs_omega_be[4] = {0};  /* aocs_omega_mag     */
+static uint8_t  hk_aocs_ctrl        = 0;    /* aocs_controller: 0=off,1=bdot,2=PD */
+static obsw_s3_param_t aocs_state_hk_params[] = {
+    {.ptr = hk_aocs_err_be,   .size = OBSW_S3_PARAM_U32},
+    {.ptr = hk_aocs_omega_be, .size = OBSW_S3_PARAM_U32},
+    {.ptr = &hk_aocs_ctrl,    .size = OBSW_S3_PARAM_U8},
+};
+
 static obsw_s3_set_t hk_sets[] = {
     {.set_id = SRDB_HK_NOMINAL_HK, .params = nominal_hk_params,
      .param_count = 1, .interval_ticks = 10, .countdown = 10, .enabled = true},
@@ -130,6 +140,8 @@ static obsw_s3_set_t hk_sets[] = {
     {.set_id = SRDB_HK_DHS_OBC_HK, .params = dhs_obc_hk_params,
      .param_count = 7, .interval_ticks = 10, .countdown = 10, .enabled = true},
     {.set_id = SRDB_HK_AOCS_HK, .params = aocs_hk_params,
+     .param_count = 3, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
+    {.set_id = SRDB_HK_AOCS_STATE_HK, .params = aocs_state_hk_params,
      .param_count = 3, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
 };
 
@@ -534,6 +546,19 @@ int main(void)
                             "[OBSW] adcs err=%.1f° tau=[%.3e,%.3e,%.3e] Nm\n",
                             adcs_out.angle_err_rad * (180.0f / 3.14159265f),
                             act.rw_torque_x, act.rw_torque_y, act.rw_torque_z);
+
+                        /* Update AOCS state HK (set_id=6) */
+                        {
+                            float om = sqrtf(omega[0]*omega[0] + omega[1]*omega[1] + omega[2]*omega[2]);
+                            uint32_t err_u32, om_u32;
+                            memcpy(&err_u32, &adcs_out.angle_err_rad, 4);
+                            memcpy(&om_u32,  &om, 4);
+                            for (int _i = 0; _i < 4; _i++) {
+                                hk_aocs_err_be[_i]   = (uint8_t)((err_u32 >> (24 - 8*_i)) & 0xFFU);
+                                hk_aocs_omega_be[_i] = (uint8_t)((om_u32  >> (24 - 8*_i)) & 0xFFU);
+                            }
+                            hk_aocs_ctrl = 2U; /* PD */
+                        }
                     }
                 } else if (cur_mode == OBSW_FSM_SAFE && sensor.mag_valid) {
                     float b[3] = {sensor.mag_x, sensor.mag_y, sensor.mag_z};
@@ -543,9 +568,12 @@ int main(void)
                     act.mtq_dipole_y = bdot_out.m_cmd[1];
                     act.mtq_dipole_z = bdot_out.m_cmd[2];
                     act.controller   = 0;
+                    hk_aocs_ctrl     = 1U; /* B-dot */
                     fprintf(stderr,
                         "[OBSW] bdot m=[%.3e,%.3e,%.3e] Am2\n",
                         act.mtq_dipole_x, act.mtq_dipole_y, act.mtq_dipole_z);
+                } else {
+                    hk_aocs_ctrl = 0U; /* STANDBY or sensors invalid */
                 }
 
                 /* Drain any TM generated during sensor tick */

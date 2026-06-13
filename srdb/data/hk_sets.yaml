@@ -66,3 +66,13 @@ hk_sets:
       - sc_inertia_zz
       - mtq_max_dipole
     default_interval_ticks: 0
+
+  - id: 6
+    name: aocs_state_hk
+    spid: 1006
+    description: "AOCS live state — attitude error from nadir, angular rate magnitude, active controller"
+    parameters:
+      - aocs_angle_err_rad
+      - aocs_omega_mag
+      - aocs_controller
+    default_interval_ticks: 5

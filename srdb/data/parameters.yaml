@@ -299,3 +299,37 @@ parameters:
     pfc: 1
     subsystem: AOCS/Dynamics
     unit: 'rad/s'
+
+  # ---- AOCS live state (S3 HK set_id=6) ----------------------------------
+
+  - id: 0x20B0
+    name: aocs_angle_err_rad
+    description: "Attitude error angle from nadir target (valid in NOMINAL mode)"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Control
+    unit: rad
+    limits:
+      soft_high: 0.0349   # 2 deg
+
+  - id: 0x20B1
+    name: aocs_omega_mag
+    description: "Angular velocity magnitude |ω| in body frame"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Control
+    unit: 'rad/s'
+
+  - id: 0x20B2
+    name: aocs_controller
+    description: "Active AOCS controller"
+    type: uint8
+    ptc: 1
+    pfc: 8
+    subsystem: AOCS/Control
+    enumeration:
+      - {value: 0, label: 'OFF'}
+      - {value: 1, label: BDOT}
+      - {value: 2, label: PD}
