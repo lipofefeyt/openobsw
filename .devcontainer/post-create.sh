@@ -54,7 +54,7 @@ echo "[3/6] aarch64-none-elf toolchain ready"
 # machine (e.g. WSL2 host vs devcontainer), the shebangs break silently.
 python3 -m venv --clear "$REPO/.venv"
 source "$REPO/.venv/bin/activate"
-pip install -q pydantic pyyaml pytest numpy matplotlib "imageio[ffmpeg]"
+pip install -q pydantic pyyaml pytest numpy matplotlib
 pip install -q -e "$REPO/srdb/"
 echo "[4/6] Python venv ready"
 

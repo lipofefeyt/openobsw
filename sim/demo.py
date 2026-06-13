@@ -21,11 +21,16 @@ import struct
 import subprocess
 import sys
 
-import matplotlib
-matplotlib.use('Agg')           # headless — no display needed
-import matplotlib.pyplot as plt
-import numpy as np
-import imageio
+try:
+    import matplotlib
+    matplotlib.use('Agg')       # headless — no display needed
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import imageio
+except ImportError as _e:
+    print(f'ERROR: missing dependency — {_e}')
+    print('  pip install -r sim/requirements-demo.txt')
+    sys.exit(1)
 
 _SIM_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _SIM_DIR)
