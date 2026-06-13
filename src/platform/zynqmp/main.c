@@ -190,8 +190,8 @@ int main(void)
             float act[8] = {0};
             act[7] = sim_time;
 
-            bool nominal = !obsw_fsm_is_safe(&fsm_ctx);
-            if (nominal && st_valid && gyro_valid) {
+            obsw_fsm_mode_t cur_mode = obsw_fsm_mode(&fsm_ctx);
+            if (cur_mode == OBSW_FSM_NOMINAL && st_valid && gyro_valid) {
                 obsw_quat_t q = { st_qw, st_qx, st_qy, st_qz };
                 float omega[3] = { gx, gy, gz };
                 obsw_adcs_output_t out;
@@ -201,7 +201,7 @@ int main(void)
                     act[5] = out.torque_cmd[2];
                     act[6] = 1.0f;
                 }
-            } else if (mag_valid) {
+            } else if (cur_mode == OBSW_FSM_SAFE && mag_valid) {
                 float b[3] = { mag_x, mag_y, mag_z };
                 obsw_bdot_output_t out;
                 obsw_bdot_step(&bdot_ctx, b, dt, &out);

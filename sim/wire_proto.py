@@ -166,6 +166,30 @@ def recv_tick(proc):
 
 
 # =========================================================================
+# Shared attitude dynamics helpers (used by bdot_harness and adcs_harness)
+# =========================================================================
+
+def quat_step(q, omega, dt):
+    """First-order quaternion kinematic update. q̇ = ½ q ⊗ [0, ω]."""
+    w, x, y, z = q
+    ox, oy, oz = omega
+    dq = 0.5 * np.array([
+        -x*ox - y*oy - z*oz,
+         w*ox + y*oz - z*oy,
+         w*oy - x*oz + z*ox,
+         w*oz + x*oy - y*ox,
+    ])
+    q_new = q + dt * dq
+    return q_new / np.linalg.norm(q_new)
+
+
+def omega_step(omega, torque, I, I_inv, dt):
+    """Euler rigid-body step. I·ω̇ = τ − ω × (I·ω)."""
+    I_omega = I @ omega
+    return omega + dt * (I_inv @ (torque - np.cross(omega, I_omega)))
+
+
+# =========================================================================
 # S20 parameter access
 # =========================================================================
 

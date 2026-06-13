@@ -38,6 +38,7 @@ from wire_proto import (
     SRDB_MTQ_MAX_DIPOLE,
     SRDB_SC_OMEGA_X0, SRDB_SC_OMEGA_Y0, SRDB_SC_OMEGA_Z0,
     send_sensor, recv_tick, query_s20_float,
+    quat_step, omega_step,
 )
 
 # ── Physical constants ────────────────────────────────────────────────────
@@ -86,24 +87,6 @@ def quat_rot_matrix(q):
     ])
 
 
-def quat_step(q, omega, dt):
-    """First-order quaternion kinematic update. q̇ = ½ q ⊗ [0, ω]."""
-    w, x, y, z = q
-    ox, oy, oz = omega
-    dq = 0.5 * np.array([
-        -x*ox - y*oy - z*oz,
-         w*ox + y*oz - z*oy,
-         w*oy - x*oz + z*ox,
-         w*oz + x*oy - y*ox,
-    ])
-    q_new = q + dt * dq
-    return q_new / np.linalg.norm(q_new)
-
-
-def omega_step(omega, torque, I, I_inv, dt):
-    """Euler rigid-body step. I·ω̇ = τ − ω × (I·ω)."""
-    I_omega = I @ omega
-    return omega + dt * (I_inv @ (torque - np.cross(omega, I_omega)))
 
 
 # =========================================================================
@@ -169,8 +152,8 @@ def _run(args, proc):
     # ── Read spacecraft config from OBSW S20 (opensvf-kde contract) ──────
     print('Reading spacecraft config from OBSW S20...')
 
-    alt_km  = args.alt_km  or query_s20_float(proc, SRDB_ORBIT_ALTITUDE_KM,     550.0)
-    inc_deg = args.inc_deg or query_s20_float(proc, SRDB_ORBIT_INCLINATION_DEG, 97.4)
+    alt_km  = query_s20_float(proc, SRDB_ORBIT_ALTITUDE_KM,     550.0) if args.alt_km  is None else args.alt_km
+    inc_deg = query_s20_float(proc, SRDB_ORBIT_INCLINATION_DEG,  97.4) if args.inc_deg is None else args.inc_deg
 
     if args.inertia:
         I_diag = args.inertia
@@ -202,7 +185,7 @@ def _run(args, proc):
     q     = np.array([1.0, 0.0, 0.0, 0.0])   # body aligned with ECI at t=0
 
     print(f'  alt={alt_km:.0f} km, inc={inc_deg}°, T={T_orbit:.0f} s'
-          f'  (config source: {"CLI" if args.alt_km else "OBSW S20"})')
+          f'  (config source: {"CLI" if args.alt_km is not None else "OBSW S20"})')
     print(f'  I = {I_diag} kg·m²')
     print(f'  ω₀ = {omega} rad/s  |ω|={np.linalg.norm(omega):.3f} rad/s')
     print()

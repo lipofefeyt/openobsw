@@ -310,6 +310,7 @@ static void compute_nadir_quat(float t_s,
         q_out->y = (R[2][1] + R[1][2]) / s;
         q_out->z = 0.25f * s;
     }
+    obsw_quat_normalise(q_out);
 }
 
 /* ------------------------------------------------------------------ */
@@ -501,9 +502,10 @@ int main(void)
                 obsw_fsm_mode_t cur_mode = obsw_fsm_mode(&fsm_ctx);
 
                 /* Sync S20-tunable AOCS gains before each control step */
-                adcs_ctx.config.kp   = s20_get_f32(SRDB_PARAM_ADCS_KP,   0.5f);
-                adcs_ctx.config.kd   = s20_get_f32(SRDB_PARAM_ADCS_KD,   0.1f);
-                bdot_ctx.config.gain = s20_get_f32(SRDB_PARAM_BDOT_GAIN, 1.0e4f);
+                adcs_ctx.config.kp          = s20_get_f32(SRDB_PARAM_ADCS_KP,        0.5f);
+                adcs_ctx.config.kd          = s20_get_f32(SRDB_PARAM_ADCS_KD,        0.1f);
+                bdot_ctx.config.gain        = s20_get_f32(SRDB_PARAM_BDOT_GAIN,      1.0e4f);
+                bdot_ctx.config.max_dipole  = s20_get_f32(SRDB_PARAM_MTQ_MAX_DIPOLE, 10.0f);
 
                 if (cur_mode == OBSW_FSM_NOMINAL && sensor.st_valid && sensor.gyro_valid) {
                     /* Update nadir target from orbital parameters (runtime-tunable via S20) */
@@ -575,11 +577,8 @@ int main(void)
                 }
 
                 /* DHS OBC HK — live state for TM(3,25) set_id=3 */
-                {
-                    obsw_fsm_mode_t m = obsw_fsm_mode(&fsm_ctx);
-                    param_obc_mode = (m == OBSW_FSM_STANDBY) ? 0U :
-                                     (m == OBSW_FSM_SAFE)    ? 1U : 2U;
-                }
+                param_obc_mode = (cur_mode == OBSW_FSM_STANDBY) ? 0U :
+                                 (cur_mode == OBSW_FSM_SAFE)    ? 1U : 2U;
                 param_obc_obt       = (uint32_t)sensor.sim_time;
                 param_obc_wd_status = 0U;   /* nominal — watchdog kicked each tick */
 
