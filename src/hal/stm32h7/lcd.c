@@ -404,6 +404,7 @@ void lcd_slpout_dispon(void)
 
     lcd_cmd(ST_COLMOD);  lcd_data1(0x05);   /* 16-bit RGB565 */
     lcd_cmd(ST_MADCTL);  lcd_data1(0x78);   /* landscape MV+MX+BGR */
+    lcd_cmd(ST_INVON);   /* match lcd_init() */
 
     lcd_cmd(ST_GMCTRP1);
     { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
@@ -449,6 +450,7 @@ void lcd_slpout_dispon_yield(void)
 
     lcd_cmd(ST_COLMOD);  lcd_data1(0x05);
     lcd_cmd(ST_MADCTL);  lcd_data1(0x78);
+    lcd_cmd(ST_INVON);   /* match lcd_init() — keeps colours consistent after PS re-init */
 
     lcd_cmd(ST_GMCTRP1);
     { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
