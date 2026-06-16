@@ -69,7 +69,7 @@ if(OBSW_BUILD_ZYNQMP)
         src/platform/zynqmp/startup.S
         src/platform/zynqmp/libc_shim.c
     )
-    target_link_libraries(obsw_zynqmp PRIVATE obsw obsw_srdb_generated)
+    target_link_libraries(obsw_zynqmp PRIVATE obsw obsw_srdb_generated m)
     target_include_directories(obsw_zynqmp PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${CMAKE_BINARY_DIR}/include
@@ -83,6 +83,14 @@ if(OBSW_BUILD_ZYNQMP)
         target_link_options(obsw_zynqmp PRIVATE
             -T ${CMAKE_CURRENT_SOURCE_DIR}/src/platform/zynqmp/zynqmp.ld
             -nostdlib -nostartfiles
+            -Wl,--no-warn-rwx-segments
+        )
+        # Flat binary for Renode LoadBinary (ELF is 64-bit, unsupported by Renode)
+        add_custom_command(TARGET obsw_zynqmp POST_BUILD
+            COMMAND ${CMAKE_OBJCOPY} -O binary
+                $<TARGET_FILE:obsw_zynqmp>
+                $<TARGET_FILE_DIR:obsw_zynqmp>/obsw_zynqmp.bin
+            COMMENT "Generating obsw_zynqmp.bin"
         )
     endif()
 endif()

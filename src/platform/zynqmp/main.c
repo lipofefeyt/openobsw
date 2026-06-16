@@ -11,6 +11,7 @@
 #include "obsw/obsw.h"
 #include "obsw/aocs/bdot.h"
 #include "obsw/aocs/adcs.h"
+#include "obsw/pus/s8.h"
 #include "obsw/srdb_generated.h"
 #include "obsw/fdir/fsm.h"
 
@@ -153,6 +154,17 @@ static void noop_responder(uint8_t flag, const obsw_tc_t *tc, void *ctx)
 }
 
 /* ------------------------------------------------------------------ */
+/* S8 FSM callbacks                                                    */
+/* ------------------------------------------------------------------ */
+
+static int fn_recover_nominal(const uint8_t *a, uint8_t l, void *ctx)
+{ (void)a; (void)l; obsw_fsm_to_nominal((obsw_fsm_ctx_t *)ctx); return 0; }
+static int fn_request_safe(const uint8_t *a, uint8_t l, void *ctx)
+{ (void)a; (void)l; obsw_fsm_to_safe((obsw_fsm_ctx_t *)ctx); return 0; }
+static int fn_request_standby(const uint8_t *a, uint8_t l, void *ctx)
+{ (void)a; (void)l; obsw_fsm_to_standby((obsw_fsm_ctx_t *)ctx); return 0; }
+
+/* ------------------------------------------------------------------ */
 /* Main                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -205,13 +217,28 @@ int main(void)
     s17_ctx.s1       = &s1_ctx;
     s17_ctx.apid     = SRDB_APID_DEFAULT;
 
+    obsw_s8_entry_t s8_table[] = {
+        {.function_id = OBSW_S8_FN_RECOVER_NOMINAL, .fn = fn_recover_nominal, .ctx = &fsm_ctx},
+        {.function_id = OBSW_S8_FN_REQUEST_SAFE,    .fn = fn_request_safe,    .ctx = &fsm_ctx},
+        {.function_id = OBSW_S8_FN_REQUEST_STANDBY, .fn = fn_request_standby, .ctx = &fsm_ctx},
+    };
+    obsw_s8_ctx_t s8_ctx = {0};
+    s8_ctx.tm_store  = &tm_store;
+    s8_ctx.s1        = &s1_ctx;
+    s8_ctx.apid      = SRDB_APID_DEFAULT;
+    s8_ctx.table     = s8_table;
+    s8_ctx.table_len = 3;
+
     /* Dispatcher */
     obsw_tc_route_t routes[] = {
         { .apid = 0xFFFF, .service = 17, .subservice = 1,
           .handler = obsw_s17_ping, .ctx = &s17_ctx },
+        { .apid = 0xFFFF, .service = 8,  .subservice = 1,
+          .handler = obsw_s8_perform, .ctx = &s8_ctx },
     };
     obsw_tc_dispatcher_t dispatcher;
-    obsw_tc_dispatcher_init(&dispatcher, routes, 1,
+    obsw_tc_dispatcher_init(&dispatcher, routes,
+                            sizeof(routes) / sizeof(routes[0]),
                             noop_responder, NULL);
 
     float last_sim_time = 0.0f;
