@@ -7,6 +7,11 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#ifndef OBSW_RENODE
+#include "obsw/hal/stm32h7/qmc5883l.h"
+static bool s_qmc_ok = false;
+#endif
+
 #define AOCS_STACK_DEPTH 512U
 #define AOCS_PRIORITY    2U   /* Lowest — periodic 10 Hz control loop */
 #define AOCS_DT_S        0.1f /* 10 Hz fixed timestep */
@@ -43,13 +48,17 @@ static void aocs_task(void *param)
         s_adcs.config.kp   = obsw_pus_s20_get_float(SRDB_PARAM_ADCS_KP,   0.5f);
         s_adcs.config.kd   = obsw_pus_s20_get_float(SRDB_PARAM_ADCS_KD,   0.1f);
 
-        /* ---- Sensor read stubs (TODO: wire real I2C/SPI drivers) ---- */
+        /* ---- Sensor reads ---- */
         float b[3]             = {0.0f, 0.0f, 0.0f};
-        bool  mag_valid        = false;
         obsw_quat_t q_meas     = {1.0f, 0.0f, 0.0f, 0.0f};
         float omega[3]         = {0.0f, 0.0f, 0.0f};
         bool  st_valid         = false;
         bool  gyro_valid       = false;
+#ifndef OBSW_RENODE
+        bool  mag_valid        = s_qmc_ok && obsw_qmc5883l_read(b);
+#else
+        bool  mag_valid        = false;
+#endif
 
         /* ---- Control law selection ---- */
         if (mode == OBSW_FSM_NOMINAL && st_valid && gyro_valid) {
@@ -72,6 +81,10 @@ void obsw_aocs_task_init(void)
 
     obsw_adcs_config_t adcs_cfg = {.kp = 0.5f, .kd = 0.1f, .max_torque = 0.01f};
     obsw_adcs_init(&s_adcs, &adcs_cfg);
+
+#ifndef OBSW_RENODE
+    s_qmc_ok = obsw_qmc5883l_init();
+#endif
 
     xTaskCreateStatic(aocs_task, "AOCS", AOCS_STACK_DEPTH,
                       NULL, AOCS_PRIORITY, aocs_stack, &aocs_tcb);

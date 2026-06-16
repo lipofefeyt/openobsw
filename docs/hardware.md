@@ -14,16 +14,11 @@ priority: **owned**, **ordered**, and **wanted**.
 | Raspberry Pi (model TBC) | Future opensvf ground segment host |
 | CP2102 USB-UART adapter (3.3V/5V) | USART3 console on STM32H750 (PD8=TX, PD9=RX) — arrived 2026-05-29 |
 | USB logic analyzer | Debug UART/I2C/SPI traffic — arrived 2026-05-29 |
+| QMC5883L magnetometer (GY-273) × 3 | B-dot controller HIL — feeds `aocs/bdot.c` via I2C1 (PB8/PB9) | arrived 2026-06-16 |
 
 ---
 
 ## Wanted
-
-### High priority
-
-| Item | ~Price | Purpose | Notes |
-|---|---|---|---|
-| QMC5883L magnetometer (GY-273) | €2–4 (AliExpress) | B-dot controller real hardware test — feeds `aocs/bdot.c` directly | Buy QMC5883L specifically, not HMC5883L (discontinued, clones unreliable) |
 
 ### Nice to have
 
