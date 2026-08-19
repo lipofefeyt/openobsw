@@ -160,10 +160,44 @@ static int fn_request_standby(const uint8_t *args, uint8_t args_len, void *ctx)
     return 0;
 }
 
+#ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
+#define OBSW_OF_S8_FN_REPORT_VOLTAGE_OUT_OF_BOUNDS 0x5001U
+
+static int fn_of_report_voltage_out_of_bounds(const uint8_t *args,
+                                              uint8_t args_len,
+                                              void *ctx)
+{
+    (void)args;
+
+    if (args_len != 0U)
+        return -1;
+
+    int rc = obsw_s5_report((obsw_s5_ctx_t *)ctx,
+                            OBSW_S5_MEDIUM,
+                            OF_EVENT_VOLTAGE_OUT_OF_BOUNDS,
+                            NULL,
+                            0U);
+    if (rc == OBSW_PUS_TM_OK) {
+        fprintf(stderr,
+                "[OBSW] OrbitFabric: OF_EVENT_VOLTAGE_OUT_OF_BOUNDS -> TM(5,3)\n");
+        return 0;
+    }
+
+    fprintf(stderr,
+            "[OBSW] OrbitFabric: OF_EVENT_VOLTAGE_OUT_OF_BOUNDS report failed: %d\n",
+            rc);
+    return -1;
+}
+#endif
+
 static obsw_s8_entry_t s8_table[] = {
     {.function_id = OBSW_S8_FN_RECOVER_NOMINAL, .fn = fn_recover_nominal, .ctx = &fsm_ctx},
     {.function_id = OBSW_S8_FN_REQUEST_SAFE,    .fn = fn_request_safe,    .ctx = &fsm_ctx},
     {.function_id = OBSW_S8_FN_REQUEST_STANDBY, .fn = fn_request_standby, .ctx = &fsm_ctx},
+#ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
+    {.function_id = OBSW_OF_S8_FN_REPORT_VOLTAGE_OUT_OF_BOUNDS,
+     .fn = fn_of_report_voltage_out_of_bounds, .ctx = &s5_ctx},
+#endif
 };
 
 /* ------------------------------------------------------------------------ */
