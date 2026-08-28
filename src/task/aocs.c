@@ -44,9 +44,10 @@ static void aocs_task(void *param)
             continue;
 
         /* Sync S20-tunable gains — reads are atomic (32-bit, single-core ARM) */
-        s_bdot.config.gain = obsw_pus_s20_get_float(SRDB_PARAM_BDOT_GAIN, 1.0e4f);
-        s_adcs.config.kp   = obsw_pus_s20_get_float(SRDB_PARAM_ADCS_KP,   0.5f);
-        s_adcs.config.kd   = obsw_pus_s20_get_float(SRDB_PARAM_ADCS_KD,   0.1f);
+        s_bdot.config.gain    = obsw_pus_s20_get_float(SRDB_PARAM_BDOT_GAIN,    1.0e4f);
+        s_bdot.config.hpf_tau = obsw_pus_s20_get_float(SRDB_PARAM_BDOT_HPF_TAU, 30.0f);
+        s_adcs.config.kp      = obsw_pus_s20_get_float(SRDB_PARAM_ADCS_KP,      0.5f);
+        s_adcs.config.kd      = obsw_pus_s20_get_float(SRDB_PARAM_ADCS_KD,      0.1f);
 
         /* ---- Sensor reads ---- */
         float b[3]             = {0.0f, 0.0f, 0.0f};
@@ -76,7 +77,7 @@ static void aocs_task(void *param)
 
 void obsw_aocs_task_init(void)
 {
-    obsw_bdot_config_t bdot_cfg = {.gain = 1.0e4f, .max_dipole = 10.0f};
+    obsw_bdot_config_t bdot_cfg = {.gain = 1.0e4f, .max_dipole = 10.0f, .hpf_tau = 30.0f};
     obsw_bdot_init(&s_bdot, &bdot_cfg);
 
     obsw_adcs_config_t adcs_cfg = {.kp = 0.5f, .kd = 0.1f, .max_torque = 0.01f};

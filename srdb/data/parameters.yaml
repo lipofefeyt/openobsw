@@ -192,6 +192,17 @@ parameters:
     subsystem: AOCS/Control
     unit: 'Am2.s/T'
 
+  - id: 0x20A3
+    name: bdot_hpf_tau
+    description: "B-dot HPF time constant τ [s] — first-order high-pass filter that rejects orbital-rate dB/dt while passing attitude-rate dB/dt. Set to 0 to disable. Typical: 30 s."
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Control
+    unit: s
+    limits:
+      soft_low: 0.0
+
   - id: 0x20A1
     name: adcs_kp
     description: "ADCS PD proportional gain Kp (τ = -Kp*q_err_vec - Kd*ω)"
