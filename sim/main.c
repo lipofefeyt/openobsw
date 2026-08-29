@@ -227,6 +227,7 @@ static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,     .value = {.u32 = 0}},
     {.param_id = SRDB_PARAM_WATCHDOG_TICKS_REMAINING,.value = {.u32 = 30}},
     {.param_id = SRDB_PARAM_BDOT_GAIN,               .value = {.f32 = 1.0e4f}},
+    {.param_id = SRDB_PARAM_BDOT_HPF_TAU,            .value = {.f32 = 15.0f}},
     {.param_id = SRDB_PARAM_ADCS_KP,                 .value = {.f32 = 0.5f}},
     {.param_id = SRDB_PARAM_ADCS_KD,                 .value = {.f32 = 0.1f}},
     /* Orbit and dynamics configuration (#68) — readable via TC(20,3) */
@@ -458,7 +459,7 @@ int main(void)
     obsw_bdot_config_t bdot_cfg = {
         .gain       = 1.0e4f,
         .max_dipole = 10.0f,
-        .hpf_tau    = s20_get_f32(SRDB_PARAM_BDOT_HPF_TAU, 30.0f),
+        .hpf_tau    = s20_get_f32(SRDB_PARAM_BDOT_HPF_TAU, 15.0f),
     };
     obsw_bdot_init(&bdot_ctx, &bdot_cfg);
 
@@ -519,7 +520,7 @@ int main(void)
                 adcs_ctx.config.kd          = s20_get_f32(SRDB_PARAM_ADCS_KD,        0.1f);
                 bdot_ctx.config.gain        = s20_get_f32(SRDB_PARAM_BDOT_GAIN,      1.0e4f);
                 bdot_ctx.config.max_dipole  = s20_get_f32(SRDB_PARAM_MTQ_MAX_DIPOLE, 10.0f);
-                bdot_ctx.config.hpf_tau     = s20_get_f32(SRDB_PARAM_BDOT_HPF_TAU,   30.0f);
+                bdot_ctx.config.hpf_tau     = s20_get_f32(SRDB_PARAM_BDOT_HPF_TAU,   15.0f);
 
                 if (cur_mode == OBSW_FSM_NOMINAL && sensor.st_valid && sensor.gyro_valid) {
                     /* Update nadir target from orbital parameters (runtime-tunable via S20) */
