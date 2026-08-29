@@ -466,6 +466,48 @@ void lcd_slpout_dispon_yield(void)
     lcd_cmd(ST_DISPON);
     vTaskDelay(pdMS_TO_TICKS(100));
 }
+
+/* Faster variant for periodic keepalive after a PS-reset SLPIN.
+ * Uses 10 ms after SLPOUT (vs 120 ms) because the oscillator was only
+ * briefly interrupted by the supply transient — it does not need the full
+ * cold-start settling time.  No trailing delay after DISPON; GRAM content
+ * is visible immediately.  Period must be < PS-fire delay (~250 ms). */
+void lcd_slpout_dispon_fast(void)
+{
+    lcd_cmd(ST_SLPOUT);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    lcd_cmd(ST_FRMCTR1); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_cmd(ST_FRMCTR2); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_cmd(ST_FRMCTR3);
+    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
+
+    lcd_cmd(ST_INVCTR);  lcd_data1(0x07);
+
+    lcd_cmd(ST_PWCTR1);  lcd_data1(0xA2); lcd_data1(0x02); lcd_data1(0x84);
+    lcd_cmd(ST_PWCTR2);  lcd_data1(0xC5);
+    lcd_cmd(ST_PWCTR3);  lcd_data1(0x0A); lcd_data1(0x00);
+    lcd_cmd(ST_PWCTR4);  lcd_data1(0x8A); lcd_data1(0x2A);
+    lcd_cmd(ST_PWCTR5);  lcd_data1(0x8A); lcd_data1(0xEE);
+    lcd_cmd(ST_VMCTR1);  lcd_data1(0x0E);
+
+    lcd_cmd(ST_COLMOD);  lcd_data1(0x05);
+    lcd_cmd(ST_MADCTL);  lcd_data1(0x78);
+    lcd_cmd(ST_INVON);
+
+    lcd_cmd(ST_GMCTRP1);
+    { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
+                            0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10};
+      lcd_data(g, 16); }
+    lcd_cmd(ST_GMCTRN1);
+    { const uint8_t g[] = {0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,
+                            0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10};
+      lcd_data(g, 16); }
+
+    lcd_cmd(ST_NORON);
+    lcd_cmd(ST_DISPON);
+}
 #endif /* OBSW_FREERTOS */
 
 void lcd_draw_char(uint16_t x, uint16_t y, char ch, uint16_t fg, uint16_t bg)

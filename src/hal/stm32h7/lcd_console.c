@@ -127,10 +127,9 @@ void lcd_console_init(void)
     g_row = 0;
     g_col = 0;
     memset(g_buf, ' ', sizeof(g_buf));
-    /* No full-screen lcd_clear here — a 25 600-byte SPI burst triggers the
-     * ST7735R power supervisor reset on the WeAct board.  Character cells
-     * are always drawn with both fg and bg pixels, so no prior clear is
-     * needed; unwritten rows show whatever GRAM held after lcd_init(). */
+    /* No SPI writes here — lcd_init() clears GRAM to black before FreeRTOS
+     * starts, so unwritten rows stay clean.  Back-to-back character draws
+     * here (~25 kB of SPI) re-trigger the ST7735R power supervisor. */
 }
 
 void lcd_console_clear(void)

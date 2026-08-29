@@ -22,6 +22,9 @@ static StackType_t       aocs_stack[AOCS_STACK_DEPTH];
 static obsw_bdot_ctx_t   s_bdot;
 static obsw_adcs_ctx_t   s_adcs;
 
+/* HK state — written each tick, read by FDIR task for S3 TM(3,25) reports. */
+static obsw_aocs_hk_t    s_hk;
+
 static void aocs_task(void *param)
 {
     (void)param;
@@ -61,6 +64,14 @@ static void aocs_task(void *param)
         bool  mag_valid        = false;
 #endif
 
+        /* Update shared HK state — each field is a single 32-bit write,
+         * atomic on Cortex-M7.  mag_valid is written last so the reader
+         * (FDIR S3 tick) always sees consistent data when valid=1. */
+        s_hk.mag_x     = b[0];
+        s_hk.mag_y     = b[1];
+        s_hk.mag_z     = b[2];
+        s_hk.mag_valid = (uint8_t)mag_valid;
+
         /* ---- Control law selection ---- */
         if (mode == OBSW_FSM_NOMINAL && st_valid && gyro_valid) {
             obsw_adcs_output_t out;
@@ -69,9 +80,12 @@ static void aocs_task(void *param)
         } else if (mode == OBSW_FSM_SAFE && mag_valid) {
             obsw_bdot_output_t out;
             obsw_bdot_step(&s_bdot, b, AOCS_DT_S, &out);
+            s_hk.m_cmd_x = out.m_cmd[0];
+            s_hk.m_cmd_y = out.m_cmd[1];
+            s_hk.m_cmd_z = out.m_cmd[2];
             /* TODO: write out.m_cmd to MTQ driver */
         }
-        /* No valid sensors → actuators hold last command (safe by zero-init) */
+        /* No valid sensors → m_cmd holds last command (safe by zero-init) */
     }
 }
 
@@ -89,4 +103,9 @@ void obsw_aocs_task_init(void)
 
     xTaskCreateStatic(aocs_task, "AOCS", AOCS_STACK_DEPTH,
                       NULL, AOCS_PRIORITY, aocs_stack, &aocs_tcb);
+}
+
+const obsw_aocs_hk_t *obsw_aocs_get_hk(void)
+{
+    return &s_hk;
 }
