@@ -143,3 +143,62 @@ class SRDBComposer:
                 "SRDB composition cross-reference errors:\n"
                 + "\n".join(f"  - {item}" for item in missing)
             )
+
+
+class SRDBMaterializer:
+    """Write a complete SRDB object as a normal loader-compatible data directory."""
+
+    @classmethod
+    def write(cls, srdb: SRDB, output_dir: str | Path) -> Path:
+        root = Path(output_dir)
+        if root.exists() and not root.is_dir():
+            raise SRDBCompositionError(f"SRDB output path is not a directory: {root}")
+        root.mkdir(parents=True, exist_ok=True)
+
+        documents = {
+            "spacecraft.yaml": {
+                "spacecraft": srdb.spacecraft.model_dump(mode="json", exclude_none=True)
+            },
+            "parameters.yaml": {
+                "parameters": [
+                    item.model_dump(mode="json", exclude_none=True)
+                    for item in srdb.parameters
+                ]
+            },
+            "telecommands.yaml": {
+                "telecommands": [
+                    item.model_dump(mode="json", exclude_none=True)
+                    for item in srdb.telecommands
+                ]
+            },
+            "hk_sets.yaml": {
+                "hk_sets": [
+                    item.model_dump(mode="json", exclude_none=True)
+                    for item in srdb.hk_sets
+                ]
+            },
+            "events.yaml": {
+                "events": [
+                    item.model_dump(mode="json", exclude_none=True)
+                    for item in srdb.events
+                ]
+            },
+        }
+
+        for filename, payload in documents.items():
+            (root / filename).write_text(
+                yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+
+        # Round-trip through the canonical target loader before declaring the
+        # materialized directory valid. Import locally to keep loader ownership
+        # separate and avoid a module-level dependency cycle.
+        from .loader import SRDBLoader
+
+        reloaded = SRDBLoader.load(root)
+        if reloaded.model_dump(mode="json") != srdb.model_dump(mode="json"):
+            raise SRDBCompositionError(
+                "Materialized SRDB does not round-trip to the same logical target model"
+            )
+        return root

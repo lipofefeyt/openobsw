@@ -5,6 +5,7 @@ from .composition import (
     SRDBCompositionError,
     SRDBContribution,
     SRDBContributionLoader,
+    SRDBMaterializer,
 )
 from .loader import SRDBLoader, SRDBValidationError
 from .model import (
@@ -25,6 +26,7 @@ __all__ = [
     "SRDBCompositionError",
     "SRDBContribution",
     "SRDBContributionLoader",
+    "SRDBMaterializer",
     "SRDB",
     "Event",
     "HKSet",
