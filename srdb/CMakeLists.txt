@@ -12,14 +12,42 @@
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-set(SRDB_PKG_DIR    "${CMAKE_CURRENT_SOURCE_DIR}")
-set(SRDB_DATA_DIR   "${CMAKE_CURRENT_SOURCE_DIR}/data")
+set(SRDB_PKG_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(
+    SRDB_DATA_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/data"
+    CACHE PATH
+    "Complete SRDB data directory used by native OpenOBSW code generation"
+)
+get_filename_component(
+    SRDB_DATA_DIR
+    "${SRDB_DATA_DIR}"
+    ABSOLUTE
+    BASE_DIR "${CMAKE_SOURCE_DIR}"
+)
+
+foreach(_required_srdb_file
+        spacecraft.yaml
+        parameters.yaml
+        telecommands.yaml
+        hk_sets.yaml
+        events.yaml)
+    if(NOT EXISTS "${SRDB_DATA_DIR}/${_required_srdb_file}")
+        message(
+            FATAL_ERROR
+            "Required SRDB input file not found: ${SRDB_DATA_DIR}/${_required_srdb_file}"
+        )
+    endif()
+endforeach()
+
+message(STATUS "OpenOBSW SRDB data directory: ${SRDB_DATA_DIR}")
+
 set(SRDB_GENERATED_DIR "${CMAKE_BINARY_DIR}/include/obsw")
 set(SRDB_GENERATED_H   "${SRDB_GENERATED_DIR}/srdb_generated.h")
-set(SRDB_XTCE_DIR   "${CMAKE_BINARY_DIR}/xtce")
-set(SRDB_XTCE_FILE  "${SRDB_XTCE_DIR}/mission.xtce")
+set(SRDB_XTCE_DIR      "${CMAKE_BINARY_DIR}/xtce")
+set(SRDB_XTCE_FILE     "${SRDB_XTCE_DIR}/mission.xtce")
 
-file(GLOB SRDB_YAML_FILES "${SRDB_DATA_DIR}/*.yaml")
+file(GLOB SRDB_YAML_FILES CONFIGURE_DEPENDS "${SRDB_DATA_DIR}/*.yaml")
 
 set(_SRDB_CODEGEN_DEPS
     ${SRDB_YAML_FILES}
