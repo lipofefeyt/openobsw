@@ -74,7 +74,7 @@ add_test(NAME s5_fdir COMMAND test_s5_fdir)
 # v0.5 — AOCS (including bdot)
 
 add_executable(test_bdot unit/test_bdot.c)
-target_link_libraries(test_bdot PRIVATE obsw unity)
+target_link_libraries(test_bdot PRIVATE obsw unity m)
 target_compile_options(test_bdot PRIVATE ${TEST_SUPPRESS})
 add_test(NAME bdot COMMAND test_bdot)
 
