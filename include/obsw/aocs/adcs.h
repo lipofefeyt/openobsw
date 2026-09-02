@@ -7,8 +7,11 @@
  *   - Rate:     angular velocity from gyro
  *   - Control:  PD controller on error quaternion → RW torque commands
  *
- * Error quaternion (multiplicative):
- *   q_err = q_cmd ⊗ q_meas*    (q_meas* = conjugate)
+ * Error quaternion (multiplicative, body-to-ECI convention):
+ *   q_err = q_cmd* ⊗ q_meas    (q_cmd* = conjugate of target)
+ *
+ * This expresses the error in the TARGET body frame so that
+ * q_err_vec points in the body-frame direction of the needed rotation.
  *
  * PD torque command:
  *   τ_cmd = -Kp * q_err_vec - Kd * ω

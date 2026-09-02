@@ -439,28 +439,243 @@ Each handler must:
 
 ---
 
-## OpenSVF integration (v0.5)
+## AOCS subsystem
 
-openobsw is the reference OBSW target for
-[OpenSVF](https://github.com/lipofefeyt/opensvf).
-The integration path:
+Two control laws are implemented. The active law is determined by the Mode
+Manager FSM state; the host sim (`sim/main.c`) and bare-metal targets gate
+actuator output accordingly.
 
-```mermaid
-flowchart TD
-    A([openobsw binary]) --> B[Renode emulator]
-    B <-->|DDS lockstep| C[Sentinel peripheral\nmemory-mapped]
-    C --> D[OBCEmulatorAdapter\nimplements ModelAdapter]
-    D --> E[OpenSVF SimulationMaster]
-    E --> F[Reaction Wheel model]
-    E --> G[Star Tracker model]
-    E --> H[PCDU model]
-    E --> I[S-Band Transponder model]
+| FSM state | Control law | Sensors required | Actuators |
+|---|---|---|---|
+| STANDBY | Off — zero actuator output | — | — |
+| SAFE | B-dot (`aocs/bdot.c`) | Magnetometer | Magnetorquers |
+| NOMINAL | PD quaternion (`aocs/adcs.c`) | Star tracker + gyroscope | Reaction wheels |
+
+### B-dot controller — `aocs/bdot.h`
+
+Implements the classic B-dot detumbling law:
+
+```
+m_cmd = −k · dB/dt
 ```
 
-The three deferred OpenSVF requirements that gate this integration are:
-- `SVF-DEV-029` — CCSDS adapter
-- `SVF-DEV-034` — ParameterStoreDdsBridge
-- `SVF-DEV-037` — PUS command adapter
+`dB/dt` is estimated via first-order finite difference across successive
+magnetometer readings. On the first call the controller has no prior sample
+and outputs zero. Dipole commands are saturated at `config.max_dipole`.
+
+```c
+obsw_bdot_config_t cfg = { .gain = 1.0e4f, .max_dipole = 10.0f };
+obsw_bdot_init(&ctx, &cfg);
+obsw_bdot_step(&ctx, b_body, dt, &out);   /* out.m_cmd [Am²] */
+```
+
+The gain `k` is runtime-tunable via `SRDB_PARAM_BDOT_GAIN` (0x20A0).
+
+### PD ADCS controller — `aocs/adcs.h`
+
+Quaternion-error PD controller:
+
+```
+τ_cmd = −Kp · q_err_vec − Kd · ω
+```
+
+where `q_err_vec` is the vector part of the attitude error quaternion (body
+to reference frame) and `ω` is the angular velocity from the gyroscope.
+Torque commands are saturated at `config.max_torque`.
+
+```c
+obsw_adcs_config_t cfg = { .kp = 0.5f, .kd = 0.1f, .max_torque = 0.01f };
+obsw_adcs_init(&ctx, &cfg);
+obsw_adcs_step(&ctx, &q_meas, omega, &out);   /* out.torque_cmd [N·m] */
+```
+
+Gains `Kp` and `Kd` are runtime-tunable via `SRDB_PARAM_ADCS_KP` (0x20A1)
+and `SRDB_PARAM_ADCS_KD` (0x20A2).
+
+### Mode gating in the host sim
+
+The mode gate in `sim/main.c` uses `obsw_fsm_mode()` (three-state–aware):
+
+```c
+obsw_fsm_mode_t mode = obsw_fsm_mode(&fsm_ctx);
+
+if (mode == OBSW_FSM_NOMINAL && sensor.st_valid && sensor.gyro_valid)
+    /* PD ADCS → reaction wheel torques */
+else if (mode == OBSW_FSM_SAFE && sensor.mag_valid)
+    /* B-dot → magnetorquer dipoles */
+/* else: STANDBY or no valid sensors → zero actuator output */
+```
+
+---
+
+## Wire protocol v3 — host sim and opensvf-kde boundary
+
+The host sim speaks a simple length-prefixed frame protocol over stdin/stdout.
+The same protocol is used by any external harness (`sim/bdot_harness.py`,
+opensvf-kde) connecting to the sim as a co-process.
+
+### Frame format
+
+```
+→ OBSW  0x01 [uint16 BE len] [TC space packet bytes]    TC uplink
+→ OBSW  0x02 [uint16 BE len] [obsw_sensor_frame_t]      Sensor injection
+← OBSW  0x03 [uint16 BE len] [obsw_actuator_frame_t]    Actuator output
+← OBSW  0x04 [uint16 BE len] [TM space packet bytes]    TM downlink
+← OBSW  0xFF                                             End-of-tick
+```
+
+After each TC frame (0x01), the sim emits any resulting TM packets (0x04)
+then an EOT byte (0xFF). After each sensor frame (0x02), the sim emits any
+TM packets generated during the tick, the actuator frame (0x03), then EOT.
+
+### Sensor frame — `obsw_sensor_frame_t`
+
+47 bytes, packed little-endian. Python struct format: `<fffBffffBfffBf`.
+
+| Field | Type | Unit | Notes |
+|---|---|---|---|
+| `mag_x / y / z` | float32 | T | Magnetometer, body frame |
+| `mag_valid` | uint8 | — | 1 = valid measurement |
+| `st_q_w / x / y / z` | float32 | — | Star tracker quaternion, body→ECI |
+| `st_valid` | uint8 | — | 1 = valid |
+| `gyro_x / y / z` | float32 | rad/s | Gyroscope, body frame |
+| `gyro_valid` | uint8 | — | 1 = valid |
+| `sim_time` | float32 | s | Simulation clock; used to compute dt |
+
+### Actuator frame — `obsw_actuator_frame_t`
+
+29 bytes, packed little-endian. Python struct format: `<ffffffBf`.
+
+| Field | Type | Unit | Notes |
+|---|---|---|---|
+| `mtq_dipole_x / y / z` | float32 | Am² | Magnetorquer dipole commands |
+| `rw_torque_x / y / z` | float32 | N·m | Reaction wheel torque commands |
+| `controller` | uint8 | — | 0 = B-dot, 1 = PD ADCS |
+| `sim_time` | float32 | s | Echo of sensor frame sim_time |
+
+---
+
+## B-dot convergence harness — `sim/bdot_harness.py`
+
+A closed-loop convergence test that exercises the full SAFE-mode control path
+without Renode. It drives `obsw_sim` as a subprocess via wire protocol v3.
+
+**Physics model:**
+- Circular SSO orbit at 550 km, inclination 97.4°
+- Geocentric dipole B-field: `B = (B₀Rₑ³/r³)(3(m̂·r̂)r̂ − m̂)`, m̂ = −ẑ
+- Rigid-body spacecraft dynamics: Euler equations `I·ω̇ = τ − ω × (I·ω)`
+- Quaternion kinematics: `q̇ = ½ q ⊗ [0, ω]`, first-order integration
+
+**Convergence criterion:** |ω| < 0.05 rad/s within 3 orbital periods (~17 190 s)
+
+**Reference result:** detumbles from |ω|=0.866 rad/s in **2533 s (0.44 periods)**
+
+```bash
+source .venv/bin/activate
+python3 sim/bdot_harness.py               # default: 550km SSO, ω₀=[0.5,0.5,0.5] rad/s
+python3 sim/bdot_harness.py --max-periods 5 --omega0 1 1 1   # higher tumble
+bdot-harness                              # alias in activate.sh
+```
+
+This harness is also the reference integration prototype for opensvf-kde
+(see [OpenSVF integration](#opensvf-integration-v012) below).
+
+---
+
+## SRDB parameter map
+
+Parameters are addressed by a 16-bit ID. Ranges in use:
+
+| Range | Subsystem | Examples |
+|---|---|---|
+| `0x0001–0x000F` | OBC thermal & power | `obc_temperature`, `obc_voltage_3v3` |
+| `0x0004–0x0007` | OBC uptime & FDIR | `obc_uptime`, `watchdog_kick_count` |
+| `0x20A0–0x20A2` | AOCS gains (S20-tunable) | `bdot_gain`, `adcs_kp`, `adcs_kd` |
+| `0x3001–0x3032` | Orbit / dynamics config | `orbit_altitude_km`, `sc_inertia_xx`, `sc_omega_x0` |
+| `0x4001–0x400A` | DHS OBC HK (opensvf) | `obc_mode`, `obc_obt`, `obc_health` |
+
+HK sets in use:
+
+| id | Name | SPID | Contents |
+|---|---|---|---|
+| 1 | `nominal_hk` | 1001 | OBC thermal, power, uptime |
+| 2 | `fdir_hk` | 1002 | Safe-mode count, watchdog stats |
+| 3 | `dhs_obc_hk` | 1003 | Mode, OBT, watchdog, health (opensvf) |
+| 4 | `aocs_hk` | 1004 | B-dot / ADCS gains |
+| 5 | `aocs_orbit_hk` | 1005 | Orbit config, inertia, MTQ limits |
+
+---
+
+## OpenSVF integration (v0.12)
+
+openobsw is the reference OBSW target for
+[OpenSVF](https://github.com/lipofefeyt/opensvf) and the companion
+**opensvf-kde** plant simulator.
+
+### Responsibilities
+
+| Component | Owns |
+|---|---|
+| openobsw | Control laws (B-dot, PD ADCS), PUS command interface, mode FSM |
+| opensvf-kde | Plant model (orbital mechanics, IGRF field, rigid-body dynamics) |
+
+The boundary is **wire protocol v3** — the sensor/actuator frame pair
+described in the section above. opensvf-kde runs as a co-process, injects
+sensor frames (0x02) each tick, and reads back actuator commands (0x03).
+
+### Integration diagram
+
+```mermaid
+flowchart LR
+    subgraph "opensvf-kde (Python)"
+        ORB[Orbital propagator\nSSO / J2] --> IGRF[IGRF B-field]
+        IGRF --> SF[Sensor frame\ntype 0x02]
+        AF[Actuator frame\ntype 0x03] --> DYN[Rigid-body dynamics\nEuler + quaternion]
+        DYN --> ORB
+    end
+    subgraph "openobsw (host sim)"
+        SF -->|stdin| SIM[obsw_sim\nwire protocol v3]
+        SIM -->|stdout| AF
+        SIM --> MODE[Mode Manager\nFSM gate]
+        MODE --> BDOT[B-dot / PD ADCS]
+        BDOT --> AF
+    end
+```
+
+### Spacecraft configuration contract
+
+opensvf-kde reads spacecraft parameters from the OBSW S20 store via TC(20,3)
+at startup. The OBSW holds authoritative defaults; the harness overrides if
+needed via TC(20,1).
+
+| SRDB ID | Parameter | Default |
+|---|---|---|
+| 0x3001 | `orbit_altitude_km` | 550.0 km |
+| 0x3002 | `orbit_inclination_deg` | 97.4° |
+| 0x3010 | `sc_inertia_xx` | 2.0×10⁻³ kg·m² |
+| 0x3011 | `sc_inertia_yy` | 2.5×10⁻³ kg·m² |
+| 0x3012 | `sc_inertia_zz` | 1.5×10⁻³ kg·m² |
+| 0x3020 | `mtq_max_dipole` | 10.0 Am² |
+| 0x3030–32 | `sc_omega_{x,y,z}0` | [0.5, 0.5, 0.5] rad/s |
+
+### Reference scenario — SAFE-mode detumbling
+
+Validated by `sim/bdot_harness.py` (see [B-dot harness](#b-dot-convergence-harness----simbdot_harnesspy)):
+
+- Initial tumble: |ω₀| = 0.866 rad/s
+- Converges to |ω| < 0.05 rad/s at **t = 2533 s (0.44 orbital periods)**
+- Limit: 3 orbital periods (17 190 s)
+
+### Roadmap to full opensvf-kde integration
+
+1. **Done (v0.12):** Wire protocol contract, SRDB spacecraft config params,
+   reference B-dot harness with SSO / dipole B-field
+2. **Next:** Read config from OBSW via TC(20,3) at harness startup rather
+   than CLI defaults
+3. **Then:** NOMINAL mode scenario — PD ADCS pointing convergence test
+   (inject star tracker + gyro, measure quaternion error)
+4. **Later:** J2 perturbation, eclipse model (B = 0 in umbra), Monte-Carlo
+   runs over initial tumble distribution
 
 ---
 

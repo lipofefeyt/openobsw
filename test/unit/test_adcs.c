@@ -119,8 +119,8 @@ void test_attitude_error_drives_torque(void)
 
     obsw_adcs_step(&ctx, &q_meas, omega, &out);
 
-    /* Error should drive torque on Z axis */
-    TEST_ASSERT_TRUE(fabsf(out.torque_cmd[2]) > 0.1f);
+    /* Error should drive NEGATIVE torque on Z (opposing the +90° rotation) */
+    TEST_ASSERT_TRUE(out.torque_cmd[2] < -0.1f);
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, out.torque_cmd[0]);
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, out.torque_cmd[1]);
     /* Angle error ≈ 90° = π/2 */
