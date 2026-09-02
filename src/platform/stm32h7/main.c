@@ -201,6 +201,26 @@ static void system_clock_init(void)
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
 
+ #ifndef OBSW_RENODE
+     /* Print reset source from RCC_RSR so we can tell if the board is BOR- or
+      * IWDG-cycling.  STM32H750 RCC base 0x58024400, RSR offset 0x0D0.
+      * Key bits: 20=POR, 21=PIN(NRST), 22=BOR, 23=SFT, 24=IWDG, 26=WWDG, 29=LP */
+ #define RCC_RSR (*(volatile uint32_t *)(0x58024400UL + 0x0D0U))
+     {
+         uint32_t rsr = RCC_RSR;
+         /* Clear flags for next boot */
+         RCC_RSR = rsr | (1U << 16);   /* RMVF bit clears all reset flags */
+         const char *rsrc =
+             (rsr & (1U << 24)) ? "[OBSW] Reset: IWDG\r\n" :
+             (rsr & (1U << 22)) ? "[OBSW] Reset: BOR (supply)\r\n" :
+             (rsr & (1U << 23)) ? "[OBSW] Reset: Software\r\n" :
+             (rsr & (1U << 21)) ? "[OBSW] Reset: NRST pin\r\n" :
+             (rsr & (1U << 20)) ? "[OBSW] Reset: POR (power-on)\r\n" :
+                                  "[OBSW] Reset: unknown\r\n";
+         uart_write_buf((const uint8_t *)rsrc, (uint16_t)__builtin_strlen(rsrc));
+     }
+ #endif
+
  /* SPI4 init is fast (register config only); LCD init is deferred to the
   * FDIR task's first tick so FreeRTOS — and the TMTC task — start without
   * a 400 ms blocking delay.  Without this deferral the UART FIFO fills

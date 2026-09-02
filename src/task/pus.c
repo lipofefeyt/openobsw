@@ -17,8 +17,10 @@
 #include "obsw/task/pus.h"
 #include "obsw/task/mode.h"
 #include "obsw/task/tmtc.h"
+#include "obsw/task/fdir.h"
 #include "obsw/pus/pus_tm.h"
 #include "obsw/pus/s1.h"
+#include "obsw/pus/s3.h"
 #include "obsw/pus/s8.h"
 #include "obsw/pus/s17.h"
 #include "obsw/pus/s20.h"
@@ -85,7 +87,12 @@ static obsw_s8_entry_t s8_table[] = {
     {.function_id = OBSW_S8_FN_REQUEST_STANDBY, .fn = fn_request_standby, .ctx = NULL},
 };
 
+/* S3 route ctx pointers are filled in at init time from obsw_fdir_get_s3_ctx(). */
 static obsw_tc_route_t s_routes[] = {
+    {.apid = 0xFFFF, .service = 3,  .subservice = 5,
+     .handler = obsw_s3_enable,  .ctx = NULL},  /* patched in pus_task_init */
+    {.apid = 0xFFFF, .service = 3,  .subservice = 6,
+     .handler = obsw_s3_disable, .ctx = NULL},  /* patched in pus_task_init */
     {.apid = 0xFFFF, .service = 8,  .subservice = 1,
      .handler = obsw_s8_perform, .ctx = &s8_ctx},
     {.apid = 0xFFFF, .service = 17, .subservice = 1,
@@ -182,6 +189,13 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
     s8_ctx.apid       = SRDB_APID_DEFAULT;
     s8_ctx.table      = s8_table;
     s8_ctx.table_len  = sizeof(s8_table) / sizeof(s8_table[0]);
+
+    /* S3 — owned by FDIR task (ticked there); PUS patches the s1 pointer so
+     * TC(3,5)/(3,6) generate S1 acceptance/completion TM, then registers routes. */
+    obsw_s3_ctx_t *s3 = obsw_fdir_get_s3_ctx();
+    s3->s1 = &s1_ctx;
+    s_routes[0].ctx = s3;   /* TC(3,5) enable  */
+    s_routes[1].ctx = s3;   /* TC(3,6) disable */
 
     obsw_tc_dispatcher_init(&s_dispatcher,
                              s_routes,
