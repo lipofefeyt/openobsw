@@ -78,9 +78,13 @@ bool obsw_adcs_step(obsw_adcs_ctx_t *ctx,
     if (!obsw_quat_normalise(&q_m))
         return false;
 
-    /* Error quaternion: q_err = q_cmd ⊗ q_meas* */
-    obsw_quat_t q_mc  = obsw_quat_conjugate(&q_m);
-    obsw_quat_t q_err = obsw_quat_multiply(&ctx->q_cmd, &q_mc);
+    /* Error quaternion: q_err = q_cmd* ⊗ q_meas  (body-to-ECI convention).
+     * Gives q_err_vec in the TARGET body frame.  For any target q_cmd:
+     *   q_cmd* ⊗ (q_cmd ⊗ q_body_err) = q_body_err
+     * so the error is always expressed in body coordinates, and
+     * τ = -Kp·q_err_vec correctly opposes it regardless of the target. */
+    obsw_quat_t q_cmd_c = obsw_quat_conjugate(&ctx->q_cmd);
+    obsw_quat_t q_err   = obsw_quat_multiply(&q_cmd_c, &q_m);
     obsw_quat_normalise(&q_err);
 
     /* Ensure short-path rotation (w >= 0) */

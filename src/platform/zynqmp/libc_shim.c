@@ -2,8 +2,9 @@
  * @file libc_shim.c
  * @brief Minimal libc replacements for ZynqMP bare-metal.
  *
- * Provides memcpy, memset, strlen, sqrtf, acosf and errno stub.
- * No system headers — intentional reimplementation for bare-metal.
+ * Provides memcpy, memset, strlen, sqrtf and errno stub.
+ * acosf/sinf/cosf come from newlib libm (linked via -lm in CMakeLists).
+ * No system headers - intentional reimplementation for bare-metal.
  */
 
 /* Suppress missing-prototype warnings — intentional reimplementation */
@@ -20,7 +21,6 @@ size_t strlen(const char *s);
 int   *__errno(void);
 float  sqrtf(float x);
 double sqrt(double x);
-float  acosf(float x);
 
 /* ------------------------------------------------------------------ */
 
@@ -53,4 +53,3 @@ int *__errno(void) { return &_errno_val; }
 /* Math via compiler builtins — no libm needed */
 float  sqrtf(float x)  { return __builtin_sqrtf(x); }
 double sqrt(double x)  { return __builtin_sqrt(x);  }
-float  acosf(float x)  { return __builtin_acosf(x); }

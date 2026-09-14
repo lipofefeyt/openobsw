@@ -33,12 +33,11 @@
 #define PUS_STACK_DEPTH 512U
 #define PUS_PRIORITY    3U   /* Med-high — TC processing */
 
-/* Byte offsets in raw TC frame for FSM gate check.
- * TC transfer frame header (5) + space packet primary header (6) +
- * PUS secondary header version/ack byte (1) = service at byte 12. */
-#define FRAME_SVC_OFFSET    12U
-#define FRAME_SUBSVC_OFFSET 13U
-#define FRAME_GATE_MIN_LEN  14U
+/* Byte offsets in a raw CCSDS space packet (wire protocol v3 carries no TC
+ * frame wrapper): [0-5] primary header, [6] PUS ver+ack, [7] service, [8] subsvc. */
+#define SP_SVC_OFFSET    7U
+#define SP_SUBSVC_OFFSET 8U
+#define SP_GATE_MIN_LEN  9U
 
 /* ── PUS service state ────────────────────────────────────────────── */
 
@@ -125,12 +124,23 @@ static void pus_task(void *param)
         if (xQueueReceive(s_tc_queue, &item, portMAX_DELAY) != pdTRUE)
             continue;
 
-        /* FSM TC gate: drop non-whitelisted TCs in SAFE/STANDBY. */
-        if (item.len >= FRAME_GATE_MIN_LEN &&
+        /* FSM TC gate: reject non-whitelisted TCs in SAFE/STANDBY. */
+        if (item.len >= SP_GATE_MIN_LEN &&
             !obsw_fsm_tc_allowed(obsw_mode_get_fsm(),
-                                 item.data[FRAME_SVC_OFFSET],
-                                 item.data[FRAME_SUBSVC_OFFSET])) {
-            continue; /* silently drop — ground detects missing S1(1,1) */
+                                 item.data[SP_SVC_OFFSET],
+                                 item.data[SP_SUBSVC_OFFSET])) {
+            /* TM(1,2) — ground needs to know the TC was mode-gated. */
+            obsw_tc_t rej = {
+                .apid       = (uint16_t)(((uint16_t)(item.data[0] & 0x07U) << 8) | item.data[1]),
+                .seq_count  = (uint16_t)(((uint16_t)(item.data[2] & 0x3FU) << 8) | item.data[3]),
+                .service    = item.data[SP_SVC_OFFSET],
+                .subservice = item.data[SP_SUBSVC_OFFSET],
+                .user_data  = NULL,
+                .user_data_len = 0,
+            };
+            obsw_s1_accept_failure(&s1_ctx, &rej, 0x0001);
+            xTaskNotify(s_tmtc_handle, 0, eNoAction);
+            continue;
         }
 
         obsw_tc_dispatcher_feed(&s_dispatcher, item.data, item.len);

@@ -131,7 +131,6 @@ void lcd_console_init(void)
      * ST7735R power supervisor reset on the WeAct board.  Character cells
      * are always drawn with both fg and bg pixels, so no prior clear is
      * needed; unwritten rows show whatever GRAM held after lcd_init(). */
-    lcd_console_set_status("FDIR starting...", LCD_BLACK, LCD_GREY);
 }
 
 void lcd_console_clear(void)

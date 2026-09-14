@@ -278,7 +278,7 @@ class TestDHSOBCHKSet:
         assert p is not None
         assert p.enumeration is not None
         labels = {e.label for e in p.enumeration}
-        assert {"SAFE", "NOMINAL", "PAYLOAD"} == labels
+        assert {"STANDBY", "SAFE", "NOMINAL"} == labels
 
     def test_obc_health_is_enumerated(self, srdb):
         p = srdb.parameter_by_name("obc_health")

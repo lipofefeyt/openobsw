@@ -36,6 +36,7 @@
  #ifndef OBSW_RENODE
  #include "obsw/hal/stm32h7/spi.h"
  #include "obsw/hal/stm32h7/lcd.h"
+ #include "obsw/hal/stm32h7/i2c.h"
  #endif
 
  #include <stdint.h>
@@ -209,6 +210,7 @@ static void system_clock_init(void)
   * FreeRTOS startup current spike and the subsequent FDIR lcd_init() re-run.
   * Toggling BL from the FDIR task would fire the ST7735R power supervisor. */
  #ifndef OBSW_RENODE
+     obsw_i2c1_init();
      obsw_spi4_init();
      lcd_init();           /* cold init with SWRESET — safe here before FreeRTOS starts;
                             * the PS fires during scheduler startup and resets ALL panel

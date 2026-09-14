@@ -306,8 +306,7 @@ stub (`platform/stm32h7/errno_stub.c`) because newlib-nano does not provide it.
 |---|---|---|
 | TC/TM end-to-end ping from CP2102 | v0.8 #49 | `tools/ping_uart.py` in progress; TM response debugging ongoing |
 | S3 housekeeping (FreeRTOS path) | v0.8 #51 | PUS task has S1/S8/S17/S20 but not S3; needs FreeRTOS software timers |
-| I2C HAL (`obsw_i2c_ops_t`) | v0.10 #37 | Not yet implemented |
-| QMC5883L magnetometer driver | v0.10 #38 | Hardware owned; stubs return `mag_valid = false` |
+| ICM-42688 / MPU-6050 gyroscope driver | v0.10 #53 | Hardware not yet owned; `gyro_valid` remains false |
 | ICM-42688 gyroscope driver | v0.10 #53 | Not yet implemented |
 | INA219 power monitor | v0.10 #39 | Not yet implemented |
 | MTQ / RW actuator output | v0.10 | AOCS computes commands but does not write to hardware |

@@ -17,6 +17,7 @@
 #include "orbitfabric_contract_adapter.h"
 #endif
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -121,6 +122,16 @@ static obsw_s3_param_t aocs_hk_params[] = {
     {.ptr = hk_adcs_kd_be,   .size = OBSW_S3_PARAM_U32},
 };
 
+/* AOCS state HK (set_id=6): live attitude state as big-endian IEEE 754 */
+static uint8_t  hk_aocs_err_be[4]   = {0};  /* aocs_angle_err_rad */
+static uint8_t  hk_aocs_omega_be[4] = {0};  /* aocs_omega_mag     */
+static uint8_t  hk_aocs_ctrl        = 0;    /* aocs_controller: 0=off,1=bdot,2=PD */
+static obsw_s3_param_t aocs_state_hk_params[] = {
+    {.ptr = hk_aocs_err_be,   .size = OBSW_S3_PARAM_U32},
+    {.ptr = hk_aocs_omega_be, .size = OBSW_S3_PARAM_U32},
+    {.ptr = &hk_aocs_ctrl,    .size = OBSW_S3_PARAM_U8},
+};
+
 static obsw_s3_set_t hk_sets[] = {
     {.set_id = SRDB_HK_NOMINAL_HK, .params = nominal_hk_params,
      .param_count = 1, .interval_ticks = 10, .countdown = 10, .enabled = true},
@@ -129,6 +140,8 @@ static obsw_s3_set_t hk_sets[] = {
     {.set_id = SRDB_HK_DHS_OBC_HK, .params = dhs_obc_hk_params,
      .param_count = 7, .interval_ticks = 10, .countdown = 10, .enabled = true},
     {.set_id = SRDB_HK_AOCS_HK, .params = aocs_hk_params,
+     .param_count = 3, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
+    {.set_id = SRDB_HK_AOCS_STATE_HK, .params = aocs_state_hk_params,
      .param_count = 3, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
 };
 
@@ -216,6 +229,16 @@ static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_BDOT_GAIN,               .value = {.f32 = 1.0e4f}},
     {.param_id = SRDB_PARAM_ADCS_KP,                 .value = {.f32 = 0.5f}},
     {.param_id = SRDB_PARAM_ADCS_KD,                 .value = {.f32 = 0.1f}},
+    /* Orbit and dynamics configuration (#68) — readable via TC(20,3) */
+    {.param_id = SRDB_PARAM_ORBIT_ALTITUDE_KM,        .value = {.f32 = 550.0f}},
+    {.param_id = SRDB_PARAM_ORBIT_INCLINATION_DEG,    .value = {.f32 = 97.4f}},
+    {.param_id = SRDB_PARAM_SC_INERTIA_XX,            .value = {.f32 = 2.0e-3f}},
+    {.param_id = SRDB_PARAM_SC_INERTIA_YY,            .value = {.f32 = 2.5e-3f}},
+    {.param_id = SRDB_PARAM_SC_INERTIA_ZZ,            .value = {.f32 = 1.5e-3f}},
+    {.param_id = SRDB_PARAM_MTQ_MAX_DIPOLE,           .value = {.f32 = 10.0f}},
+    {.param_id = SRDB_PARAM_SC_OMEGA_X0,              .value = {.f32 = 0.5f}},
+    {.param_id = SRDB_PARAM_SC_OMEGA_Y0,              .value = {.f32 = 0.5f}},
+    {.param_id = SRDB_PARAM_SC_OMEGA_Z0,              .value = {.f32 = 0.5f}},
 };
 
 static float s20_get_f32(uint16_t param_id, float default_val)
@@ -225,6 +248,81 @@ static float s20_get_f32(uint16_t param_id, float default_val)
             return s20_params[i].value.f32;
     }
     return default_val;
+}
+
+/* ------------------------------------------------------------------ */
+/* Nadir-pointing target                                               */
+/* ------------------------------------------------------------------ */
+
+/* Compute body-to-ECI quaternion for nadir-pointing circular orbit.
+ * Frame: body +z = zenith (anti-nadir), body -z = nadir (Earth-facing),
+ *        body +x = along-track (velocity), body +y = orbit normal.
+ * Uses Shepperd's method to convert the rotation matrix to quaternion. */
+static void compute_nadir_quat(float t_s,
+                                float alt_km, float inc_deg,
+                                obsw_quat_t *q_out)
+{
+    static const float MU_EARTH  = 3.986004418e14f;  /* m³/s² */
+    static const float R_EARTH   = 6.371e6f;          /* m     */
+    static const float DEG2RAD   = 3.14159265f / 180.0f;
+
+    float r_orbit   = R_EARTH + alt_km * 1.0e3f;
+    float omega_orb = sqrtf(MU_EARTH / (r_orbit * r_orbit * r_orbit));
+    float nu        = omega_orb * t_s;
+    float inc       = inc_deg * DEG2RAD;
+
+    /* Unit radial r̂ and unit velocity v̂ for circular orbit in ECI */
+    float r[3] = { cosf(nu),
+                   sinf(nu) * cosf(inc),
+                   sinf(nu) * sinf(inc) };
+    float v[3] = { -sinf(nu),
+                    cosf(nu) * cosf(inc),
+                    cosf(nu) * sinf(inc) };
+
+    /* Orbit-normal axis: h = r̂ × v̂  (body +y direction in ECI) */
+    float h[3] = { r[1]*v[2] - r[2]*v[1],
+                   r[2]*v[0] - r[0]*v[2],
+                   r[0]*v[1] - r[1]*v[0] };
+    float hn = sqrtf(h[0]*h[0] + h[1]*h[1] + h[2]*h[2]);
+    if (hn > 1e-10f) { h[0] /= hn; h[1] /= hn; h[2] /= hn; }
+
+    /* Rotation matrix R (body→ECI): columns are body axes expressed in ECI
+     * col 0 = body +x = v̂,  col 1 = body +y = h,  col 2 = body +z = r̂ */
+    float R[3][3] = {
+        { v[0], h[0], r[0] },
+        { v[1], h[1], r[1] },
+        { v[2], h[2], r[2] },
+    };
+
+    /* Shepperd's method: R → unit quaternion [w, x, y, z] */
+    float tr = R[0][0] + R[1][1] + R[2][2];
+    float s;
+    if (tr > 0.0f) {
+        s = 0.5f / sqrtf(tr + 1.0f);
+        q_out->w = 0.25f / s;
+        q_out->x = (R[2][1] - R[1][2]) * s;
+        q_out->y = (R[0][2] - R[2][0]) * s;
+        q_out->z = (R[1][0] - R[0][1]) * s;
+    } else if (R[0][0] > R[1][1] && R[0][0] > R[2][2]) {
+        s = 2.0f * sqrtf(1.0f + R[0][0] - R[1][1] - R[2][2]);
+        q_out->w = (R[2][1] - R[1][2]) / s;
+        q_out->x = 0.25f * s;
+        q_out->y = (R[0][1] + R[1][0]) / s;
+        q_out->z = (R[0][2] + R[2][0]) / s;
+    } else if (R[1][1] > R[2][2]) {
+        s = 2.0f * sqrtf(1.0f + R[1][1] - R[0][0] - R[2][2]);
+        q_out->w = (R[0][2] - R[2][0]) / s;
+        q_out->x = (R[0][1] + R[1][0]) / s;
+        q_out->y = 0.25f * s;
+        q_out->z = (R[2][1] + R[1][2]) / s;
+    } else {
+        s = 2.0f * sqrtf(1.0f + R[2][2] - R[0][0] - R[1][1]);
+        q_out->w = (R[1][0] - R[0][1]) / s;
+        q_out->x = (R[0][2] + R[2][0]) / s;
+        q_out->y = (R[2][1] + R[1][2]) / s;
+        q_out->z = 0.25f * s;
+    }
+    obsw_quat_normalise(q_out);
 }
 
 /* ------------------------------------------------------------------ */
@@ -367,7 +465,7 @@ int main(void)
     obsw_adcs_config_t adcs_cfg = {
         .kp         = 0.5f,
         .kd         = 0.1f,
-        .max_torque = 0.01f,
+        .max_torque = 0.2f,   /* 0.2 Nm matches Kp=0.5 linear regime up to ~47° error */
     };
     obsw_adcs_init(&adcs_ctx, &adcs_cfg);
 
@@ -412,14 +510,25 @@ int main(void)
                 act.sim_time   = sensor.sim_time;
                 act.controller = 0;
 
-                bool in_nominal = !obsw_fsm_is_safe(&fsm_ctx);
+                /* Three-state mode gate: STANDBY=off, SAFE=bdot, NOMINAL=PD ADCS */
+                obsw_fsm_mode_t cur_mode = obsw_fsm_mode(&fsm_ctx);
 
                 /* Sync S20-tunable AOCS gains before each control step */
-                adcs_ctx.config.kp   = s20_get_f32(SRDB_PARAM_ADCS_KP,   0.5f);
-                adcs_ctx.config.kd   = s20_get_f32(SRDB_PARAM_ADCS_KD,   0.1f);
-                bdot_ctx.config.gain = s20_get_f32(SRDB_PARAM_BDOT_GAIN, 1.0e4f);
+                adcs_ctx.config.kp          = s20_get_f32(SRDB_PARAM_ADCS_KP,        0.5f);
+                adcs_ctx.config.kd          = s20_get_f32(SRDB_PARAM_ADCS_KD,        0.1f);
+                bdot_ctx.config.gain        = s20_get_f32(SRDB_PARAM_BDOT_GAIN,      1.0e4f);
+                bdot_ctx.config.max_dipole  = s20_get_f32(SRDB_PARAM_MTQ_MAX_DIPOLE, 10.0f);
 
-                if (in_nominal && sensor.st_valid && sensor.gyro_valid) {
+                if (cur_mode == OBSW_FSM_NOMINAL && sensor.st_valid && sensor.gyro_valid) {
+                    /* Update nadir target from orbital parameters (runtime-tunable via S20) */
+                    {
+                        float alt_km  = s20_get_f32(SRDB_PARAM_ORBIT_ALTITUDE_KM,     550.0f);
+                        float inc_deg = s20_get_f32(SRDB_PARAM_ORBIT_INCLINATION_DEG,  97.4f);
+                        obsw_quat_t q_nadir;
+                        compute_nadir_quat(sensor.sim_time, alt_km, inc_deg, &q_nadir);
+                        obsw_adcs_set_target(&adcs_ctx, &q_nadir);
+                    }
+
                     obsw_quat_t q_meas = {
                         sensor.st_q_w, sensor.st_q_x,
                         sensor.st_q_y, sensor.st_q_z
@@ -434,10 +543,24 @@ int main(void)
                         act.rw_torque_z = adcs_out.torque_cmd[2];
                         act.controller  = 1;
                         fprintf(stderr,
-                            "[OBSW] adcs tau=[%.3e,%.3e,%.3e] Nm\n",
+                            "[OBSW] adcs err=%.1f° tau=[%.3e,%.3e,%.3e] Nm\n",
+                            adcs_out.angle_err_rad * (180.0f / 3.14159265f),
                             act.rw_torque_x, act.rw_torque_y, act.rw_torque_z);
+
+                        /* Update AOCS state HK (set_id=6) */
+                        {
+                            float om = sqrtf(omega[0]*omega[0] + omega[1]*omega[1] + omega[2]*omega[2]);
+                            uint32_t err_u32, om_u32;
+                            memcpy(&err_u32, &adcs_out.angle_err_rad, 4);
+                            memcpy(&om_u32,  &om, 4);
+                            for (int _i = 0; _i < 4; _i++) {
+                                hk_aocs_err_be[_i]   = (uint8_t)((err_u32 >> (24 - 8*_i)) & 0xFFU);
+                                hk_aocs_omega_be[_i] = (uint8_t)((om_u32  >> (24 - 8*_i)) & 0xFFU);
+                            }
+                            hk_aocs_ctrl = 2U; /* PD */
+                        }
                     }
-                } else if (sensor.mag_valid) {
+                } else if (cur_mode == OBSW_FSM_SAFE && sensor.mag_valid) {
                     float b[3] = {sensor.mag_x, sensor.mag_y, sensor.mag_z};
                     obsw_bdot_output_t bdot_out;
                     obsw_bdot_step(&bdot_ctx, b, dt, &bdot_out);
@@ -445,9 +568,12 @@ int main(void)
                     act.mtq_dipole_y = bdot_out.m_cmd[1];
                     act.mtq_dipole_z = bdot_out.m_cmd[2];
                     act.controller   = 0;
+                    hk_aocs_ctrl     = 1U; /* B-dot */
                     fprintf(stderr,
                         "[OBSW] bdot m=[%.3e,%.3e,%.3e] Am2\n",
                         act.mtq_dipole_x, act.mtq_dipole_y, act.mtq_dipole_z);
+                } else {
+                    hk_aocs_ctrl = 0U; /* STANDBY or sensors invalid */
                 }
 
                 /* Drain any TM generated during sensor tick */
@@ -479,11 +605,8 @@ int main(void)
                 }
 
                 /* DHS OBC HK — live state for TM(3,25) set_id=3 */
-                {
-                    obsw_fsm_mode_t m = obsw_fsm_mode(&fsm_ctx);
-                    param_obc_mode = (m == OBSW_FSM_STANDBY) ? 0U :
-                                     (m == OBSW_FSM_SAFE)    ? 1U : 2U;
-                }
+                param_obc_mode = (cur_mode == OBSW_FSM_STANDBY) ? 0U :
+                                 (cur_mode == OBSW_FSM_SAFE)    ? 1U : 2U;
                 param_obc_obt       = (uint32_t)sensor.sim_time;
                 param_obc_wd_status = 0U;   /* nominal — watchdog kicked each tick */
 

@@ -1,12 +1,12 @@
 /* zynqmp.ld — linker script for ZynqMP APU bare-metal
- * Separates RX (text) and RW (data) segments to avoid RWX warning.
- * Loads into DDR at 0x00400000 (matches Renode ddrLowApu).
+ * Single DDR region so objcopy -O binary produces a compact flat image.
+ * Loads at 0x00400000 (matches Renode ddrLowApu).
+ * Stack pointer is set to 0x0FFFFFFF in startup.S (top of 256 MB DDR).
  */
 ENTRY(_start)
 
 MEMORY {
-    DDR_RX  (rx)  : ORIGIN = 0x00400000, LENGTH = 128M
-    DDR_RW  (rw)  : ORIGIN = 0x08000000, LENGTH = 128M
+    DDR (rwx) : ORIGIN = 0x00400000, LENGTH = 64M
 }
 
 SECTIONS {
@@ -14,21 +14,16 @@ SECTIONS {
         *(.text.boot)
         *(.text*)
         *(.rodata*)
-    } > DDR_RX
+    } > DDR
 
     .data : {
         *(.data*)
-    } > DDR_RW
+    } > DDR
 
-    .bss : {
+    .bss (NOLOAD) : {
         __bss_start = .;
         *(.bss*)
         *(COMMON)
         __bss_end = .;
-    } > DDR_RW
-
-    .stack (NOLOAD) : {
-        . = ALIGN(16);
-        . += 0x10000;
-    } > DDR_RW
+    } > DDR
 }
