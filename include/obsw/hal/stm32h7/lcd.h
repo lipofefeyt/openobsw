@@ -60,11 +60,14 @@ void lcd_fill_gram_raw(uint16_t colour);
 void lcd_slpout_dispon(void);
 
 #ifdef OBSW_FREERTOS
-/* Like lcd_slpout_dispon() but uses vTaskDelay for the mandatory panel
- * delays (120+10+100 ms) so the CPU enters WFI instead of DWT-spinning.
- * Lower system current during init keeps the supply above the ST7735R
- * power-supervisor threshold.  Must be called from a FreeRTOS task. */
+/* Like lcd_slpout_dispon() but uses vTaskDelay so the CPU yields during
+ * mandatory panel delays (120+10+100 ms).  Use for the first wake after a
+ * cold PS reset where the oscillator may need full settling time. */
 void lcd_slpout_dispon_yield(void);
+/* Fast keepalive variant: 10 ms after SLPOUT (oscillator was only briefly
+ * interrupted), no trailing delay after DISPON.  Call every ~200 ms (before
+ * the ~250 ms PS-fire window) to keep the panel continuously visible. */
+void lcd_slpout_dispon_fast(void);
 #endif
 
 #endif /* OBSW_HAL_STM32H7_LCD_H */

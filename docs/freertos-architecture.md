@@ -125,9 +125,15 @@ B-dot state is reset on each NOMINAL → SAFE transition. Controller configs
 match the host sim: `gain = 1e4 A·m²·s/T`, `max_dipole = 10 A·m²`,
 `kp = 0.5`, `kd = 0.1`, `max_torque = 0.01 N·m`, `dt = 0.1 s`.
 
-**Sensor hardware not yet connected.** All sensor reads are stubs returning
-`valid = false`. Actuators produce no output until I2C drivers are wired
-(see [What is not yet wired](#what-is-not-yet-wired)).
+**QMC5883L magnetometer is wired** (I2C1, PB8/PB9, 100 kHz). `mag_valid` is
+true when the sensor chip-ID checks out and each read returns data.
+After each control tick the raw field `b[3]` and B-dot dipole command
+`out.m_cmd[3]` are written to `obsw_aocs_hk_t` (see
+`include/obsw/task/aocs.h`) for S3 HK reporting.
+
+MTQ hardware drivers are not yet wired — `out.m_cmd` is computed by `bdot.c`
+but the GPIO/PWM output to physical magnetorquers is pending (see
+[What is not yet wired](#what-is-not-yet-wired)).
 
 ---
 
@@ -139,9 +145,10 @@ match the host sim: `gain = 1e4 A·m²·s/T`, `max_dipole = 10 A·m²`,
 | Trigger | Periodic — `vTaskDelayUntil()` at 1 Hz |
 | Stack | Static |
 
-Owns the `obsw_fsm_ctx_t` and the hardware IWDG. Init order in `main.c`
-requires FDIR to initialise before PUS (PUS receives the FSM pointer via
-`obsw_fdir_get_fsm()`).
+Owns the `obsw_fsm_ctx_t`, the hardware IWDG, and the **S3 HK context**. Init
+order in `main.c` requires FDIR to initialise before PUS (PUS receives the FSM
+pointer via `obsw_mode_get_fsm()` and the S3 pointer via
+`obsw_fdir_get_s3_ctx()`).
 
 Each 1 s tick:
 
@@ -156,9 +163,12 @@ Each 1 s tick:
    avoiding a second current spike that would re-trigger the power supervisor.
 3. **Boot event** — on first tick only (after LCD re-init), emits
    `SRDB_EVENT_BOOT_COMPLETE` (INFO).
-4. **Mode change detection** — if FSM mode changed since last tick, emits
-   `SRDB_EVENT_SAFE_MODE_ENTRY` (HIGH) or `SRDB_EVENT_SAFE_MODE_EXIT` (INFO).
-5. **LCD status bar update** — draws `FDIR:NOMINAL  WDG:XXXXXXXX` (or
+4. **Mode change detection** — if FSM mode changed since last tick, increments
+   `s_safe_mode_count` and emits `SRDB_EVENT_SAFE_MODE_ENTRY` (HIGH) or
+   `SRDB_EVENT_SAFE_MODE_EXIT` (INFO).
+5. **S3 HK tick** — calls `obsw_s3_tick()` advancing all enabled HK set
+   countdowns. Enabled sets emit TM(3,25) when their countdown reaches zero.
+6. **LCD status bar update** — draws `FDIR:NOMINAL  WDG:XXXXXXXX` (or
    `FDIR:SAFE`) on the bottom row using `lcd_console_set_status()`.
 
 A stuck FDIR task causes IWDG expiry and hardware reset within 4 s.
@@ -173,7 +183,8 @@ TC whitelist in SAFE mode: `{8,1}` (S8 recover), `{17,1}` (ping), `{20,3}`
 | Channel | Type | Producer | Consumer | Notes |
 |---|---|---|---|---|
 | TC queue | `QueueHandle_t` static, 4 slots | TMTC | PUS | `obsw_tc_frame_item_t` — raw frame + 16-bit length |
-| TM store | `obsw_tm_store_t` SPSC ring, 32 slots | PUS | TMTC | Lock-free `volatile` head/tail; safe on single-core FreeRTOS — context switches (PendSV) include ARM memory barriers |
+| TM store | `obsw_tm_store_t` ring, 32 slots | PUS + FDIR | TMTC | Lock-free `volatile` head/tail. Two same-priority writers (PUS prio 3, FDIR prio 3) never preempt each other mid-enqueue on single-core; TMTC (prio 4) only advances `tail`, not `head`. |
+| AOCS HK | `obsw_aocs_hk_t` volatile struct | AOCS | FDIR (S3) | Each field is a single 32-bit write — atomic on Cortex-M7. `mag_valid` written last so reader sees consistent data when valid=1. |
 | Task notify | `xTaskNotify` | PUS | TMTC | Immediate TM drain after each TC dispatch |
 | FSM pointer | `obsw_fsm_ctx_t *` | FDIR (owner) | PUS (gate + S8) | Set once at init; FSM transitions only from PUS task — no concurrent write conflict |
 
@@ -243,6 +254,33 @@ regardless of scheduler state.
 
 ---
 
+## S3 Housekeeping
+
+S3 HK is owned by the **FDIR task**. PUS registers the TC(3,5)/(3,6) routes
+at init time (after FDIR) and backfills `s3_ctx.s1` so TC verification TM is
+generated. The FDIR 1 Hz loop calls `obsw_s3_tick()` — interval units are
+seconds on this path.
+
+### HK sets on the FreeRTOS path
+
+| SID | Name | Parameters | Default interval |
+|---|---|---|---|
+| 2 | `fdir_hk` | `safe_mode_entry_count`, `watchdog_kick_count`, `watchdog_ticks_remaining` | 60 s |
+| 7 | `aocs_bdot_hk` | `bdot_mag_x/y/z` [T], `bdot_m_cmd_x/y/z` [Am²], `bdot_mag_valid` | 10 s |
+
+All sets are **disabled at boot**. Enable via TC(3,5) over CP2102:
+
+```bash
+# Enable aocs_bdot_hk (SID 7) every 10 s — TC(3,5) user-data: [set_id=7][interval=10 u32 BE]
+# (hex-encode and send via ping_uart.py --raw or a custom script)
+```
+
+**Encoding note:** float parameters (`bdot_mag_x/y/z`, `m_cmd_x/y/z`) are
+reported as raw 4-byte little-endian IEEE 754 (native ARM byte order). Decode
+on the ground with `struct.unpack('<f', bytes)`.
+
+---
+
 ## Ground tools
 
 | Tool | Path | Purpose |
@@ -304,10 +342,7 @@ stub (`platform/stm32h7/errno_stub.c`) because newlib-nano does not provide it.
 
 | Item | Milestone | Notes |
 |---|---|---|
-| TC/TM end-to-end ping from CP2102 | v0.8 #49 | `tools/ping_uart.py` in progress; TM response debugging ongoing |
-| S3 housekeeping (FreeRTOS path) | v0.8 #51 | PUS task has S1/S8/S17/S20 but not S3; needs FreeRTOS software timers |
+| MTQ actuator output | v0.9 | AOCS computes `out.m_cmd` via `bdot.c` and reports it via S3 HK (SID 7); GPIO/PWM driver to physical magnetorquers not yet written |
 | ICM-42688 / MPU-6050 gyroscope driver | v0.10 #53 | Hardware not yet owned; `gyro_valid` remains false |
-| ICM-42688 gyroscope driver | v0.10 #53 | Not yet implemented |
 | INA219 power monitor | v0.10 #39 | Not yet implemented |
-| MTQ / RW actuator output | v0.10 | AOCS computes commands but does not write to hardware |
 | STM32H750 Renode socket transport for OpenSVF | v0.11 #54 | Renode script exists; OpenSVF integration not yet validated |

@@ -81,6 +81,7 @@ add_library(obsw_stm32h7 STATIC
     ${OBSW_ROOT}/src/tm/store.c
     ${OBSW_ROOT}/src/pus/pus_tm.c
     ${OBSW_ROOT}/src/pus/s1.c
+    ${OBSW_ROOT}/src/pus/s3.c
     ${OBSW_ROOT}/src/pus/s5.c
     ${OBSW_ROOT}/src/pus/s8.c
     ${OBSW_ROOT}/src/pus/s17.c

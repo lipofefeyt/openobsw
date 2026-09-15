@@ -344,3 +344,70 @@ parameters:
       - {value: 0, label: 'OFF'}
       - {value: 1, label: BDOT}
       - {value: 2, label: PD}
+
+  # ---- AOCS B-dot HIL state (S3 HK set_id=7) — raw sensor + actuator -------
+
+  - id: 0x20C0
+    name: bdot_mag_x
+    description: "Magnetometer reading X — body frame, raw QMC5883L output"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Sensors
+    unit: T
+
+  - id: 0x20C1
+    name: bdot_mag_y
+    description: "Magnetometer reading Y — body frame, raw QMC5883L output"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Sensors
+    unit: T
+
+  - id: 0x20C2
+    name: bdot_mag_z
+    description: "Magnetometer reading Z — body frame, raw QMC5883L output"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Sensors
+    unit: T
+
+  - id: 0x20C3
+    name: bdot_m_cmd_x
+    description: "B-dot MTQ dipole command X"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Actuators
+    unit: 'A*m^2'
+
+  - id: 0x20C4
+    name: bdot_m_cmd_y
+    description: "B-dot MTQ dipole command Y"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Actuators
+    unit: 'A*m^2'
+
+  - id: 0x20C5
+    name: bdot_m_cmd_z
+    description: "B-dot MTQ dipole command Z"
+    type: float32
+    ptc: 5
+    pfc: 1
+    subsystem: AOCS/Actuators
+    unit: 'A*m^2'
+
+  - id: 0x20C6
+    name: bdot_mag_valid
+    description: "Magnetometer validity flag — 1 if QMC5883L init succeeded and last read returned data"
+    type: uint8
+    ptc: 1
+    pfc: 8
+    subsystem: AOCS/Sensors
+    enumeration:
+      - {value: 0, label: INVALID}
+      - {value: 1, label: VALID}

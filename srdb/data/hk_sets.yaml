@@ -76,3 +76,17 @@ hk_sets:
       - aocs_omega_mag
       - aocs_controller
     default_interval_ticks: 5
+
+  - id: 7
+    name: aocs_bdot_hk
+    spid: 1007
+    description: "AOCS B-dot HIL state — raw magnetometer readings and MTQ dipole commands from QMC5883L + bdot.c"
+    parameters:
+      - bdot_mag_x
+      - bdot_mag_y
+      - bdot_mag_z
+      - bdot_m_cmd_x
+      - bdot_m_cmd_y
+      - bdot_m_cmd_z
+      - bdot_mag_valid
+    default_interval_ticks: 10
