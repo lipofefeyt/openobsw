@@ -39,6 +39,8 @@ extern "C" {
 typedef struct {
     float gain;       /**< Controller gain k [A·m²·s/T]           */
     float max_dipole; /**< Saturation limit [A·m²]                 */
+    float hpf_tau;    /**< HPF time constant τ [s]; 0 = disabled.
+                           Rejects orbital-rate dB/dt (issue #70). */
 } obsw_bdot_config_t;
 
 /* ------------------------------------------------------------------ */
@@ -47,8 +49,10 @@ typedef struct {
 
 typedef struct {
     obsw_bdot_config_t config;
-    float b_prev[3];  /**< Previous B-field measurement [T]        */
-    bool initialised; /**< True after first measurement            */
+    float b_prev[3];      /**< Previous B-field measurement [T]    */
+    float dbdt_raw_prev[3]; /**< Previous raw dB/dt [T/s] — HPF x[k-1] */
+    float dbdt_filt[3];   /**< HPF output state y[k-1] [T/s]       */
+    bool initialised;     /**< True after first measurement         */
 } obsw_bdot_ctx_t;
 
 /* ------------------------------------------------------------------ */
@@ -56,8 +60,10 @@ typedef struct {
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    float m_cmd[3]; /**< Dipole command [A·m²] (x, y, z)        */
-    float dbdt[3];  /**< Estimated dB/dt [T/s]                   */
+    float m_cmd[3];      /**< Dipole command [A·m²] (x, y, z)     */
+    float dbdt[3];       /**< Raw estimated dB/dt [T/s]            */
+    float dbdt_filt[3];  /**< HPF-filtered dB/dt [T/s]; equals
+                              dbdt[] when HPF is disabled           */
 } obsw_bdot_output_t;
 
 /* ------------------------------------------------------------------ */

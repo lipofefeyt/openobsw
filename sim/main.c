@@ -227,6 +227,7 @@ static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,     .value = {.u32 = 0}},
     {.param_id = SRDB_PARAM_WATCHDOG_TICKS_REMAINING,.value = {.u32 = 30}},
     {.param_id = SRDB_PARAM_BDOT_GAIN,               .value = {.f32 = 1.0e4f}},
+    {.param_id = SRDB_PARAM_BDOT_HPF_TAU,            .value = {.f32 = 15.0f}},
     {.param_id = SRDB_PARAM_ADCS_KP,                 .value = {.f32 = 0.5f}},
     {.param_id = SRDB_PARAM_ADCS_KD,                 .value = {.f32 = 0.1f}},
     /* Orbit and dynamics configuration (#68) — readable via TC(20,3) */
@@ -458,6 +459,7 @@ int main(void)
     obsw_bdot_config_t bdot_cfg = {
         .gain       = 1.0e4f,
         .max_dipole = 10.0f,
+        .hpf_tau    = s20_get_f32(SRDB_PARAM_BDOT_HPF_TAU, 15.0f),
     };
     obsw_bdot_init(&bdot_ctx, &bdot_cfg);
 
@@ -518,6 +520,7 @@ int main(void)
                 adcs_ctx.config.kd          = s20_get_f32(SRDB_PARAM_ADCS_KD,        0.1f);
                 bdot_ctx.config.gain        = s20_get_f32(SRDB_PARAM_BDOT_GAIN,      1.0e4f);
                 bdot_ctx.config.max_dipole  = s20_get_f32(SRDB_PARAM_MTQ_MAX_DIPOLE, 10.0f);
+                bdot_ctx.config.hpf_tau     = s20_get_f32(SRDB_PARAM_BDOT_HPF_TAU,   15.0f);
 
                 if (cur_mode == OBSW_FSM_NOMINAL && sensor.st_valid && sensor.gyro_valid) {
                     /* Update nadir target from orbital parameters (runtime-tunable via S20) */
@@ -569,8 +572,23 @@ int main(void)
                     act.mtq_dipole_z = bdot_out.m_cmd[2];
                     act.controller   = 0;
                     hk_aocs_ctrl     = 1U; /* B-dot */
+                    /* Issue #70: log raw and HPF-filtered dB/dt to quantify orbital aliasing */
+                    float dbdt_raw_mag = sqrtf(
+                        bdot_out.dbdt[0]*bdot_out.dbdt[0] +
+                        bdot_out.dbdt[1]*bdot_out.dbdt[1] +
+                        bdot_out.dbdt[2]*bdot_out.dbdt[2]);
+                    float dbdt_filt_mag = sqrtf(
+                        bdot_out.dbdt_filt[0]*bdot_out.dbdt_filt[0] +
+                        bdot_out.dbdt_filt[1]*bdot_out.dbdt_filt[1] +
+                        bdot_out.dbdt_filt[2]*bdot_out.dbdt_filt[2]);
                     fprintf(stderr,
-                        "[OBSW] bdot m=[%.3e,%.3e,%.3e] Am2\n",
+                        "[OBSW] bdot raw=[%.3e,%.3e,%.3e] T/s |raw|=%.3e"
+                        " filt=[%.3e,%.3e,%.3e] T/s |filt|=%.3e"
+                        " m=[%.3e,%.3e,%.3e] Am2\n",
+                        bdot_out.dbdt[0], bdot_out.dbdt[1], bdot_out.dbdt[2],
+                        dbdt_raw_mag,
+                        bdot_out.dbdt_filt[0], bdot_out.dbdt_filt[1], bdot_out.dbdt_filt[2],
+                        dbdt_filt_mag,
                         act.mtq_dipole_x, act.mtq_dipole_y, act.mtq_dipole_z);
                 } else {
                     hk_aocs_ctrl = 0U; /* STANDBY or sensors invalid */

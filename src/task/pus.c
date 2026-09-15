@@ -51,9 +51,10 @@ static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT, .value = {.u32 = 0}},
     {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,   .value = {.u32 = 0}},
     /* AOCS control gains — tunable via TC(20,1), read by AOCS task each tick */
-    {.param_id = SRDB_PARAM_BDOT_GAIN, .value = {.f32 = 1.0e4f}},
-    {.param_id = SRDB_PARAM_ADCS_KP,   .value = {.f32 = 0.5f}},
-    {.param_id = SRDB_PARAM_ADCS_KD,   .value = {.f32 = 0.1f}},
+    {.param_id = SRDB_PARAM_BDOT_GAIN,    .value = {.f32 = 1.0e4f}},
+    {.param_id = SRDB_PARAM_BDOT_HPF_TAU, .value = {.f32 = 15.0f}},
+    {.param_id = SRDB_PARAM_ADCS_KP,      .value = {.f32 = 0.5f}},
+    {.param_id = SRDB_PARAM_ADCS_KD,      .value = {.f32 = 0.1f}},
 };
 
 /* S8 function table — mode transition requests via Mode Manager. */
