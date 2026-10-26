@@ -13,6 +13,9 @@ export OPENOBSW_PYTHON="$REPO/.venv/bin/python3"
 # ── aarch64-none-elf bare-metal toolchain ────────────────────────────
 [ -d /opt/arm-gnu-toolchain/bin ] && export PATH="/opt/arm-gnu-toolchain/bin:$PATH"
 
+# ── TI msp430-elf-gcc ─────────────────────────────────────────────────
+[ -d /opt/msp430-gcc-9.3.1.11_linux64/bin ] && export PATH="/opt/msp430-gcc-9.3.1.11_linux64/bin:$PATH"
+
 # ── aarch64 glibc for QEMU user-mode ─────────────────────────────────
 if [ -z "$AARCH64_GLIBC" ]; then
     _GLIBC=$(find /usr -name "ld-linux-aarch64.so.1" 2>/dev/null | head -1 | \
