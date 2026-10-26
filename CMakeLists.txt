@@ -9,6 +9,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(OBSW_BUILD_TESTS  "Build unit tests"        ON)
 option(OBSW_BUILD_SIM    "Build host simulation"   ON)
 option(OBSW_ENABLE_ASAN  "Enable AddressSanitizer" OFF)
+option(OBSW_WERROR       "Treat warnings as errors" OFF)
 
 option(
     OBSW_ENABLE_ORBITFABRIC_CONTRACT
@@ -40,6 +41,10 @@ add_compile_options(
     -Wcast-align -Wcast-qual
     -Wmissing-prototypes -Wstrict-prototypes
 )
+
+if(OBSW_WERROR)
+    add_compile_options(-Werror)
+endif()
 
 if(OBSW_ENABLE_ASAN)
     add_compile_options(-fsanitize=address,undefined)
