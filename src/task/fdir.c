@@ -36,6 +36,7 @@
 
 #include "obsw/task/fdir.h"
 #include "obsw/task/mode.h"
+#include "obsw/task/pus.h"
 #include "obsw/task/tmtc.h"
 #include "obsw/task/aocs.h"
 #include "obsw/pus/s3.h"
@@ -229,6 +230,8 @@ static void fdir_task(void *param)
         /* ── Full 1000 ms tick below ─────────────────────────────── */
 
         dbg_puts("F\r\n");   /* full tick marker — appears every 1 s on serial monitor */
+
+        obsw_pus_obt_advance(1000U);
 
         /* 3. Heartbeat LED (PE3, 1 Hz) and HK kick counter. */
         kick_count++;

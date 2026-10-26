@@ -12,6 +12,7 @@
 #include "obsw/srdb_generated.h"
 #include "sensor_inject.h"
 #include "obsw/pus/s20.h"
+#include "obsw/pus/s9.h"
 
 #ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
 #include "orbitfabric_contract_adapter.h"
@@ -79,6 +80,8 @@ static obsw_s3_ctx_t  s3_ctx  = {0};
 static obsw_s5_ctx_t  s5_ctx  = {0};
 static obsw_s8_ctx_t  s8_ctx  = {0};
 static obsw_s17_ctx_t s17_ctx = {0};
+static obsw_obt_t     obt     = {0};
+static obsw_s9_ctx_t  s9_ctx  = {.obt = &obt};
 static obsw_s20_ctx_t  s20_ctx = {0};
 static obsw_fsm_ctx_t fsm_ctx = {0};
 static obsw_wd_ctx_t  wd_ctx  = {0};
@@ -344,6 +347,7 @@ static void on_watchdog_expiry(void *ctx) {
 static const obsw_fsm_tc_entry_t safe_whitelist[] = {
     {SRDB_TC_ARE_YOU_ALIVE_SVC,      SRDB_TC_ARE_YOU_ALIVE_SUBSVC},
     {SRDB_TC_S8_PERFORM_FUNCTION_SVC, SRDB_TC_S8_PERFORM_FUNCTION_SUBSVC},
+    {SRDB_TC_SET_OBT_SVC,             SRDB_TC_SET_OBT_SUBSVC},
 };
 
 static obsw_tc_route_t routes[] = {
@@ -359,6 +363,8 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s20_set, .ctx = &s20_ctx},
     {.apid = 0xFFFF, .service = 20, .subservice = 3,
      .handler = obsw_s20_get, .ctx = &s20_ctx},
+    {.apid = 0xFFFF, .service = SRDB_TC_SET_OBT_SVC, .subservice = SRDB_TC_SET_OBT_SUBSVC,
+     .handler = obsw_s9_set_obt, .ctx = &s9_ctx},
 };
 
 #ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
@@ -431,6 +437,8 @@ int main(void)
     s17_ctx.tm_store = &tm_store;
     s17_ctx.s1       = &s1_ctx;
     s17_ctx.apid     = SRDB_APID_DEFAULT;
+
+    s9_ctx.s1        = &s1_ctx;
 
     s8_ctx.tm_store  = &tm_store;
     s8_ctx.s1        = &s1_ctx;
@@ -625,7 +633,8 @@ int main(void)
                 /* DHS OBC HK — live state for TM(3,25) set_id=3 */
                 param_obc_mode = (cur_mode == OBSW_FSM_STANDBY) ? 0U :
                                  (cur_mode == OBSW_FSM_SAFE)    ? 1U : 2U;
-                param_obc_obt       = (uint32_t)sensor.sim_time;
+                obsw_obt_advance(&obt, (uint32_t)(dt * 1000.0f + 0.5f));
+                param_obc_obt       = obsw_obt_seconds(&obt);
                 param_obc_wd_status = 0U;   /* nominal — watchdog kicked each tick */
 
                 obsw_wd_kick(&wd_ctx);

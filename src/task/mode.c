@@ -34,6 +34,7 @@ static const obsw_fsm_tc_entry_t s_whitelist[] = {
     {.service = 8,  .subservice = 1},  /* S8(8,1): mode transitions    */
     {.service = 17, .subservice = 1},  /* S17(17,1): ping               */
     {.service = 20, .subservice = 3},  /* S20(20,3): get parameter      */
+    {.service = 9,  .subservice = 128},/* S9(9,128): set on-board time  */
 };
 
 /* ── Static allocation ───────────────────────────────────────────────── */

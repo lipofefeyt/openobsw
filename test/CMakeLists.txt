@@ -55,6 +55,16 @@ target_link_libraries(test_s17 PRIVATE obsw unity)
 target_compile_options(test_s17 PRIVATE ${TEST_SUPPRESS})
 add_test(NAME s17 COMMAND test_s17)
 
+add_executable(test_s9 unit/test_s9.c)
+target_link_libraries(test_s9 PRIVATE obsw unity)
+target_compile_options(test_s9 PRIVATE ${TEST_SUPPRESS})
+add_test(NAME s9 COMMAND test_s9)
+
+add_executable(test_obt unit/test_obt.c)
+target_link_libraries(test_obt PRIVATE obsw unity)
+target_compile_options(test_obt PRIVATE ${TEST_SUPPRESS})
+add_test(NAME obt COMMAND test_obt)
+
 # v0.4 — FDIR
 add_executable(test_fsm unit/test_fsm.c)
 target_link_libraries(test_fsm PRIVATE obsw unity)
