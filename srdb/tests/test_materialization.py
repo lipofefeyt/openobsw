@@ -29,7 +29,7 @@ def test_materialized_complete_srdb_round_trips(srdb, tmp_path: Path) -> None:
         ),
         hk_sets=(
             HKSet(
-                id=5,
+                id=200,  # clear of base HK set IDs
                 name="external_hk",
                 description="External housekeeping",
                 parameters=["external_voltage_mv"],
@@ -44,7 +44,7 @@ def test_materialized_complete_srdb_round_trips(srdb, tmp_path: Path) -> None:
 
     assert reloaded == composed
     assert reloaded.parameter_by_id(0x6001).name == "external_voltage_mv"
-    assert reloaded.hk_set_by_id(5).parameters == ["external_voltage_mv"]
+    assert reloaded.hk_set_by_id(200).parameters == ["external_voltage_mv"]
 
 
 def test_materialization_writes_only_complete_srdb_contract_files(srdb, tmp_path: Path) -> None:
