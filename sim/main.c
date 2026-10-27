@@ -119,27 +119,32 @@ static obsw_s3_param_t dhs_obc_hk_params[] = {
     {.ptr = &param_obc_reset_count, .size = OBSW_S3_PARAM_U16},
     {.ptr = &param_obc_cpu_load,    .size = OBSW_S3_PARAM_U8},
 };
-/* AOCS HK (set_id=4): gains as big-endian IEEE 754 floats for YAMCS */
-static uint8_t hk_bdot_gain_be[4] = {0};
-static uint8_t hk_adcs_kp_be[4]   = {0};
-static uint8_t hk_adcs_kd_be[4]   = {0};
+/* AOCS HK (set_id=4): gains as IEEE 754 floats */
+static float hk_bdot_gain = 0.0f;
+static float hk_adcs_kp   = 0.0f;
+static float hk_adcs_kd   = 0.0f;
 static obsw_s3_param_t aocs_hk_params[] = {
-    {.ptr = hk_bdot_gain_be, .size = OBSW_S3_PARAM_U32},
-    {.ptr = hk_adcs_kp_be,   .size = OBSW_S3_PARAM_U32},
-    {.ptr = hk_adcs_kd_be,   .size = OBSW_S3_PARAM_U32},
+    {.ptr = &hk_bdot_gain, .size = OBSW_S3_PARAM_U32},
+    {.ptr = &hk_adcs_kp,   .size = OBSW_S3_PARAM_U32},
+    {.ptr = &hk_adcs_kd,   .size = OBSW_S3_PARAM_U32},
 };
 
-/* AOCS state HK (set_id=6): live attitude state as big-endian IEEE 754 */
-static uint8_t  hk_aocs_err_be[4]   = {0};  /* aocs_angle_err_rad */
-static uint8_t  hk_aocs_omega_be[4] = {0};  /* aocs_omega_mag     */
-static uint8_t  hk_aocs_ctrl        = 0;    /* aocs_controller: 0=off,1=bdot,2=PD */
+/* AOCS state HK (set_id=6): live attitude state as IEEE 754 floats */
+static float    hk_aocs_err   = 0.0f;  /* aocs_angle_err_rad */
+static float    hk_aocs_omega = 0.0f;  /* aocs_omega_mag     */
+static uint8_t  hk_aocs_ctrl  = 0;     /* aocs_controller: 0=off,1=bdot,2=PD */
 static obsw_s3_param_t aocs_state_hk_params[] = {
-    {.ptr = hk_aocs_err_be,   .size = OBSW_S3_PARAM_U32},
-    {.ptr = hk_aocs_omega_be, .size = OBSW_S3_PARAM_U32},
+    {.ptr = &hk_aocs_err,   .size = OBSW_S3_PARAM_U32},
+    {.ptr = &hk_aocs_omega, .size = OBSW_S3_PARAM_U32},
     {.ptr = &hk_aocs_ctrl,    .size = OBSW_S3_PARAM_U8},
 };
 
-static obsw_s3_set_t hk_sets[] = {
+/* 5 static sets plus free slots and a parameter pool for TC(3,1) */
+#define HK_STATIC_SETS 5U
+#define HK_SET_SLOTS   (HK_STATIC_SETS + 4U)
+static obsw_s3_param_t hk_define_pool[32];
+
+static obsw_s3_set_t hk_sets[HK_SET_SLOTS] = {
     {.set_id = SRDB_HK_NOMINAL_HK, .params = nominal_hk_params,
      .param_count = 1, .interval_ticks = 10, .countdown = 10, .enabled = true},
     {.set_id = SRDB_HK_FDIR_HK, .params = fdir_hk_params,
@@ -356,6 +361,8 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s17_ping, .ctx = &s17_ctx},
     {.apid = 0xFFFF, .service = 8,  .subservice = 1,
      .handler = obsw_s8_perform, .ctx = &s8_ctx},
+    {.apid = 0xFFFF, .service = 3,  .subservice = 1,
+     .handler = obsw_s3_define, .ctx = &s3_ctx},
     {.apid = 0xFFFF, .service = 3,  .subservice = 5,
      .handler = obsw_s3_enable, .ctx = &s3_ctx},
     {.apid = 0xFFFF, .service = 3,  .subservice = 6,
@@ -430,7 +437,12 @@ int main(void)
     s3_ctx.s1        = &s1_ctx;
     s3_ctx.apid      = SRDB_APID_DEFAULT;
     s3_ctx.sets      = hk_sets;
-    s3_ctx.set_count = sizeof(hk_sets) / sizeof(hk_sets[0]);
+    s3_ctx.set_count = HK_STATIC_SETS;
+    s3_ctx.set_capacity    = HK_SET_SLOTS;
+    s3_ctx.param_pool      = hk_define_pool;
+    s3_ctx.param_pool_len  = sizeof(hk_define_pool) / sizeof(hk_define_pool[0]);
+    s3_ctx.param_table     = s20_params;
+    s3_ctx.param_table_len = sizeof(s20_params) / sizeof(s20_params[0]);
 
     s5_ctx.tm_store           = &tm_store;
     s5_ctx.apid               = SRDB_APID_DEFAULT;
@@ -576,17 +588,9 @@ int main(void)
                             act.rw_torque_x, act.rw_torque_y, act.rw_torque_z);
 
                         /* Update AOCS state HK (set_id=6) */
-                        {
-                            float om = sqrtf(omega[0]*omega[0] + omega[1]*omega[1] + omega[2]*omega[2]);
-                            uint32_t err_u32, om_u32;
-                            memcpy(&err_u32, &adcs_out.angle_err_rad, 4);
-                            memcpy(&om_u32,  &om, 4);
-                            for (int _i = 0; _i < 4; _i++) {
-                                hk_aocs_err_be[_i]   = (uint8_t)((err_u32 >> (24 - 8*_i)) & 0xFFU);
-                                hk_aocs_omega_be[_i] = (uint8_t)((om_u32  >> (24 - 8*_i)) & 0xFFU);
-                            }
-                            hk_aocs_ctrl = 2U; /* PD */
-                        }
+                        hk_aocs_err   = adcs_out.angle_err_rad;
+                        hk_aocs_omega = sqrtf(omega[0]*omega[0] + omega[1]*omega[1] + omega[2]*omega[2]);
+                        hk_aocs_ctrl  = 2U; /* PD */
                     }
                 } else if (cur_mode == OBSW_FSM_SAFE && sensor.mag_valid) {
                     float b[3] = {sensor.mag_x, sensor.mag_y, sensor.mag_z};
@@ -634,18 +638,10 @@ int main(void)
                 s20_params[4].value.u32 = (uint32_t)param_safe_entry_count;  /* safe_mode_entry_count */
                 s20_params[5].value.u32 = param_wd_kick_count;               /* watchdog_kick_count */
 
-                /* Sync AOCS HK gains as big-endian IEEE 754 for TM(3,25) set_id=4 */
-                {
-                    uint32_t params[3];
-                    memcpy(&params[0], &(float){s20_get_f32(SRDB_PARAM_BDOT_GAIN, 1.0e4f)}, 4);
-                    memcpy(&params[1], &(float){s20_get_f32(SRDB_PARAM_ADCS_KP,   0.5f)},   4);
-                    memcpy(&params[2], &(float){s20_get_f32(SRDB_PARAM_ADCS_KD,   0.1f)},   4);
-                    for (int _i = 0; _i < 4; _i++) {
-                        hk_bdot_gain_be[_i] = (uint8_t)((params[0] >> (24 - 8*_i)) & 0xFFU);
-                        hk_adcs_kp_be[_i]   = (uint8_t)((params[1] >> (24 - 8*_i)) & 0xFFU);
-                        hk_adcs_kd_be[_i]   = (uint8_t)((params[2] >> (24 - 8*_i)) & 0xFFU);
-                    }
-                }
+                /* Sync AOCS HK gains for TM(3,25) set_id=4 */
+                hk_bdot_gain = s20_get_f32(SRDB_PARAM_BDOT_GAIN, 1.0e4f);
+                hk_adcs_kp   = s20_get_f32(SRDB_PARAM_ADCS_KP,   0.5f);
+                hk_adcs_kd   = s20_get_f32(SRDB_PARAM_ADCS_KD,   0.1f);
 
                 /* DHS OBC HK — live state for TM(3,25) set_id=3 */
                 param_obc_mode = (cur_mode == OBSW_FSM_STANDBY) ? 0U :
