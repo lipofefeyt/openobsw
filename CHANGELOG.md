@@ -19,6 +19,8 @@ README roadmap. Releases before v0.16 are described on the
 - SRDB loader tests.
 - `OBSW_ENABLE_COVERAGE` CMake option and a CI coverage gate: core library
   line coverage below 90% fails the build; HTML report kept as an artifact.
+- MSP430FR5969 build in CI on every pull request, with a FRAM/SRAM usage
+  report; the TI toolchain is pinned by SHA-256 and cached.
 - Static analysis in CI: cppcheck with the MISRA C:2012 addon on the core
   library. Required rules are at zero; Advisory deviations are documented in
   `docs/misra-deviations.md` (#74).

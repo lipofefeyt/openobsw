@@ -27,7 +27,7 @@ OpenSVF runs it closed loop (SIL) against a 6-DOF physics engine.
 | `obsw_sim` (aarch64) | aarch64 Linux | pipe via QEMU user-mode | Runs under `qemu-aarch64` | — |
 | `obsw_zynqmp` | aarch64 bare metal | Cadence UART | Renode: TC(17,1) ping, S8 mode changes, NOMINAL AOCS test | binary |
 | `obsw_stm32h7` | Cortex-M7 (STM32H750), FreeRTOS | USART3 115200 | WeAct board: TC/TM ping over UART; Renode ping | binary |
-| `obsw_msp430` | MSP430FR5969, 2 KB SRAM | UCA0 UART 9600 | LaunchPad: TC/TM ping over UART | — |
+| `obsw_msp430` | MSP430FR5969, 2 KB SRAM | UCA0 UART 9600 | LaunchPad: TC/TM ping over UART | binary + memory report, every PR |
 
 Not yet shown: the B-dot loop closed on real hardware (#52); the STM32H750 runs
 on the 64 MHz HSI, with PLL init to 480 MHz written but disabled (#72).
