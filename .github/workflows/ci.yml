@@ -187,6 +187,17 @@ jobs:
           cmake -B build -G Ninja -DOBSW_BUILD_TESTS=OFF -DOBSW_BUILD_SIM=OFF
           cmake --build build --target srdb_codegen
 
+      # Guards against a run that reports nothing because the addon did not
+      # load or style-severity findings were filtered out
+      - name: MISRA canary (addon must report)
+        run: |
+          out=$(cppcheck --std=c11 --enable=style \
+            --addon=misra --addon-python=/usr/bin/python3 \
+            tools/misra-canary.c 2>&1)
+          echo "$out"
+          echo "$out" | grep -q 'misra-c2012-15.6' \
+            || { echo "::error::MISRA addon produced no findings on the canary"; exit 1; }
+
       - name: cppcheck + MISRA
         run: |
           cppcheck --std=c11 \
