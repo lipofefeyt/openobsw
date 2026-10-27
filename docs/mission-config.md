@@ -128,12 +128,41 @@ Standard (PUS) implementation document.
 
 ---
 
+### S6 Memory Map
+
+| Property | Value |
+|---|---|
+| Type | `obsw_s6_region_t[]` in `obsw_s6_ctx_t` |
+| Default | none: a context without regions rejects every S6 TC |
+
+TC(6,2) load, TC(6,5) check and TC(6,9) dump carry 32-bit ground
+addresses. Each region maps a ground range `[start, start + size)` to a
+local pointer with READ and/or WRITE access. A request is served only if
+its whole range lies inside one region granting the needed access;
+otherwise it is rejected with TM(1,2) code `0x0006` before memory is
+touched. Grant WRITE only on memory that is safe to patch from ground.
+
+**openobsw reference maps:**
+
+| Build | Ground address | Size | Access | Backing |
+|---|---|---|---|---|
+| Host sim | `0x00000000` | 4 KB | READ, WRITE | patch RAM (matches opensvf `ObcEquipment`) |
+| STM32H7 FreeRTOS | `0x00000000` | 4 KB | READ, WRITE | patch RAM |
+| STM32H7 FreeRTOS | `0x08000000` | 128 KB | READ | internal flash (image CRC check) |
+
+S6 is not on the SAFE/STANDBY TC whitelist on any target. The whitelist is
+currently enforced only on STM32H7 FreeRTOS and MSP430; the host sim and
+ZynqMP do not apply it yet (#86).
+
+---
+
 ## Integrating openobsw into a mission
 
 1. Define all mission parameters above for your spacecraft.
 2. Set SCID and VCID in your `obsw_tm_frame_config_t` instance.
 3. Allocate APIDs and populate your `obsw_tc_route_t` routing table.
 4. Override compile-time sizing macros in your `CMakeLists.txt` if needed.
+   Define the S6 memory map (regions and access) for your memory layout.
 5. Implement `obsw_io_ops_t` for your target platform (UART, SpaceWire, etc).
 6. Update this document with your mission's actual values before flight.
 
@@ -151,3 +180,4 @@ Standard (PUS) implementation document.
 | TM store slots | `32` | _to be defined_ |
 | TM max packet length | `1024` bytes | _to be defined_ |
 | TC APID (nominal) | `0x010` | _to be defined_ |
+| S6 memory map | sim: 4 KB patch RAM at `0x0` | _to be defined_ |

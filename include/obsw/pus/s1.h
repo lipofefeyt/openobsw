@@ -33,6 +33,7 @@ extern "C"
 #define OBSW_S1_FAIL_ILLEGAL_SUBSVC 0x0003U
 #define OBSW_S1_FAIL_EXEC_ERROR 0x0004U
 #define OBSW_S1_FAIL_ILLEGAL_APP_DATA 0x0005U
+#define OBSW_S1_FAIL_MEM_ACCESS 0x0006U /**< S6 range outside allowed regions */
 
     /* ------------------------------------------------------------------ */
     /* Context                                                             */

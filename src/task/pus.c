@@ -21,6 +21,7 @@
 #include "obsw/pus/pus_tm.h"
 #include "obsw/pus/s1.h"
 #include "obsw/pus/s3.h"
+#include "obsw/pus/s6.h"
 #include "obsw/pus/s8.h"
 #include "obsw/pus/s9.h"
 #include "obsw/pus/s17.h"
@@ -33,7 +34,9 @@
 #include "task.h"
 #include "queue.h"
 
-#define PUS_STACK_DEPTH 512U
+/* 1024 words = 4 KB. Worst case is TC(6,9): ~1 KB dump buffer in
+ * obsw_s6_dump plus the 1 KB packet buffer in obsw_pus_tm_build. */
+#define PUS_STACK_DEPTH 1024U
 #define PUS_PRIORITY    3U   /* Med-high — TC processing */
 
 /* Byte offsets in a raw CCSDS space packet (wire protocol v3 carries no TC
@@ -50,6 +53,22 @@ static obsw_s20_ctx_t s20_ctx = {0};
 static obsw_s8_ctx_t  s8_ctx  = {0};
 static obsw_obt_t     s_obt   = {0};
 static obsw_s9_ctx_t  s9_ctx  = {.obt = &s_obt};
+static obsw_s6_ctx_t  s6_ctx  = {0};
+
+/* S6 memory map. Patch RAM sits at ground address 0, as in the host sim
+ * and opensvf, so S6 campaigns are target-independent. Internal flash is
+ * exposed read-only at its real address (stm32h750.ld) so TC(6,5) can
+ * CRC-check the flashed image. Only the PUS task touches either region. */
+#define S6_FLASH_ADDR 0x08000000U
+#define S6_FLASH_SIZE (128U * 1024U)
+
+static uint8_t s6_patch_ram[4096];
+static const obsw_s6_region_t s6_regions[] = {
+    {.start = 0x00000000U, .size = sizeof(s6_patch_ram), .base = s6_patch_ram,
+     .access = OBSW_S6_ACCESS_READ | OBSW_S6_ACCESS_WRITE},
+    {.start = S6_FLASH_ADDR, .size = S6_FLASH_SIZE,
+     .base = (const uint8_t *)S6_FLASH_ADDR, .access = OBSW_S6_ACCESS_READ},
+};
 
 static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_OBC_UPTIME,            .value = {.u32 = 0}},
@@ -116,6 +135,13 @@ static obsw_tc_route_t s_routes[] = {
      .handler = obsw_s20_get,    .ctx = &s20_ctx},
     {.apid = 0xFFFF, .service = SRDB_TC_SET_OBT_SVC, .subservice = SRDB_TC_SET_OBT_SUBSVC,
      .handler = s9_set_obt_locked, .ctx = &s9_ctx},
+    /* S6 is not in the SAFE/STANDBY whitelist: memory TCs need NOMINAL */
+    {.apid = 0xFFFF, .service = 6,  .subservice = 2,
+     .handler = obsw_s6_load,    .ctx = &s6_ctx},
+    {.apid = 0xFFFF, .service = 6,  .subservice = 5,
+     .handler = obsw_s6_check,   .ctx = &s6_ctx},
+    {.apid = 0xFFFF, .service = 6,  .subservice = 9,
+     .handler = obsw_s6_dump,    .ctx = &s6_ctx},
 };
 
 static obsw_tc_dispatcher_t s_dispatcher;
@@ -200,6 +226,12 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
     s20_ctx.table_len = sizeof(s20_params) / sizeof(s20_params[0]);
 
     s9_ctx.s1         = &s1_ctx;
+
+    s6_ctx.tm_store     = tm_store;
+    s6_ctx.s1           = &s1_ctx;
+    s6_ctx.apid         = SRDB_APID_DEFAULT;
+    s6_ctx.regions      = s6_regions;
+    s6_ctx.region_count = (uint8_t)(sizeof(s6_regions) / sizeof(s6_regions[0]));
 
     s8_ctx.tm_store   = tm_store;
     s8_ctx.s1         = &s1_ctx;

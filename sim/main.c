@@ -83,7 +83,16 @@ static obsw_s17_ctx_t s17_ctx = {0};
 static obsw_obt_t     obt     = {0};
 static obsw_s9_ctx_t  s9_ctx  = {.obt = &obt};
 static obsw_s20_ctx_t  s20_ctx = {0};
+static obsw_s6_ctx_t  s6_ctx  = {0};
 static obsw_fsm_ctx_t fsm_ctx = {0};
+
+/* S6 patch RAM: 4 KB at ground address 0, matching opensvf ObcEquipment's
+ * S6_SIMULATED_MEMORY_SIZE so the same S6 campaign runs against both. */
+static uint8_t s6_patch_ram[4096];
+static const obsw_s6_region_t s6_regions[] = {
+    {.start = 0x00000000U, .size = sizeof(s6_patch_ram), .base = s6_patch_ram,
+     .access = OBSW_S6_ACCESS_READ | OBSW_S6_ACCESS_WRITE},
+};
 static obsw_wd_ctx_t  wd_ctx  = {0};
 
 static uint16_t param_uptime_s         = 0;
@@ -365,6 +374,13 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s20_get, .ctx = &s20_ctx},
     {.apid = 0xFFFF, .service = SRDB_TC_SET_OBT_SVC, .subservice = SRDB_TC_SET_OBT_SUBSVC,
      .handler = obsw_s9_set_obt, .ctx = &s9_ctx},
+    /* S6 is not in the SAFE whitelist: memory TCs need NOMINAL */
+    {.apid = 0xFFFF, .service = 6,  .subservice = 2,
+     .handler = obsw_s6_load, .ctx = &s6_ctx},
+    {.apid = 0xFFFF, .service = 6,  .subservice = 5,
+     .handler = obsw_s6_check, .ctx = &s6_ctx},
+    {.apid = 0xFFFF, .service = 6,  .subservice = 9,
+     .handler = obsw_s6_dump, .ctx = &s6_ctx},
 };
 
 #ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
@@ -439,6 +455,12 @@ int main(void)
     s17_ctx.apid     = SRDB_APID_DEFAULT;
 
     s9_ctx.s1        = &s1_ctx;
+
+    s6_ctx.tm_store     = &tm_store;
+    s6_ctx.s1           = &s1_ctx;
+    s6_ctx.apid         = SRDB_APID_DEFAULT;
+    s6_ctx.regions      = s6_regions;
+    s6_ctx.region_count = (uint8_t)(sizeof(s6_regions) / sizeof(s6_regions[0]));
 
     s8_ctx.tm_store  = &tm_store;
     s8_ctx.s1        = &s1_ctx;

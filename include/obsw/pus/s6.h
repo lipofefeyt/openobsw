@@ -3,8 +3,15 @@
  * @brief PUS-C Service 6 — Memory Management.
  *
  * Provides ground-commanded memory load, check and dump over TT&C.
- * All operations work on raw memory addresses — address validity is
- * platform-specific and not validated here.
+ *
+ * Addresses in a TC are 32-bit ground addresses, resolved through the
+ * caller's region table (obsw_s6_region_t): a request is served only if
+ * [addr, addr + length) lies entirely inside one region granting the
+ * needed access (READ for check/dump, WRITE for load). Anything else is
+ * rejected with TM(1,2) OBSW_S1_FAIL_MEM_ACCESS before memory is touched.
+ * A context with no regions rejects every request (fail closed). Mapping
+ * through a base pointer also lets 64-bit hosts, whose data addresses do
+ * not fit in 32 bits, expose memory to ground.
  *
  * TC handlers registered in the dispatcher routing table:
  *   TC(6,2)  Load memory area         → obsw_s6_load()
@@ -46,6 +53,28 @@ extern "C" {
 #define OBSW_S6_DUMP_LEN 7U     /**< addr(4) + len(2) + id(1)     */
 
 /* ------------------------------------------------------------------ */
+/* Memory regions                                                      */
+/* ------------------------------------------------------------------ */
+
+#define OBSW_S6_ACCESS_READ 0x01U  /**< TC(6,5) check, TC(6,9) dump */
+#define OBSW_S6_ACCESS_WRITE 0x02U /**< TC(6,2) load                */
+
+/**
+ * One ground-addressable memory region.
+ *
+ * Ground address @c start maps to local pointer @c base. @c base is
+ * const so read-only regions can cover const data (e.g. flash); S6 writes
+ * through it only when @c access includes OBSW_S6_ACCESS_WRITE, so that
+ * flag must only be set on writable memory.
+ */
+typedef struct {
+    uint32_t start;      /**< Ground-visible start address     */
+    uint32_t size;       /**< Region size in bytes              */
+    const uint8_t *base; /**< Local address corresponding to start */
+    uint8_t access;      /**< OBSW_S6_ACCESS_READ | _WRITE      */
+} obsw_s6_region_t;
+
+/* ------------------------------------------------------------------ */
 /* Context                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -55,6 +84,8 @@ typedef struct {
     uint16_t apid;
     uint16_t msg_counter;
     uint32_t timestamp;
+    const obsw_s6_region_t *regions; /**< Allowed regions (NULL = none) */
+    uint8_t region_count;
 } obsw_s6_ctx_t;
 
 /* ------------------------------------------------------------------ */
@@ -63,8 +94,9 @@ typedef struct {
 
 /**
  * TC(6,2) — load memory area.
- * Writes the data field of the TC directly to the address specified
- * in the user data field. Issues TM(1,1) and TM(1,7) via S1.
+ * Writes the data field of the TC to the requested range of a WRITE
+ * region. Issues TM(1,1) and TM(1,7) via S1, or TM(1,2) if the range
+ * is not writable.
  */
 int obsw_s6_load(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx);
 
