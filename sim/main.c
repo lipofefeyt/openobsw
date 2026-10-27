@@ -66,11 +66,6 @@ static void write_actuator_frame(const obsw_actuator_frame_t *act)
 
 static obsw_tm_store_t tm_store;
 
-static void sim_responder(uint8_t f, const obsw_tc_t *t, void *c)
-{
-    (void)f; (void)t; (void)c;
-}
-
 /* ------------------------------------------------------------------ */
 /* Service contexts                                                    */
 /* ------------------------------------------------------------------ */
@@ -353,11 +348,8 @@ static void on_watchdog_expiry(void *ctx) {
                    OBSW_S5_HIGH, SRDB_EVENT_WATCHDOG_EXPIRY, NULL, 0);
 }
 
-static const obsw_fsm_tc_entry_t safe_whitelist[] = {
-    {SRDB_TC_ARE_YOU_ALIVE_SVC,      SRDB_TC_ARE_YOU_ALIVE_SUBSVC},
-    {SRDB_TC_S8_PERFORM_FUNCTION_SVC, SRDB_TC_S8_PERFORM_FUNCTION_SUBSVC},
-    {SRDB_TC_SET_OBT_SVC,             SRDB_TC_SET_OBT_SUBSVC},
-};
+/* telecommands.yaml safe_allowed: TC(17,1), (8,1), (9,128), (20,3) */
+static const obsw_fsm_tc_entry_t safe_whitelist[] = SRDB_SAFE_TC_WHITELIST;
 
 static obsw_tc_route_t routes[] = {
     {.apid = 0xFFFF, .service = 17, .subservice = 1,
@@ -425,7 +417,7 @@ int main(void)
         .on_exit_safe      = NULL,
         .hook_ctx          = NULL,
         .safe_tc_whitelist = safe_whitelist,
-        .whitelist_len     = sizeof(safe_whitelist) / sizeof(safe_whitelist[0]),
+        .whitelist_len     = SRDB_SAFE_TC_COUNT,
     };
     obsw_fsm_init(&fsm_ctx, &fsm_cfg);
     obsw_fsm_to_safe(&fsm_ctx);   /* sim skips STANDBY auto-timeout; start in SAFE */
@@ -482,7 +474,8 @@ int main(void)
     obsw_tc_dispatcher_t dispatcher;
     obsw_tc_dispatcher_init(&dispatcher,
                             routes, sizeof(routes) / sizeof(routes[0]),
-                            sim_responder, NULL);
+                            obsw_s1_dispatch_responder, &s1_ctx);
+    obsw_tc_dispatcher_set_gate(&dispatcher, obsw_fsm_tc_gate, &fsm_ctx);
 
     /* B-dot AOCS */
     obsw_bdot_ctx_t bdot_ctx;
@@ -519,6 +512,8 @@ int main(void)
             int rc = obsw_tc_dispatcher_feed(&dispatcher, frame, frame_len);
             if (rc == OBSW_TC_ERR_NO_ROUTE)
                 fprintf(stderr, "[OBSW] No route for TC\n");
+            else if (rc == OBSW_TC_ERR_GATED)
+                fprintf(stderr, "[OBSW] TC not allowed in current mode\n");
             else if (rc != OBSW_TC_OK)
                 fprintf(stderr, "[OBSW] Dispatcher error: %d\n", rc);
 

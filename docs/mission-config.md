@@ -150,9 +150,24 @@ touched. Grant WRITE only on memory that is safe to patch from ground.
 | STM32H7 FreeRTOS | `0x00000000` | 4 KB | READ, WRITE | patch RAM |
 | STM32H7 FreeRTOS | `0x08000000` | 128 KB | READ | internal flash (image CRC check) |
 
-S6 is not on the SAFE/STANDBY TC whitelist on any target. The whitelist is
-currently enforced only on STM32H7 FreeRTOS and MSP430; the host sim and
-ZynqMP do not apply it yet (#86).
+S6 is not on the SAFE/STANDBY TC whitelist, so memory TCs need NOMINAL.
+
+---
+
+### SAFE/STANDBY TC Whitelist
+
+| Property | Value |
+|---|---|
+| Source | `safe_allowed: true` in `srdb/data/telecommands.yaml` |
+| Generated | `SRDB_SAFE_TC_WHITELIST`, `SRDB_SAFE_TC_COUNT` |
+| Rejection | TM(1,2) code `0x0007` |
+
+Every target installs the FSM gate on its dispatcher, so the whitelist is
+enforced identically on the host sim, STM32H7, ZynqMP and MSP430. Keep it
+to the TCs needed to diagnose the spacecraft and leave SAFE.
+
+**openobsw default:** TC(17,1) ping, TC(8,1) mode functions, TC(9,128)
+set OBT, TC(20,3) parameter get.
 
 ---
 
@@ -181,3 +196,4 @@ ZynqMP do not apply it yet (#86).
 | TM max packet length | `1024` bytes | _to be defined_ |
 | TC APID (nominal) | `0x010` | _to be defined_ |
 | S6 memory map | sim: 4 KB patch RAM at `0x0` | _to be defined_ |
+| SAFE TC whitelist | (17,1) (8,1) (9,128) (20,3) | _to be defined_ |

@@ -112,7 +112,114 @@ void test_dispatch_no_route(void)
 
     TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_NO_ROUTE,
                           obsw_tc_dispatcher_feed(&d, frame, len));
-    TEST_ASSERT_EQUAL_UINT8(OBSW_TC_ACK_REJECT, last_ack_flags);
+    TEST_ASSERT_EQUAL_UINT8(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_SVC, last_ack_flags);
+}
+
+void test_dispatch_no_route_known_service(void)
+{
+    obsw_tc_route_t table[] = {
+        {.apid = 0x010, .service = 17, .subservice = 1, .handler = noop_handler, .ctx = NULL},
+    };
+    obsw_tc_dispatcher_t d;
+    obsw_tc_dispatcher_init(&d, table, 1, test_responder, NULL);
+
+    uint8_t frame[16];
+    size_t len = make_tc_frame(frame, sizeof(frame), 0x010, 17, 9);
+
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_NO_ROUTE, obsw_tc_dispatcher_feed(&d, frame, len));
+    TEST_ASSERT_EQUAL_UINT8(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_SUBSVC, last_ack_flags);
+}
+
+void test_dispatch_service_on_other_apid_is_illegal_svc(void)
+{
+    obsw_tc_route_t table[] = {
+        {.apid = 0x020, .service = 17, .subservice = 2, .handler = noop_handler, .ctx = NULL},
+    };
+    obsw_tc_dispatcher_t d;
+    obsw_tc_dispatcher_init(&d, table, 1, test_responder, NULL);
+
+    uint8_t frame[16];
+    size_t len = make_tc_frame(frame, sizeof(frame), 0x010, 17, 1);
+
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_NO_ROUTE, obsw_tc_dispatcher_feed(&d, frame, len));
+    TEST_ASSERT_EQUAL_UINT8(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_SVC, last_ack_flags);
+}
+
+/* Gate that only lets service 17 through and records what it saw */
+static int gate_call_count;
+static uint8_t gate_seen_svc;
+
+static bool svc17_gate(const obsw_tc_t *tc, void *ctx)
+{
+    (void)ctx;
+    gate_call_count++;
+    gate_seen_svc = tc->service;
+    return tc->service == 17;
+}
+
+void test_gate_rejects_before_handler(void)
+{
+    handler_call_count = 0;
+    gate_call_count    = 0;
+    last_ack_flags     = 0;
+
+    obsw_tc_route_t table[] = {
+        {.apid = 0xFFFF, .service = 8, .subservice = 1, .handler = noop_handler, .ctx = NULL},
+    };
+    obsw_tc_dispatcher_t d;
+    obsw_tc_dispatcher_init(&d, table, 1, test_responder, NULL);
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_OK, obsw_tc_dispatcher_set_gate(&d, svc17_gate, NULL));
+
+    uint8_t frame[16];
+    size_t len = make_tc_frame(frame, sizeof(frame), 0x010, 8, 1);
+
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_GATED, obsw_tc_dispatcher_feed(&d, frame, len));
+    TEST_ASSERT_EQUAL_INT(0, handler_call_count);
+    TEST_ASSERT_EQUAL_INT(1, gate_call_count);
+    TEST_ASSERT_EQUAL_UINT8(8, gate_seen_svc);
+    TEST_ASSERT_EQUAL_UINT8(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_GATED, last_ack_flags);
+}
+
+void test_gate_allows_then_routes(void)
+{
+    handler_call_count = 0;
+
+    obsw_tc_route_t table[] = {
+        {.apid = 0xFFFF, .service = 17, .subservice = 1, .handler = noop_handler, .ctx = NULL},
+    };
+    obsw_tc_dispatcher_t d;
+    obsw_tc_dispatcher_init(&d, table, 1, test_responder, NULL);
+    obsw_tc_dispatcher_set_gate(&d, svc17_gate, NULL);
+
+    uint8_t frame[16];
+    size_t len = make_tc_frame(frame, sizeof(frame), 0x010, 17, 1);
+
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_OK, obsw_tc_dispatcher_feed(&d, frame, len));
+    TEST_ASSERT_EQUAL_INT(1, handler_call_count);
+}
+
+void test_gate_cleared_with_null(void)
+{
+    handler_call_count = 0;
+
+    obsw_tc_route_t table[] = {
+        {.apid = 0xFFFF, .service = 8, .subservice = 1, .handler = noop_handler, .ctx = NULL},
+    };
+    obsw_tc_dispatcher_t d;
+    obsw_tc_dispatcher_init(&d, table, 1, test_responder, NULL);
+    obsw_tc_dispatcher_set_gate(&d, svc17_gate, NULL);
+    obsw_tc_dispatcher_set_gate(&d, NULL, NULL);
+
+    uint8_t frame[16];
+    size_t len = make_tc_frame(frame, sizeof(frame), 0x010, 8, 1);
+
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_OK, obsw_tc_dispatcher_feed(&d, frame, len));
+    TEST_ASSERT_EQUAL_INT(1, handler_call_count);
+}
+
+void test_set_gate_null_dispatcher(void)
+{
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_NULL, obsw_tc_dispatcher_set_gate(NULL, svc17_gate, NULL));
 }
 
 void test_dispatch_wildcard_apid(void)
@@ -172,6 +279,12 @@ int main(void)
     RUN_TEST(test_init_null_args);
     RUN_TEST(test_dispatch_matching_route);
     RUN_TEST(test_dispatch_no_route);
+    RUN_TEST(test_dispatch_no_route_known_service);
+    RUN_TEST(test_dispatch_service_on_other_apid_is_illegal_svc);
+    RUN_TEST(test_gate_rejects_before_handler);
+    RUN_TEST(test_gate_allows_then_routes);
+    RUN_TEST(test_gate_cleared_with_null);
+    RUN_TEST(test_set_gate_null_dispatcher);
     RUN_TEST(test_dispatch_wildcard_apid);
     RUN_TEST(test_dispatch_handler_error);
     RUN_TEST(test_dispatch_first_match_wins);

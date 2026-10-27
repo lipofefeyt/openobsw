@@ -58,6 +58,11 @@ bool obsw_fsm_tc_allowed(const obsw_fsm_ctx_t *fsm, uint8_t svc, uint8_t subsvc)
     return false;
 }
 
+bool obsw_fsm_tc_gate(const obsw_tc_t *tc, void *fsm)
+{
+    return tc && obsw_fsm_tc_allowed((const obsw_fsm_ctx_t *)fsm, tc->service, tc->subservice);
+}
+
 obsw_fsm_mode_t obsw_fsm_mode(const obsw_fsm_ctx_t *fsm)
 {
     if (!fsm)

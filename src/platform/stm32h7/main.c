@@ -78,11 +78,6 @@ static void system_clock_init(void)
  /* Superloop path owns the dispatcher and PUS contexts directly.
   * In the FreeRTOS path these live in src/task/pus.c instead. */
  #ifndef OBSW_FREERTOS
- static void noop_responder(uint8_t flag, const obsw_tc_t *tc, void *ctx)
- {
-     (void)flag; (void)tc; (void)ctx;
- }
-
  static obsw_s1_ctx_t   s1_ctx  = {0};
  static obsw_s17_ctx_t  s17_ctx = {0};
  static obsw_s20_ctx_t  s20_ctx = {0};
@@ -187,7 +182,7 @@ static void system_clock_init(void)
      obsw_tc_dispatcher_init(&dispatcher,
                              routes,
                              sizeof(routes) / sizeof(routes[0]),
-                             noop_responder, NULL);
+                             obsw_s1_dispatch_responder, &s1_ctx);
  #endif /* !OBSW_FREERTOS */
 
      /* DBGMCU: keep SWD alive during WFI — placed after uart_init so a fault

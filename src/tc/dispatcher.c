@@ -2,9 +2,10 @@
  * @file dispatcher.c
  * @brief TC command dispatcher — routes incoming TC packets to handlers.
  *
- * Parses the space packet primary and PUS secondary headers, then performs
- * a linear scan of the routing table for a matching (APID, service,
- * subservice) tuple. Wildcard APID (0xFFFF) matches any source.
+ * Parses the space packet primary and PUS secondary headers, applies the
+ * optional acceptance gate, then performs a linear scan of the routing
+ * table for a matching (APID, service, subservice) tuple. Wildcard APID
+ * (0xFFFF) matches any source.
  */
 #include "obsw/tc/dispatcher.h"
 #include <string.h>
@@ -25,6 +26,21 @@ int obsw_tc_dispatcher_init(obsw_tc_dispatcher_t *d,
     d->table_len = table_len;
     d->responder = responder;
     d->responder_ctx = responder_ctx;
+    d->gate = NULL;
+    d->gate_ctx = NULL;
+
+    return OBSW_TC_OK;
+}
+
+int obsw_tc_dispatcher_set_gate(obsw_tc_dispatcher_t *d,
+                                obsw_tc_gate_t gate,
+                                void *gate_ctx)
+{
+    if (!d)
+        return OBSW_TC_ERR_NULL;
+
+    d->gate = gate;
+    d->gate_ctx = gate_ctx;
 
     return OBSW_TC_OK;
 }
@@ -58,20 +74,28 @@ int obsw_tc_dispatcher_feed(obsw_tc_dispatcher_t *d,
                            ? (uint16_t)(pkt.payload_len - PUS_TC_SEC_HDR_LEN)
                            : 0U;
 
+    if (d->gate && !d->gate(&tc, d->gate_ctx))
+    {
+        d->responder(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_GATED, &tc, d->responder_ctx);
+        return OBSW_TC_ERR_GATED;
+    }
+
     /* Route lookup — first match wins */
+    uint8_t reason = OBSW_TC_REJECT_SVC;
     for (size_t i = 0; i < d->table_len; i++)
     {
         const obsw_tc_route_t *r = &d->table[i];
-        if ((r->apid == 0xFFFFU || r->apid == tc.apid) &&
-            r->service == tc.service &&
-            r->subservice == tc.subservice)
+        if ((r->apid != 0xFFFFU && r->apid != tc.apid) || r->service != tc.service)
+            continue;
+        if (r->subservice == tc.subservice)
         {
             int rc = r->handler(&tc, d->responder, r->ctx);
             return (rc == 0) ? OBSW_TC_OK : OBSW_TC_ERR_HANDLER;
         }
+        reason = OBSW_TC_REJECT_SUBSVC;
     }
 
     /* No route — send reject */
-    d->responder(OBSW_TC_ACK_REJECT, &tc, d->responder_ctx);
+    d->responder(OBSW_TC_ACK_REJECT | reason, &tc, d->responder_ctx);
     return OBSW_TC_ERR_NO_ROUTE;
 }

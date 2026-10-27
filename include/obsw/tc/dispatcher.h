@@ -11,6 +11,7 @@
 #define OBSW_TC_DISPATCHER_H
 
 #include "obsw/ccsds/space_packet.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -27,6 +28,7 @@ extern "C" {
 #define OBSW_TC_ERR_NO_ROUTE    -2   /**< No handler matched          */
 #define OBSW_TC_ERR_HANDLER     -3   /**< Handler returned an error   */
 #define OBSW_TC_ERR_PARSE       -4   /**< Packet could not be parsed  */
+#define OBSW_TC_ERR_GATED       -5   /**< Refused by the dispatcher gate */
 
 /* ------------------------------------------------------------------ */
 /* TC packet descriptor                                               */
@@ -55,6 +57,11 @@ typedef struct {
 #define OBSW_TC_ACK_PROGRESS 0x04U
 #define OBSW_TC_ACK_COMPLETE 0x08U
 #define OBSW_TC_ACK_REJECT   0x80U   /**< Negative ack */
+
+/** Rejection reasons, set together with OBSW_TC_ACK_REJECT by the dispatcher */
+#define OBSW_TC_REJECT_SVC    0x10U   /**< No route for this service      */
+#define OBSW_TC_REJECT_SUBSVC 0x20U   /**< Service routed, subservice not */
+#define OBSW_TC_REJECT_GATED  0x40U   /**< Refused by the gate (e.g. mode) */
 
 /**
  * Called by a handler to emit a TM acknowledgement.
@@ -92,6 +99,15 @@ typedef struct {
     void              *ctx;         /**< Passed through to handler      */
 } obsw_tc_route_t;
 
+/**
+ * Acceptance gate, consulted before route lookup.
+ *
+ * @param tc   Parsed TC command.
+ * @param ctx  Opaque context provided to obsw_tc_dispatcher_set_gate().
+ * @return true to let the TC through, false to reject it.
+ */
+typedef bool (*obsw_tc_gate_t)(const obsw_tc_t *tc, void *ctx);
+
 /* ------------------------------------------------------------------ */
 /* Dispatcher                                                          */
 /* ------------------------------------------------------------------ */
@@ -102,6 +118,8 @@ typedef struct {
     size_t                table_len;
     obsw_tc_responder_t   responder;
     void                 *responder_ctx;
+    obsw_tc_gate_t        gate;          /**< NULL = accept every TC     */
+    void                 *gate_ctx;
 } obsw_tc_dispatcher_t;
 
 /**
@@ -121,17 +139,31 @@ int obsw_tc_dispatcher_init(obsw_tc_dispatcher_t *d,
                              void *responder_ctx);
 
 /**
+ * Install an acceptance gate (e.g. obsw_fsm_tc_gate for the SAFE whitelist).
+ *
+ * @param d         Initialised dispatcher.
+ * @param gate      Gate callback, or NULL to remove it.
+ * @param gate_ctx  Passed through to every gate call.
+ * @return OBSW_TC_OK or OBSW_TC_ERR_NULL.
+ */
+int obsw_tc_dispatcher_set_gate(obsw_tc_dispatcher_t *d,
+                                obsw_tc_gate_t gate,
+                                void *gate_ctx);
+
+/**
  * Feed a raw TC frame into the dispatcher.
  *
- * The dispatcher parses the space packet, looks up the route,
- * and calls the matching handler. If no route matches,
- * the responder is called with OBSW_TC_ACK_REJECT.
+ * The dispatcher parses the space packet, asks the gate (if any), looks
+ * up the route, and calls the matching handler. A TC refused by the gate
+ * or matching no route is passed to the responder with
+ * OBSW_TC_ACK_REJECT and one OBSW_TC_REJECT_* reason; the handler is not
+ * called. Packets that fail to parse are dropped without a response.
  *
  * @param d          Initialised dispatcher.
  * @param frame      Raw TC frame bytes.
  * @param frame_len  Length of frame in bytes.
- * @return OBSW_TC_OK, OBSW_TC_ERR_NO_ROUTE, OBSW_TC_ERR_PARSE,
- *         or OBSW_TC_ERR_HANDLER.
+ * @return OBSW_TC_OK, OBSW_TC_ERR_GATED, OBSW_TC_ERR_NO_ROUTE,
+ *         OBSW_TC_ERR_PARSE, or OBSW_TC_ERR_HANDLER.
  */
 int obsw_tc_dispatcher_feed(obsw_tc_dispatcher_t *d,
                              const uint8_t *frame,

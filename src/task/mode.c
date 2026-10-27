@@ -30,12 +30,8 @@
 
 /* ── TC whitelist for non-NOMINAL modes ──────────────────────────────── */
 
-static const obsw_fsm_tc_entry_t s_whitelist[] = {
-    {.service = 8,  .subservice = 1},  /* S8(8,1): mode transitions    */
-    {.service = 17, .subservice = 1},  /* S17(17,1): ping               */
-    {.service = 20, .subservice = 3},  /* S20(20,3): get parameter      */
-    {.service = 9,  .subservice = 128},/* S9(9,128): set on-board time  */
-};
+/* telecommands.yaml safe_allowed: TC(17,1), (8,1), (9,128), (20,3) */
+static const obsw_fsm_tc_entry_t s_whitelist[] = SRDB_SAFE_TC_WHITELIST;
 
 /* ── Static allocation ───────────────────────────────────────────────── */
 
@@ -128,7 +124,7 @@ void obsw_mode_task_init(obsw_tm_store_t *tm_store)
         .on_exit_safe      = on_exit_safe,
         .hook_ctx          = NULL,
         .safe_tc_whitelist = s_whitelist,
-        .whitelist_len     = sizeof(s_whitelist) / sizeof(s_whitelist[0]),
+        .whitelist_len     = SRDB_SAFE_TC_COUNT,
     };
     obsw_fsm_init(&s_fsm, &cfg);   /* starts in STANDBY */
 

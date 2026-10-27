@@ -7,6 +7,10 @@
 #   service     PUS service type
 #   subservice  PUS subservice type
 #   parameters  User data field parameters (ordered list)
+#   safe_allowed  Optional, default false. true puts (service, subservice)
+#                 on the SAFE/STANDBY TC whitelist (SRDB_SAFE_TC_WHITELIST),
+#                 used by every target. All other TCs need NOMINAL and are
+#                 rejected with TM(1,2) code 0x0007 in SAFE/STANDBY.
 #
 # Parameter types: uint8, uint16, uint32, int8, int16, int32
 
@@ -18,6 +22,7 @@ telecommands:
     apid: 0x010
     service: 17
     subservice: 1
+    safe_allowed: true
     parameters: []
 
   # ---- S3 — Housekeeping -------------------------------------------------
@@ -52,6 +57,7 @@ telecommands:
     apid: 0x010
     service: 8
     subservice: 1
+    safe_allowed: true
     parameters:
       - name: function_id
         type: uint16
@@ -67,6 +73,7 @@ telecommands:
     apid: 0x010
     service: 9
     subservice: 128
+    safe_allowed: true
     parameters:
       - name: coarse
         type: uint32
@@ -74,3 +81,29 @@ telecommands:
       - name: fine
         type: uint16
         description: "Fractional seconds, 1/65536 s units"
+
+  # ---- S20 - Parameter Management ---------------------------------------
+
+  - name: set_parameter
+    description: "TC(20,1) set an on-board parameter value"
+    apid: 0x010
+    service: 20
+    subservice: 1
+    parameters:
+      - name: param_id
+        type: uint16
+        description: "SRDB parameter ID"
+      - name: raw_value
+        type: uint32
+        description: "Raw 32-bit value (float32 parameters as IEEE 754 bits)"
+
+  - name: get_parameter
+    description: "TC(20,3) get an on-board parameter value, reported in TM(20,2)"
+    apid: 0x010
+    service: 20
+    subservice: 3
+    safe_allowed: true
+    parameters:
+      - name: param_id
+        type: uint16
+        description: "SRDB parameter ID"

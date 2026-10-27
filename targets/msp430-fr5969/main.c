@@ -113,10 +113,7 @@ static void on_enter_safe(void *ctx)
 /* SAFE-mode TC whitelist                                              */
 /* ------------------------------------------------------------------ */
 
-static const obsw_fsm_tc_entry_t safe_whitelist[] = {
-    {SRDB_TC_ARE_YOU_ALIVE_SVC, SRDB_TC_ARE_YOU_ALIVE_SUBSVC},
-    {SRDB_TC_S8_PERFORM_FUNCTION_SVC, SRDB_TC_S8_PERFORM_FUNCTION_SUBSVC},
-};
+static const obsw_fsm_tc_entry_t safe_whitelist[] = SRDB_SAFE_TC_WHITELIST;
 
 /* ------------------------------------------------------------------ */
 /* TC routing table                                                    */
@@ -152,16 +149,6 @@ static obsw_tc_route_t routes[] = {
 /* TM responder — writes TM packets to UART                           */
 /* ------------------------------------------------------------------ */
 
-/* ------------------------------------------------------------------ */
-/* No-op responder — TM is drained explicitly after each dispatch     */
-/* ------------------------------------------------------------------ */
-
-static void noop_responder(uint8_t f, const obsw_tc_t *t, void *c)
-{
-    (void)f;
-    (void)t;
-    (void)c;
-}
 
 /* ------------------------------------------------------------------ */
 /* Watchdog expiry handler                                             */
@@ -209,7 +196,7 @@ int main(void)
         .on_exit_safe      = NULL,
         .hook_ctx          = NULL,
         .safe_tc_whitelist = safe_whitelist,
-        .whitelist_len     = sizeof(safe_whitelist) / sizeof(safe_whitelist[0]),
+        .whitelist_len     = SRDB_SAFE_TC_COUNT,
     };
     obsw_fsm_init(&fsm, &fsm_cfg);
 
@@ -255,7 +242,8 @@ int main(void)
     /* Dispatcher */
     obsw_tc_dispatcher_t dispatcher;
     obsw_tc_dispatcher_init(
-        &dispatcher, routes, sizeof(routes) / sizeof(routes[0]), noop_responder, NULL);
+        &dispatcher, routes, sizeof(routes) / sizeof(routes[0]), obsw_s1_dispatch_responder, &s1);
+    obsw_tc_dispatcher_set_gate(&dispatcher, obsw_fsm_tc_gate, &fsm);
 
     /* Boot event */
     obsw_s5_report(&s5, OBSW_S5_INFO, SRDB_EVENT_BOOT_COMPLETE, NULL, 0);
@@ -276,13 +264,8 @@ int main(void)
         if (frame_len > 0 && frame_len <= sizeof(frame)) {
             uart_read_exact(frame, frame_len);
 
-            /* Filter by FSM mode before dispatching */
-            obsw_sp_packet_t pkt;
-            if (obsw_sp_parse(frame, frame_len, &pkt) == OBSW_SP_OK) {
-                if (obsw_fsm_tc_allowed(&fsm, pkt.payload[1], pkt.payload[2])) {
-                    obsw_tc_dispatcher_feed(&dispatcher, frame, frame_len);
-                }
-            }
+            /* FSM gate and TM(1,2) on rejection are applied by the dispatcher */
+            obsw_tc_dispatcher_feed(&dispatcher, frame, frame_len);
 
             /* Drain TM store — transmit all enqueued packets */
             {

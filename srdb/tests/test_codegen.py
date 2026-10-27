@@ -49,6 +49,19 @@ class TestCodegen:
         header = generate_header(srdb)
         assert "SRDB_SAFE_TRIGGER_IDS" in header
 
+    def test_safe_tc_whitelist(self, srdb):
+        header = generate_header(srdb)
+        assert f"SRDB_SAFE_TC_COUNT  {len(srdb.safe_tc_whitelist())}U" in header
+        assert "SRDB_SAFE_TC_WHITELIST  { {17U, 1U}, {8U, 1U}, {9U, 128U}, {20U, 3U} }" in header
+
+    def test_safe_tc_whitelist_omitted_when_empty(self, srdb):
+        srdb = srdb.model_copy(deep=True)
+        for tc in srdb.telecommands:
+            tc.safe_allowed = False
+        header = generate_header(srdb)
+        assert "SRDB_SAFE_TC_COUNT  0U" in header
+        assert "SRDB_SAFE_TC_WHITELIST" not in header
+
     def test_all_parameters_have_macros(self, srdb):
         header = generate_header(srdb)
         for p in srdb.parameters:
