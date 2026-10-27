@@ -20,7 +20,9 @@ static obsw_s3_set_t *find_set(obsw_s3_ctx_t *ctx, uint8_t set_id)
     for (uint8_t i = 0; i < ctx->set_count; i++)
     {
         if (ctx->sets[i].set_id == set_id)
+        {
             return &ctx->sets[i];
+        }
     }
     return NULL;
 }
@@ -31,17 +33,19 @@ static void put_be(uint8_t *dst, const void *src, obsw_s3_param_size_t size)
     uint32_t v = 0;
     if (size == OBSW_S3_PARAM_U8) {
         uint8_t u8;
-        memcpy(&u8, src, 1);
+        (void)memcpy(&u8, src, 1);
         v = u8;
     } else if (size == OBSW_S3_PARAM_U16) {
         uint16_t u16;
-        memcpy(&u16, src, 2);
+        (void)memcpy(&u16, src, 2);
         v = u16;
     } else {
-        memcpy(&v, src, 4); /* uint32_t, int32_t or float */
+        (void)memcpy(&v, src, 4); /* uint32_t, int32_t or float */
     }
-    for (uint8_t i = 0; i < (uint8_t)size; i++)
-        dst[i] = (uint8_t)(v >> (8U * ((uint8_t)size - 1U - i)));
+    uint32_t n = (uint32_t)size;
+    for (uint32_t i = 0; i < n; i++) {
+        dst[i] = (uint8_t)(v >> (8U * (n - 1U - i)));
+    }
 }
 
 /** Serialise all parameters of a set into buf, big-endian (PUS-C);
@@ -53,23 +57,27 @@ static uint16_t serialise_set(const obsw_s3_set_t *set,
     for (uint8_t i = 0; i < set->param_count; i++)
     {
         const obsw_s3_param_t *p = &set->params[i];
-        if (offset + p->size > buf_len)
+        if (((uint32_t)offset + (uint32_t)p->size) > buf_len)
+        {
             return 0;
+        }
         put_be(buf + offset, p->ptr, p->size);
-        offset = (uint16_t)(offset + p->size);
+        offset = (uint16_t)(offset + (uint16_t)p->size);
     }
     return offset;
 }
 
 /** Emit a TM(3,25) housekeeping report for the given set. */
-static int emit_hk_report(obsw_s3_ctx_t *ctx, obsw_s3_set_t *set)
+static int emit_hk_report(obsw_s3_ctx_t *ctx, const obsw_s3_set_t *set)
 {
     uint8_t buf[OBSW_TM_MAX_PACKET_LEN];
     buf[0] = set->set_id;
     uint16_t param_len = serialise_set(set, buf + 1U,
                                        (uint16_t)(sizeof(buf) - 1U));
-    if (param_len == 0 && set->param_count > 0)
+    if (param_len == 0U && set->param_count > 0U)
+    {
         return OBSW_PUS_TM_ERR_TOO_LARGE;
+    }
 
     uint16_t seq = ctx->msg_counter++;
     return obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
@@ -87,7 +95,9 @@ static const obsw_s20_param_t *find_param(const obsw_s3_ctx_t *ctx, uint16_t id)
     for (uint8_t i = 0; i < ctx->param_table_len; i++)
     {
         if (ctx->param_table[i].param_id == id)
+        {
             return &ctx->param_table[i];
+        }
     }
     return NULL;
 }
@@ -100,14 +110,16 @@ int obsw_s3_define(const obsw_tc_t *tc,
                    obsw_tc_responder_t respond,
                    void *ctx)
 {
-    (void)respond;
+    (void)&respond; /* unused: handlers report through S1 */
     obsw_s3_ctx_t *s = (obsw_s3_ctx_t *)ctx;
     if (!s || !tc)
+    {
         return -1;
+    }
 
     if (!tc->user_data || tc->user_data_len < 6U)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
 
@@ -120,14 +132,14 @@ int obsw_s3_define(const obsw_tc_t *tc,
     if (n == 0U || tc->user_data_len != 6U + 2U * (uint16_t)n || find_set(s, set_id) ||
         1U + 4U * (uint32_t)n > S3_MAX_REPORT_DATA)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
     for (uint8_t i = 0; i < n; i++)
     {
         if (!find_param(s, obsw_be16(ids + 2U * i)))
         {
-            obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+            (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
             return -1;
         }
     }
@@ -135,11 +147,11 @@ int obsw_s3_define(const obsw_tc_t *tc,
     if (!s->param_pool || s->set_count >= s->set_capacity ||
         s->param_pool_len - s->param_pool_used < n)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
         return -1;
     }
 
-    obsw_s1_accept_success(s->s1, tc);
+    (void)obsw_s1_accept_success(s->s1, tc);
 
     obsw_s3_param_t *params = &s->param_pool[s->param_pool_used];
     for (uint8_t i = 0; i < n; i++)
@@ -158,7 +170,7 @@ int obsw_s3_define(const obsw_tc_t *tc,
     set->enabled        = false;
     s->set_count++; /* last, so obsw_s3_tick never sees a half-built set */
 
-    obsw_s1_completion_success(s->s1, tc);
+    (void)obsw_s1_completion_success(s->s1, tc);
     return 0;
 }
 
@@ -166,14 +178,16 @@ int obsw_s3_enable(const obsw_tc_t *tc,
                    obsw_tc_responder_t respond,
                    void *ctx)
 {
-    (void)respond;
+    (void)&respond; /* unused: handlers report through S1 */
     obsw_s3_ctx_t *s = (obsw_s3_ctx_t *)ctx;
     if (!s || !tc)
+    {
         return -1;
+    }
 
     if (!tc->user_data || tc->user_data_len < 5U)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
 
@@ -183,15 +197,15 @@ int obsw_s3_enable(const obsw_tc_t *tc,
     obsw_s3_set_t *set = find_set(s, set_id);
     if (!set)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
         return -1;
     }
 
-    obsw_s1_accept_success(s->s1, tc);
+    (void)obsw_s1_accept_success(s->s1, tc);
     set->interval_ticks = interval;
     set->countdown = interval;
     set->enabled = true;
-    obsw_s1_completion_success(s->s1, tc);
+    (void)obsw_s1_completion_success(s->s1, tc);
     return 0;
 }
 
@@ -199,27 +213,29 @@ int obsw_s3_disable(const obsw_tc_t *tc,
                     obsw_tc_responder_t respond,
                     void *ctx)
 {
-    (void)respond;
+    (void)&respond; /* unused: handlers report through S1 */
     obsw_s3_ctx_t *s = (obsw_s3_ctx_t *)ctx;
     if (!s || !tc)
+    {
         return -1;
+    }
 
     if (!tc->user_data || tc->user_data_len < 1U)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
 
     obsw_s3_set_t *set = find_set(s, tc->user_data[0]);
     if (!set)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
         return -1;
     }
 
-    obsw_s1_accept_success(s->s1, tc);
+    (void)obsw_s1_accept_success(s->s1, tc);
     set->enabled = false;
-    obsw_s1_completion_success(s->s1, tc);
+    (void)obsw_s1_completion_success(s->s1, tc);
     return 0;
 }
 
@@ -230,17 +246,23 @@ int obsw_s3_disable(const obsw_tc_t *tc,
 void obsw_s3_tick(obsw_s3_ctx_t *ctx)
 {
     if (!ctx)
+    {
         return;
+    }
     for (uint8_t i = 0; i < ctx->set_count; i++)
     {
         obsw_s3_set_t *set = &ctx->sets[i];
         if (!set->enabled || set->interval_ticks == 0U)
+        {
             continue;
+        }
         if (set->countdown > 0U)
+        {
             set->countdown--;
+        }
         if (set->countdown == 0U)
         {
-            emit_hk_report(ctx, set);
+            (void)emit_hk_report(ctx, set);
             set->countdown = set->interval_ticks;
         }
     }
@@ -253,9 +275,13 @@ void obsw_s3_tick(obsw_s3_ctx_t *ctx)
 int obsw_s3_report(obsw_s3_ctx_t *ctx, uint8_t set_id)
 {
     if (!ctx)
+    {
         return OBSW_PUS_TM_ERR_NULL;
-    obsw_s3_set_t *set = find_set(ctx, set_id);
+    }
+    const obsw_s3_set_t *set = find_set(ctx, set_id);
     if (!set)
+    {
         return OBSW_PUS_TM_ERR_NULL;
+    }
     return emit_hk_report(ctx, set);
 }

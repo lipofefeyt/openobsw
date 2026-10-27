@@ -22,18 +22,19 @@
 /** Encode TC packet ID and sequence control into the first 4 bytes of buf. */
 static void encode_tc_ref(const obsw_tc_t *tc, uint8_t *buf)
 {
-    uint16_t pkt_id = (uint16_t)((1U << 12) | (1U << 11) | (tc->apid & 0x7FFU));
+    uint16_t pkt_id = (uint16_t)(((uint16_t)1U << 12) | ((uint16_t)1U << 11) | (tc->apid & 0x7FFU));
     buf[0] = (uint8_t)(pkt_id >> 8);
     buf[1] = (uint8_t)(pkt_id & 0xFFU);
-    uint16_t seq = (uint16_t)((0x3U << 14) | (tc->seq_count & 0x3FFFU));
+    uint16_t seq = (uint16_t)(((uint16_t)0x3U << 14) | (tc->seq_count & 0x3FFFU));
     buf[2] = (uint8_t)(seq >> 8);
     buf[3] = (uint8_t)(seq & 0xFFU);
 }
 
 int obsw_s1_accept_success(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc)
 {
-    if (!ctx || !tc)
+    if (!ctx || !tc) {
         return OBSW_PUS_TM_ERR_NULL;
+    }
     uint8_t data[4];
     encode_tc_ref(tc, data);
     uint16_t seq = ctx->msg_counter++;
@@ -45,8 +46,9 @@ int obsw_s1_accept_success(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc)
 int obsw_s1_accept_failure(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc,
                            uint16_t failure_code)
 {
-    if (!ctx || !tc)
+    if (!ctx || !tc) {
         return OBSW_PUS_TM_ERR_NULL;
+    }
     uint8_t data[6];
     encode_tc_ref(tc, data);
     data[4] = (uint8_t)(failure_code >> 8);
@@ -59,8 +61,9 @@ int obsw_s1_accept_failure(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc,
 
 int obsw_s1_completion_success(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc)
 {
-    if (!ctx || !tc)
+    if (!ctx || !tc) {
         return OBSW_PUS_TM_ERR_NULL;
+    }
     uint8_t data[4];
     encode_tc_ref(tc, data);
     uint16_t seq = ctx->msg_counter++;
@@ -72,8 +75,9 @@ int obsw_s1_completion_success(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc)
 int obsw_s1_completion_failure(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc,
                                uint16_t failure_code)
 {
-    if (!ctx || !tc)
+    if (!ctx || !tc) {
         return OBSW_PUS_TM_ERR_NULL;
+    }
     uint8_t data[6];
     encode_tc_ref(tc, data);
     data[4] = (uint8_t)(failure_code >> 8);
@@ -86,14 +90,18 @@ int obsw_s1_completion_failure(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc,
 
 void obsw_s1_dispatch_responder(uint8_t flags, const obsw_tc_t *tc, void *ctx)
 {
-    if (!(flags & OBSW_TC_ACK_REJECT))
+    if ((flags & OBSW_TC_ACK_REJECT) == 0U) {
         return;
+    }
 
-    uint16_t code = OBSW_S1_FAIL_ILLEGAL_SVC;
-    if (flags & OBSW_TC_REJECT_GATED)
+    uint16_t code;
+    if ((flags & OBSW_TC_REJECT_GATED) != 0U) {
         code = OBSW_S1_FAIL_MODE_GATED;
-    else if (flags & OBSW_TC_REJECT_SUBSVC)
+    } else if ((flags & OBSW_TC_REJECT_SUBSVC) != 0U) {
         code = OBSW_S1_FAIL_ILLEGAL_SUBSVC;
+    } else {
+        code = OBSW_S1_FAIL_ILLEGAL_SVC; /* OBSW_TC_REJECT_SVC */
+    }
 
-    obsw_s1_accept_failure((obsw_s1_ctx_t *)ctx, tc, code);
+    (void)obsw_s1_accept_failure((obsw_s1_ctx_t *)ctx, tc, code);
 }

@@ -3,8 +3,9 @@
 
 int obsw_sp_encode_primary(const obsw_sp_primary_hdr_t *hdr, uint8_t *buf)
 {
-    if (!hdr || !buf)
+    if (!hdr || !buf) {
         return OBSW_SP_ERR_NULL;
+    }
 
     /* Word 0: version(3) | type(1) | sec_hdr_flag(1) | apid(11) */
     buf[0] = (uint8_t)(((hdr->version & 0x07U) << 5) |
@@ -28,10 +29,12 @@ int obsw_sp_encode_primary(const obsw_sp_primary_hdr_t *hdr, uint8_t *buf)
 int obsw_sp_decode_primary(const uint8_t *buf, size_t buf_len,
                            obsw_sp_primary_hdr_t *hdr)
 {
-    if (!buf || !hdr)
+    if (!buf || !hdr) {
         return OBSW_SP_ERR_NULL;
-    if (buf_len < OBSW_SP_PRIMARY_HEADER_LEN)
+    }
+    if (buf_len < OBSW_SP_PRIMARY_HEADER_LEN) {
         return OBSW_SP_ERR_BUF_TOO_SMALL;
+    }
 
     hdr->version = (buf[0] >> 5) & 0x07U;
     hdr->type = (buf[0] >> 4) & 0x01U;
@@ -41,24 +44,28 @@ int obsw_sp_decode_primary(const uint8_t *buf, size_t buf_len,
     hdr->seq_count = (uint16_t)(((uint16_t)(buf[2] & 0x3FU) << 8) | buf[3]);
     hdr->data_len = (uint16_t)(((uint16_t)buf[4] << 8) | buf[5]);
 
-    if (hdr->version != 0U)
+    if (hdr->version != 0U) {
         return OBSW_SP_ERR_BAD_VERSION;
+    }
 
     return OBSW_SP_OK;
 }
 
 int obsw_sp_parse(const uint8_t *buf, size_t buf_len, obsw_sp_packet_t *pkt)
 {
-    if (!buf || !pkt)
+    if (!buf || !pkt) {
         return OBSW_SP_ERR_NULL;
+    }
 
     int rc = obsw_sp_decode_primary(buf, buf_len, &pkt->hdr);
-    if (rc != OBSW_SP_OK)
+    if (rc != OBSW_SP_OK) {
         return rc;
+    }
 
     size_t expected = obsw_sp_total_len(pkt->hdr.data_len);
-    if (buf_len < expected)
+    if (buf_len < expected) {
         return OBSW_SP_ERR_BAD_LENGTH;
+    }
 
     pkt->payload = buf + OBSW_SP_PRIMARY_HEADER_LEN;
     pkt->payload_len = pkt->hdr.data_len + 1U;

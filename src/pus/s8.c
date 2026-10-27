@@ -13,13 +13,14 @@
 
 int obsw_s8_perform(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
 {
-    (void)respond;
+    (void)&respond; /* unused: handlers report through S1 */
     obsw_s8_ctx_t *s = (obsw_s8_ctx_t *)ctx;
-    if (!s || !tc)
+    if (!s || !tc) {
         return -1;
+    }
 
     if (!tc->user_data || tc->user_data_len < S8_MIN_LEN) {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
 
@@ -27,8 +28,8 @@ int obsw_s8_perform(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
     uint8_t args_len    = tc->user_data[2];
 
     /* args_len must not claim bytes the TC does not carry */
-    if ((uint16_t)(S8_MIN_LEN + args_len) > tc->user_data_len) {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+    if (((uint16_t)S8_MIN_LEN + (uint16_t)args_len) > tc->user_data_len) {
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
 
@@ -44,17 +45,17 @@ int obsw_s8_perform(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
     }
 
     if (!entry) {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
         return -1;
     }
 
-    obsw_s1_accept_success(s->s1, tc);
+    (void)obsw_s1_accept_success(s->s1, tc);
 
     int rc = entry->fn(args, args_len, entry->ctx);
     if (rc == 0) {
-        obsw_s1_completion_success(s->s1, tc);
+        (void)obsw_s1_completion_success(s->s1, tc);
     } else {
-        obsw_s1_completion_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
+        (void)obsw_s1_completion_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
         return -1;
     }
     return 0;

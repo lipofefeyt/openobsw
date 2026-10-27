@@ -6,9 +6,13 @@ int obsw_wd_init(obsw_wd_ctx_t *wd,
                  void *cb_ctx)
 {
     if (!wd || !expire_cb)
+    {
         return OBSW_WD_ERR_NULL;
+    }
     if (timeout_ticks == 0U)
+    {
         return OBSW_WD_ERR_PARAM;
+    }
 
     wd->timeout_ticks = timeout_ticks;
     wd->countdown = timeout_ticks;
@@ -22,14 +26,18 @@ int obsw_wd_init(obsw_wd_ctx_t *wd,
 void obsw_wd_kick(obsw_wd_ctx_t *wd)
 {
     if (!wd)
+    {
         return;
+    }
     wd->kicked = true;
 }
 
 void obsw_wd_tick(obsw_wd_ctx_t *wd)
 {
     if (!wd || wd->expired)
+    {
         return;
+    }
 
     if (wd->kicked)
     {
@@ -39,7 +47,9 @@ void obsw_wd_tick(obsw_wd_ctx_t *wd)
     }
 
     if (wd->countdown > 0U)
+    {
         wd->countdown--;
+    }
 
     if (wd->countdown == 0U)
     {
@@ -51,6 +61,8 @@ void obsw_wd_tick(obsw_wd_ctx_t *wd)
 bool obsw_wd_expired(const obsw_wd_ctx_t *wd)
 {
     if (!wd)
+    {
         return false;
+    }
     return wd->expired;
 }
