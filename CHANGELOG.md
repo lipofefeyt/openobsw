@@ -4,7 +4,7 @@ All notable changes to openobsw. Versions follow the release trains in the
 README roadmap. Releases before v0.16 are described on the
 [GitHub releases page](https://github.com/lipofefeyt/openobsw/releases).
 
-## [Unreleased] — v0.17 Qualification baseline
+## [v0.17] — Qualification baseline
 
 ### Added
 
