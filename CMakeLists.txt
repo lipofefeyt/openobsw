@@ -9,6 +9,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(OBSW_BUILD_TESTS  "Build unit tests"        ON)
 option(OBSW_BUILD_SIM    "Build host simulation"   ON)
 option(OBSW_ENABLE_ASAN  "Enable AddressSanitizer" OFF)
+option(OBSW_ENABLE_COVERAGE "Instrument for gcov line/branch coverage" OFF)
 option(OBSW_WERROR       "Treat warnings as errors" OFF)
 
 option(
@@ -49,6 +50,14 @@ endif()
 if(OBSW_ENABLE_ASAN)
     add_compile_options(-fsanitize=address,undefined)
     add_link_options(-fsanitize=address,undefined)
+endif()
+
+if(OBSW_ENABLE_COVERAGE)
+    if(NOT CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        message(FATAL_ERROR "OBSW_ENABLE_COVERAGE needs GCC (gcov); got ${CMAKE_C_COMPILER_ID}")
+    endif()
+    add_compile_options(--coverage -O0)
+    add_link_options(--coverage)
 endif()
 
 add_subdirectory(srdb)

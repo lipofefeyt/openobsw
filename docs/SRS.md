@@ -386,8 +386,9 @@ Each release shall be tagged and described in `CHANGELOG.md`.
 CI shall fail when an IMPLEMENTED requirement with method T has no tagged test, or a test names an unknown requirement.
 *Evidence: `tools/trace.py` CI step.*
 
-**OBSW-SRS-262** `[QA]` `BASELINED` `T`
+**OBSW-SRS-262** `[QA]` `IMPLEMENTED` `I`
 CI shall measure line coverage of the core library and fail below 90%.
+*Evidence: CI `coverage` job (`gcovr --fail-under-line 90` over `src/{ccsds,tc,tm,pus,fdir,aocs,time}`, after unit, integration and system tests).*
 
 **OBSW-SRS-263** `[QA]` `BASELINED` `I`
 CI shall run static analysis with a MISRA-C subset and fail on new findings. *(#74)*

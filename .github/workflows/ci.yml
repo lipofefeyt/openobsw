@@ -107,6 +107,61 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   # ------------------------------------------------------------------ #
+  # Core coverage gate (OBSW-SRS-262): unit, integration and system    #
+  # tests together must cover >= 90% of core library lines             #
+  # ------------------------------------------------------------------ #
+  coverage:
+    name: Coverage (core >= 90% lines)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc python3-pip
+          pip install pydantic pyyaml pytest gcovr --break-system-packages
+          pip install -e srdb/ --break-system-packages
+
+      - name: Configure with coverage
+        run: |
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DOBSW_ENABLE_COVERAGE=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Unit and integration tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: System tests
+        run: OBSW_SIM=build/sim/obsw_sim pytest test/system -q
+
+      - name: Coverage report and gate
+        run: |
+          mkdir -p build/coverage
+          gcovr -r . --object-directory build \
+            --filter 'src/(ccsds|tc|tm|pus|fdir|aocs|time)/' \
+            --print-summary --txt build/coverage.txt \
+            --html-details build/coverage/index.html \
+            --fail-under-line 90
+          cat build/coverage.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            build/coverage.txt
+            build/coverage/
+          retention-days: 90
+
+  # ------------------------------------------------------------------ #
   # ZynqMP bare-metal binary — build and publish as workflow artifact  #
   # Runs on main pushes + monthly schedule (not PRs)                   #
   # ------------------------------------------------------------------ #

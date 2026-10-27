@@ -17,6 +17,8 @@ README roadmap. Releases before v0.16 are described on the
 - `test/system`: pytest suite driving `obsw_sim` over wire protocol v3
   (framing, SAFE gate, TM(1,2) codes, S6, S9, HK encoding, TC(3,1), S8 modes).
 - SRDB loader tests.
+- `OBSW_ENABLE_COVERAGE` CMake option and a CI coverage gate: core library
+  line coverage below 90% fails the build; HTML report kept as an artifact.
 
 ### Fixed
 
