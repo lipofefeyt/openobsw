@@ -27,6 +27,7 @@ static obsw_quat_t identity(void)
 /* Quaternion math tests                                               */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-205 */
 void test_quat_normalise_identity(void)
 {
     obsw_quat_t q = {2.0f, 0.0f, 0.0f, 0.0f};
@@ -34,12 +35,14 @@ void test_quat_normalise_identity(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, q.w);
 }
 
+/* @verifies OBSW-SRS-205 */
 void test_quat_normalise_zero_fails(void)
 {
     obsw_quat_t q = {0.0f, 0.0f, 0.0f, 0.0f};
     TEST_ASSERT_FALSE(obsw_quat_normalise(&q));
 }
 
+/* @verifies OBSW-SRS-203 */
 void test_quat_conjugate(void)
 {
     obsw_quat_t q = {1.0f, 2.0f, 3.0f, 4.0f};
@@ -50,6 +53,7 @@ void test_quat_conjugate(void)
     TEST_ASSERT_EQUAL_FLOAT(-4.0f, c.z);
 }
 
+/* @verifies OBSW-SRS-203 */
 void test_quat_multiply_by_conjugate_gives_identity(void)
 {
     /* q ⊗ q* = identity */
@@ -67,6 +71,7 @@ void test_quat_multiply_by_conjugate_gives_identity(void)
 /* Controller tests                                                    */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-203 */
 void test_zero_error_zero_torque(void)
 {
     obsw_adcs_ctx_t ctx;
@@ -85,6 +90,7 @@ void test_zero_error_zero_torque(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, out.angle_err_rad);
 }
 
+/* @verifies OBSW-SRS-203 */
 void test_rate_damping(void)
 {
     /* Zero attitude error but non-zero rate → derivative term fires */
@@ -104,6 +110,7 @@ void test_rate_damping(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, out.torque_cmd[2]);
 }
 
+/* @verifies OBSW-SRS-203 */
 void test_attitude_error_drives_torque(void)
 {
     /* 90° rotation about Z → vector part = (0,0,sin45°) */
@@ -127,6 +134,7 @@ void test_attitude_error_drives_torque(void)
     TEST_ASSERT_FLOAT_WITHIN(0.1f, (float)(M_PI / 2.0), out.angle_err_rad);
 }
 
+/* @verifies OBSW-SRS-203 */
 void test_torque_saturation(void)
 {
     obsw_adcs_ctx_t ctx;
@@ -147,6 +155,7 @@ void test_torque_saturation(void)
     }
 }
 
+/* @verifies OBSW-SRS-203 */
 void test_set_target(void)
 {
     obsw_adcs_ctx_t ctx;
@@ -168,6 +177,7 @@ void test_set_target(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0f, out.torque_cmd[2]);
 }
 
+/* @verifies OBSW-SRS-205 */
 void test_null_inputs_return_false(void)
 {
     obsw_adcs_ctx_t ctx;
@@ -183,6 +193,7 @@ void test_null_inputs_return_false(void)
     TEST_ASSERT_FALSE(obsw_adcs_step(&ctx, &q, NULL, &out));
 }
 
+/* @verifies OBSW-SRS-204 */
 void test_runtime_kd_update(void)
 {
     /* Run with kd=0, then update to kd=1 and verify derivative term fires */
@@ -202,6 +213,7 @@ void test_runtime_kd_update(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, -0.1f, out.torque_cmd[0]); /* kd=1: -1.0*0.1 */
 }
 
+/* @verifies OBSW-SRS-204 */
 void test_runtime_kp_update(void)
 {
     /* Run with kp=0, then update to kp=1 and verify proportional term fires */

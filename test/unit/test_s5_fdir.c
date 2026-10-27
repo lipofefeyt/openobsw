@@ -27,6 +27,7 @@ static void setup(void)
     s5.safe_trigger_count = 2;
 }
 
+/* @verifies OBSW-SRS-111 */
 void test_high_matching_id_triggers_safe(void)
 {
     setup();
@@ -34,6 +35,7 @@ void test_high_matching_id_triggers_safe(void)
     TEST_ASSERT_TRUE(obsw_fsm_is_safe(&fsm));
 }
 
+/* @verifies OBSW-SRS-111 */
 void test_high_non_matching_id_no_safe(void)
 {
     setup();
@@ -41,6 +43,7 @@ void test_high_non_matching_id_no_safe(void)
     TEST_ASSERT_FALSE(obsw_fsm_is_safe(&fsm));
 }
 
+/* @verifies OBSW-SRS-111 */
 void test_low_matching_id_no_safe(void)
 {
     setup();
@@ -49,6 +52,7 @@ void test_low_matching_id_no_safe(void)
     TEST_ASSERT_FALSE(obsw_fsm_is_safe(&fsm));
 }
 
+/* @verifies OBSW-SRS-111 */
 void test_no_fsm_pointer_no_crash(void)
 {
     setup();
@@ -58,6 +62,7 @@ void test_no_fsm_pointer_no_crash(void)
                           obsw_s5_report(&s5, OBSW_S5_HIGH, 0xDEAD, NULL, 0));
 }
 
+/* @verifies OBSW-SRS-111 */
 void test_second_safe_trigger_id_works(void)
 {
     setup();

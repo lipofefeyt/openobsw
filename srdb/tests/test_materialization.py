@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from obsw_srdb import (
     HKSet,
     Parameter,
@@ -12,6 +14,8 @@ from obsw_srdb import (
     SRDBLoader,
     SRDBMaterializer,
 )
+
+pytestmark = pytest.mark.requirement("OBSW-SRS-223")
 
 
 def test_materialized_complete_srdb_round_trips(srdb, tmp_path: Path) -> None:

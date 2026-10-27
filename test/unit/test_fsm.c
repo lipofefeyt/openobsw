@@ -46,6 +46,7 @@ static obsw_fsm_ctx_t make_fsm(void)
     return fsm;
 }
 
+/* @verifies OBSW-SRS-180 */
 void test_init_starts_standby(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -53,6 +54,7 @@ void test_init_starts_standby(void)
     TEST_ASSERT_FALSE(obsw_fsm_is_safe(&fsm));
 }
 
+/* @verifies OBSW-SRS-180 */
 void test_init_null_returns_error(void)
 {
     obsw_fsm_config_t cfg = {0};
@@ -61,6 +63,7 @@ void test_init_null_returns_error(void)
     TEST_ASSERT_NOT_EQUAL(0, obsw_fsm_init(&fsm, NULL));
 }
 
+/* @verifies OBSW-SRS-180 */
 void test_to_safe_transitions_mode(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -69,6 +72,7 @@ void test_to_safe_transitions_mode(void)
     TEST_ASSERT_TRUE(obsw_fsm_is_safe(&fsm));
 }
 
+/* @verifies OBSW-SRS-181 */
 void test_to_safe_fires_hook(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -76,6 +80,7 @@ void test_to_safe_fires_hook(void)
     TEST_ASSERT_EQUAL_INT(1, enter_safe_calls);
 }
 
+/* @verifies OBSW-SRS-180 */
 void test_to_safe_idempotent(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -85,6 +90,7 @@ void test_to_safe_idempotent(void)
     TEST_ASSERT_EQUAL_UINT32(1, fsm.safe_entry_count);
 }
 
+/* @verifies OBSW-SRS-181 */
 void test_safe_entry_count_increments(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -94,6 +100,7 @@ void test_safe_entry_count_increments(void)
     TEST_ASSERT_EQUAL_UINT32(2, fsm.safe_entry_count);
 }
 
+/* @verifies OBSW-SRS-180 */
 void test_to_nominal_returns_to_nominal(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -103,6 +110,7 @@ void test_to_nominal_returns_to_nominal(void)
     TEST_ASSERT_EQUAL_INT(1, exit_safe_calls);
 }
 
+/* @verifies OBSW-SRS-180 */
 void test_to_nominal_from_nominal_is_noop(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -114,6 +122,7 @@ void test_to_nominal_from_nominal_is_noop(void)
     TEST_ASSERT_EQUAL_INT(0, exit_safe_calls);
 }
 
+/* @verifies OBSW-SRS-182 */
 void test_nominal_allows_all_tc(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -123,6 +132,7 @@ void test_nominal_allows_all_tc(void)
     TEST_ASSERT_TRUE(obsw_fsm_tc_allowed(&fsm, 99, 99));
 }
 
+/* @verifies OBSW-SRS-182 */
 void test_safe_allows_whitelisted_tc(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -131,6 +141,7 @@ void test_safe_allows_whitelisted_tc(void)
     TEST_ASSERT_TRUE(obsw_fsm_tc_allowed(&fsm, 1, 1));
 }
 
+/* @verifies OBSW-SRS-182 */
 void test_safe_blocks_non_whitelisted_tc(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -139,6 +150,7 @@ void test_safe_blocks_non_whitelisted_tc(void)
     TEST_ASSERT_FALSE(obsw_fsm_tc_allowed(&fsm, 99, 1));
 }
 
+/* @verifies OBSW-SRS-182, OBSW-SRS-062 */
 void test_tc_gate_adapter(void)
 {
     obsw_fsm_ctx_t fsm = make_fsm();
@@ -152,6 +164,7 @@ void test_tc_gate_adapter(void)
     TEST_ASSERT_TRUE(obsw_fsm_tc_gate(&hk, &fsm));
 }
 
+/* @verifies OBSW-SRS-182 */
 void test_standby_whitelist_enforced(void)
 {
     /* Whitelist applies in STANDBY as well as SAFE. */
@@ -163,6 +176,7 @@ void test_standby_whitelist_enforced(void)
     TEST_ASSERT_FALSE(obsw_fsm_tc_allowed(&fsm, 20, 1));  /* not on whitelist */
 }
 
+/* @verifies OBSW-SRS-181 */
 void test_standby_to_nominal_skips_exit_hook(void)
 {
     /* obsw_fsm_to_nominal() from STANDBY transitions but does NOT fire
@@ -174,6 +188,7 @@ void test_standby_to_nominal_skips_exit_hook(void)
     TEST_ASSERT_EQUAL_INT(0, enter_safe_calls);
 }
 
+/* @verifies OBSW-SRS-180 */
 void test_standby_safe_nominal_chain(void)
 {
     /* Full auto-timeout path at FSM level:

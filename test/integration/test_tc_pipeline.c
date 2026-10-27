@@ -108,6 +108,7 @@ static int s17_handler(const obsw_tc_t *tc,
 /* Tests                                                               */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-020, OBSW-SRS-060, OBSW-SRS-040 */
 void test_full_uplink_downlink_pipeline(void)
 {
     /* Setup */
@@ -171,6 +172,7 @@ void test_full_uplink_downlink_pipeline(void)
     TEST_ASSERT_TRUE(obsw_tm_store_empty(&tm_store));
 }
 
+/* @verifies OBSW-SRS-021 */
 void test_pipeline_bad_crc_rejected(void)
 {
     uint8_t tc_raw[32];
@@ -200,6 +202,7 @@ static uint16_t expect_tm12(uint16_t *tc_seq)
     return (uint16_t)((sp.payload[15] << 8) | sp.payload[16]);
 }
 
+/* @verifies OBSW-SRS-061, OBSW-SRS-062, OBSW-SRS-063, OBSW-SRS-081, OBSW-SRS-182 */
 void test_pipeline_rejections_reach_tm12(void)
 {
     obsw_tm_store_init(&tm_store);

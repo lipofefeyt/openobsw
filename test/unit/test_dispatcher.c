@@ -67,6 +67,7 @@ static size_t make_tc_frame(uint8_t *buf, size_t buf_len,
 /* Tests                                                               */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-060 */
 void test_init_null_args(void)
 {
     obsw_tc_dispatcher_t d;
@@ -79,6 +80,7 @@ void test_init_null_args(void)
                           obsw_tc_dispatcher_init(&d, table, 1, NULL, NULL));
 }
 
+/* @verifies OBSW-SRS-060 */
 void test_dispatch_matching_route(void)
 {
     handler_call_count = 0;
@@ -98,6 +100,7 @@ void test_dispatch_matching_route(void)
                             last_ack_flags);
 }
 
+/* @verifies OBSW-SRS-061 */
 void test_dispatch_no_route(void)
 {
     obsw_tc_route_t table[] = {
@@ -115,6 +118,7 @@ void test_dispatch_no_route(void)
     TEST_ASSERT_EQUAL_UINT8(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_SVC, last_ack_flags);
 }
 
+/* @verifies OBSW-SRS-061 */
 void test_dispatch_no_route_known_service(void)
 {
     obsw_tc_route_t table[] = {
@@ -130,6 +134,7 @@ void test_dispatch_no_route_known_service(void)
     TEST_ASSERT_EQUAL_UINT8(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_SUBSVC, last_ack_flags);
 }
 
+/* @verifies OBSW-SRS-061 */
 void test_dispatch_service_on_other_apid_is_illegal_svc(void)
 {
     obsw_tc_route_t table[] = {
@@ -157,6 +162,7 @@ static bool svc17_gate(const obsw_tc_t *tc, void *ctx)
     return tc->service == 17;
 }
 
+/* @verifies OBSW-SRS-062 */
 void test_gate_rejects_before_handler(void)
 {
     handler_call_count = 0;
@@ -180,6 +186,7 @@ void test_gate_rejects_before_handler(void)
     TEST_ASSERT_EQUAL_UINT8(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_GATED, last_ack_flags);
 }
 
+/* @verifies OBSW-SRS-062 */
 void test_gate_allows_then_routes(void)
 {
     handler_call_count = 0;
@@ -198,6 +205,7 @@ void test_gate_allows_then_routes(void)
     TEST_ASSERT_EQUAL_INT(1, handler_call_count);
 }
 
+/* @verifies OBSW-SRS-062 */
 void test_gate_cleared_with_null(void)
 {
     handler_call_count = 0;
@@ -217,11 +225,38 @@ void test_gate_cleared_with_null(void)
     TEST_ASSERT_EQUAL_INT(1, handler_call_count);
 }
 
+/* @verifies OBSW-SRS-062 */
 void test_set_gate_null_dispatcher(void)
 {
     TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_NULL, obsw_tc_dispatcher_set_gate(NULL, svc17_gate, NULL));
 }
 
+/* @verifies OBSW-SRS-064 */
+void test_unparseable_packet_dropped_without_response(void)
+{
+    handler_call_count = 0;
+    last_ack_flags     = 0;
+
+    obsw_tc_route_t table[] = {
+        {.apid = 0xFFFF, .service = 17, .subservice = 1, .handler = noop_handler, .ctx = NULL},
+    };
+    obsw_tc_dispatcher_t d;
+    obsw_tc_dispatcher_init(&d, table, 1, test_responder, NULL);
+
+    uint8_t frame[16];
+    size_t len = make_tc_frame(frame, sizeof(frame), 0x010, 17, 1);
+
+    /* Truncated below the primary header's declared length */
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_PARSE, obsw_tc_dispatcher_feed(&d, frame, len - 1));
+    /* No PUS secondary header */
+    frame[0] &= (uint8_t)~0x08U;
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_PARSE, obsw_tc_dispatcher_feed(&d, frame, len));
+
+    TEST_ASSERT_EQUAL_INT(0, handler_call_count);
+    TEST_ASSERT_EQUAL_UINT8(0, last_ack_flags);
+}
+
+/* @verifies OBSW-SRS-060 */
 void test_dispatch_wildcard_apid(void)
 {
     handler_call_count = 0;
@@ -239,6 +274,7 @@ void test_dispatch_wildcard_apid(void)
     TEST_ASSERT_EQUAL_INT(1, handler_call_count);
 }
 
+/* @verifies OBSW-SRS-060 */
 void test_dispatch_handler_error(void)
 {
     obsw_tc_route_t table[] = {
@@ -254,6 +290,7 @@ void test_dispatch_handler_error(void)
                           obsw_tc_dispatcher_feed(&d, frame, len));
 }
 
+/* @verifies OBSW-SRS-060 */
 void test_dispatch_first_match_wins(void)
 {
     handler_call_count = 0;
@@ -286,6 +323,7 @@ int main(void)
     RUN_TEST(test_gate_cleared_with_null);
     RUN_TEST(test_set_gate_null_dispatcher);
     RUN_TEST(test_dispatch_wildcard_apid);
+    RUN_TEST(test_unparseable_packet_dropped_without_response);
     RUN_TEST(test_dispatch_handler_error);
     RUN_TEST(test_dispatch_first_match_wins);
     return UNITY_END();

@@ -1,6 +1,9 @@
 """Tests for the SRDB C header code generator."""
 
 from obsw_srdb.codegen import generate_header
+import pytest
+
+pytestmark = pytest.mark.requirement("OBSW-SRS-221")
 
 
 class TestCodegen:
@@ -49,6 +52,7 @@ class TestCodegen:
         header = generate_header(srdb)
         assert "SRDB_SAFE_TRIGGER_IDS" in header
 
+    @pytest.mark.requirement("OBSW-SRS-186")
     def test_enumeration_macros(self, srdb):
         header = generate_header(srdb)
         assert "#define SRDB_ENUM_OBC_MODE_STANDBY" in header
@@ -64,6 +68,7 @@ class TestCodegen:
         header = generate_header(srdb)
         assert f"SRDB_ENUM_{p.name.upper()}_B_DOT_ON" in header
 
+    @pytest.mark.requirement("OBSW-SRS-183")
     def test_safe_tc_whitelist(self, srdb):
         header = generate_header(srdb)
         assert f"SRDB_SAFE_TC_COUNT  {len(srdb.safe_tc_whitelist())}U" in header

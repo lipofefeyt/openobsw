@@ -5,6 +5,7 @@
 void setUp(void) {}
 void tearDown(void) {}
 
+/* @verifies OBSW-SRS-050 */
 void test_init_empty(void)
 {
     obsw_tm_store_t s;
@@ -13,6 +14,7 @@ void test_init_empty(void)
     TEST_ASSERT_EQUAL_size_t(0, obsw_tm_store_count(&s));
 }
 
+/* @verifies OBSW-SRS-050 */
 void test_enqueue_dequeue(void)
 {
     obsw_tm_store_t s;
@@ -32,6 +34,7 @@ void test_enqueue_dequeue(void)
     TEST_ASSERT_TRUE(obsw_tm_store_empty(&s));
 }
 
+/* @verifies OBSW-SRS-050 */
 void test_fifo_order(void)
 {
     obsw_tm_store_t s;
@@ -51,6 +54,7 @@ void test_fifo_order(void)
     TEST_ASSERT_EQUAL_UINT8(0x02, out[0]);
 }
 
+/* @verifies OBSW-SRS-050 */
 void test_dequeue_empty(void)
 {
     obsw_tm_store_t s;
@@ -62,6 +66,7 @@ void test_dequeue_empty(void)
                           obsw_tm_store_dequeue(&s, out, sizeof(out), &len));
 }
 
+/* @verifies OBSW-SRS-051 */
 void test_packet_too_large(void)
 {
     obsw_tm_store_t s;
@@ -72,6 +77,7 @@ void test_packet_too_large(void)
                           obsw_tm_store_enqueue(&s, big, sizeof(big)));
 }
 
+/* @verifies OBSW-SRS-051 */
 void test_store_full(void)
 {
     obsw_tm_store_t s;
@@ -88,6 +94,7 @@ void test_store_full(void)
                           obsw_tm_store_enqueue(&s, pkt, 1));
 }
 
+/* @verifies OBSW-SRS-050 */
 void test_ring_buffer_wraparound(void)
 {
     obsw_tm_store_t s;

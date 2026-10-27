@@ -9,6 +9,7 @@ void tearDown(void) {}
 /* Encode / decode round-trip                                          */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-030 */
 void test_encode_decode_roundtrip(void)
 {
     obsw_sp_primary_hdr_t orig = {
@@ -37,6 +38,7 @@ void test_encode_decode_roundtrip(void)
     TEST_ASSERT_EQUAL_UINT16(orig.data_len, decoded.data_len);
 }
 
+/* @verifies OBSW-SRS-031 */
 void test_encode_null_args(void)
 {
     uint8_t buf[6];
@@ -45,6 +47,7 @@ void test_encode_null_args(void)
     TEST_ASSERT_EQUAL_INT(OBSW_SP_ERR_NULL, obsw_sp_encode_primary(&hdr, NULL));
 }
 
+/* @verifies OBSW-SRS-031 */
 void test_decode_buf_too_small(void)
 {
     uint8_t buf[5] = {0};
@@ -53,6 +56,7 @@ void test_decode_buf_too_small(void)
                           obsw_sp_decode_primary(buf, sizeof(buf), &hdr));
 }
 
+/* @verifies OBSW-SRS-030 */
 void test_apid_max_value(void)
 {
     obsw_sp_primary_hdr_t orig = {.apid = 0x7FF};
@@ -64,6 +68,7 @@ void test_apid_max_value(void)
     TEST_ASSERT_EQUAL_UINT16(0x7FF, decoded.apid);
 }
 
+/* @verifies OBSW-SRS-030 */
 void test_seq_count_max_value(void)
 {
     obsw_sp_primary_hdr_t orig = {.seq_count = 0x3FFF};
@@ -79,6 +84,7 @@ void test_seq_count_max_value(void)
 /* Full packet parse                                                   */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-030 */
 void test_parse_valid_packet(void)
 {
     /* Build a minimal TC packet: 6-byte primary + 4-byte payload */
@@ -105,6 +111,7 @@ void test_parse_valid_packet(void)
     TEST_ASSERT_EQUAL_UINT16(4, pkt.payload_len);
 }
 
+/* @verifies OBSW-SRS-031 */
 void test_parse_truncated_packet(void)
 {
     obsw_sp_primary_hdr_t hdr = {.data_len = 10};
@@ -120,6 +127,7 @@ void test_parse_truncated_packet(void)
 /* Total length helper                                                 */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-030 */
 void test_total_len(void)
 {
     /* data_len field = N means N+1 bytes of data + 6 header bytes */

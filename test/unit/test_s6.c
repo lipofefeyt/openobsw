@@ -126,6 +126,7 @@ static const uint8_t k_pattern[4] = {0xDE, 0xAD, 0xBE, 0xEF};
 /* TC(6,2) Load                                                        */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-120, OBSW-SRS-123 */
 void test_load_writes_to_memory(void)
 {
     setup_ctx();
@@ -139,6 +140,7 @@ void test_load_writes_to_memory(void)
     TEST_ASSERT_EQUAL_HEX8(0x00, g_ram[8]);
 }
 
+/* @verifies OBSW-SRS-120, OBSW-SRS-123 */
 void test_load_to_last_bytes_of_region(void)
 {
     setup_ctx();
@@ -150,6 +152,7 @@ void test_load_to_last_bytes_of_region(void)
     TEST_ASSERT_EQUAL_MEMORY(k_pattern, g_ram + 12, sizeof(k_pattern));
 }
 
+/* @verifies OBSW-SRS-123 */
 void test_load_straddling_region_end_rejected(void)
 {
     setup_ctx();
@@ -163,6 +166,7 @@ void test_load_straddling_region_end_rejected(void)
     TEST_ASSERT_EQUAL_MEMORY(zero, g_ram, sizeof(g_ram));
 }
 
+/* @verifies OBSW-SRS-123 */
 void test_load_before_region_start_rejected(void)
 {
     setup_ctx();
@@ -174,6 +178,7 @@ void test_load_before_region_start_rejected(void)
     assert_rejected(OBSW_S1_FAIL_MEM_ACCESS);
 }
 
+/* @verifies OBSW-SRS-123 */
 void test_load_to_read_only_region_rejected(void)
 {
     setup_ctx();
@@ -186,6 +191,7 @@ void test_load_to_read_only_region_rejected(void)
     TEST_ASSERT_EQUAL_HEX8('1', g_rom[0]);
 }
 
+/* @verifies OBSW-SRS-123 */
 void test_load_without_regions_rejected(void)
 {
     setup_ctx();
@@ -199,6 +205,7 @@ void test_load_without_regions_rejected(void)
     assert_rejected(OBSW_S1_FAIL_MEM_ACCESS);
 }
 
+/* @verifies OBSW-SRS-083, OBSW-SRS-124 */
 void test_load_data_len_wrap_rejected(void)
 {
     /* data_len = 0xFFFF: 6 + 0xFFFF wraps to 5 in 16 bits, which used to
@@ -214,6 +221,7 @@ void test_load_data_len_wrap_rejected(void)
     assert_rejected(OBSW_S1_FAIL_ILLEGAL_APP_DATA);
 }
 
+/* @verifies OBSW-SRS-083 */
 void test_load_truncated_data_rejected(void)
 {
     setup_ctx();
@@ -225,6 +233,7 @@ void test_load_truncated_data_rejected(void)
     assert_rejected(OBSW_S1_FAIL_ILLEGAL_APP_DATA);
 }
 
+/* @verifies OBSW-SRS-083 */
 void test_load_too_short_rejects(void)
 {
     setup_ctx();
@@ -245,6 +254,7 @@ static obsw_tc_t make_check(uint8_t *ud, uint32_t addr, uint16_t len, uint16_t c
     return make_tc(5, ud, OBSW_S6_CHECK_LEN);
 }
 
+/* @verifies OBSW-SRS-121, OBSW-SRS-023 */
 void test_check_success_emits_tm6_10(void)
 {
     setup_ctx();
@@ -259,6 +269,7 @@ void test_check_success_emits_tm6_10(void)
     TEST_ASSERT_EQUAL_UINT8(10, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-121 */
 void test_check_failure_emits_tm6_11(void)
 {
     setup_ctx();
@@ -276,6 +287,7 @@ void test_check_failure_emits_tm6_11(void)
     TEST_ASSERT_EQUAL_HEX16(actual, (uint16_t)(((uint16_t)app[6] << 8) | app[7]));
 }
 
+/* @verifies OBSW-SRS-123 */
 void test_check_out_of_region_rejected(void)
 {
     setup_ctx();
@@ -285,6 +297,7 @@ void test_check_out_of_region_rejected(void)
     assert_rejected(OBSW_S1_FAIL_MEM_ACCESS);
 }
 
+/* @verifies OBSW-SRS-083 */
 void test_check_too_short_rejects(void)
 {
     setup_ctx();
@@ -298,6 +311,7 @@ void test_check_too_short_rejects(void)
 /* TC(6,9) Dump                                                        */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-122, OBSW-SRS-123 */
 void test_dump_emits_tm6_6(void)
 {
     setup_ctx();
@@ -318,6 +332,7 @@ void test_dump_emits_tm6_6(void)
     TEST_ASSERT_EQUAL_MEMORY(k_pattern, app + 5, sizeof(k_pattern));
 }
 
+/* @verifies OBSW-SRS-122, OBSW-SRS-123 */
 void test_dump_read_only_region(void)
 {
     setup_ctx();
@@ -332,6 +347,7 @@ void test_dump_read_only_region(void)
     TEST_ASSERT_EQUAL_MEMORY(g_rom + 2, pkt.payload + OBSW_PUS_TM_SEC_HDR_LEN + 5U, 3U);
 }
 
+/* @verifies OBSW-SRS-124 */
 void test_dump_near_address_space_top(void)
 {
     /* addr + len would wrap past 0xFFFFFFFF; must not alias low memory */
@@ -348,6 +364,7 @@ void test_dump_near_address_space_top(void)
     assert_rejected(OBSW_S1_FAIL_MEM_ACCESS);
 }
 
+/* @verifies OBSW-SRS-123 */
 void test_dump_unmapped_address_rejected(void)
 {
     setup_ctx();
@@ -358,6 +375,7 @@ void test_dump_unmapped_address_rejected(void)
     assert_rejected(OBSW_S1_FAIL_MEM_ACCESS);
 }
 
+/* @verifies OBSW-SRS-122 */
 void test_dump_too_large_rejects(void)
 {
     setup_ctx();
@@ -368,6 +386,7 @@ void test_dump_too_large_rejects(void)
     assert_rejected(OBSW_S1_FAIL_ILLEGAL_APP_DATA);
 }
 
+/* @verifies OBSW-SRS-083 */
 void test_dump_too_short_rejects(void)
 {
     setup_ctx();

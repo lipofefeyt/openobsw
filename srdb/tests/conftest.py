@@ -16,3 +16,6 @@ def srdb() -> SRDB:
 @pytest.fixture(scope="session")
 def data_dir() -> Path:
     return DATA_DIR
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line("markers", "requirement(id): SRS requirement verified by the test")

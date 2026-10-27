@@ -6,6 +6,8 @@ import pytest
 
 from obsw_srdb.codegen import generate_xtce, _param_bits
 
+pytestmark = pytest.mark.requirement("OBSW-SRS-222")
+
 _NS = "http://www.omg.org/space/xtce"
 
 

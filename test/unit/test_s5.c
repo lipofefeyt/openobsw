@@ -34,6 +34,7 @@ static obsw_sp_packet_t dequeue_pkt(uint8_t *buf, size_t buf_len)
     return pkt;
 }
 
+/* @verifies OBSW-SRS-110 */
 void test_info_event_subsvc_1(void)
 {
     setup_ctx();
@@ -44,6 +45,7 @@ void test_info_event_subsvc_1(void)
     TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-110 */
 void test_high_severity_subsvc_4(void)
 {
     setup_ctx();
@@ -54,6 +56,7 @@ void test_high_severity_subsvc_4(void)
     TEST_ASSERT_EQUAL_UINT8(4, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-110 */
 void test_event_id_in_data_field(void)
 {
     setup_ctx();
@@ -65,6 +68,7 @@ void test_event_id_in_data_field(void)
     TEST_ASSERT_EQUAL_HEX8(0xCD, data[1]);
 }
 
+/* @verifies OBSW-SRS-110 */
 void test_auxiliary_data_appended(void)
 {
     setup_ctx();
@@ -77,6 +81,7 @@ void test_auxiliary_data_appended(void)
     TEST_ASSERT_EQUAL_HEX8(0xAD, data[3]);
 }
 
+/* @verifies OBSW-SRS-110 */
 void test_null_ctx_rejected(void)
 {
     TEST_ASSERT_NOT_EQUAL(OBSW_PUS_TM_OK, obsw_s5_report(NULL, OBSW_S5_INFO, 0x0001, NULL, 0));

@@ -28,6 +28,7 @@ static obsw_wd_ctx_t make_wd(uint32_t timeout)
 /* Init                                                                */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-184 */
 void test_init_ok(void)
 {
     obsw_wd_ctx_t wd;
@@ -35,12 +36,14 @@ void test_init_ok(void)
     TEST_ASSERT_FALSE(obsw_wd_expired(&wd));
 }
 
+/* @verifies OBSW-SRS-184 */
 void test_init_zero_timeout_fails(void)
 {
     obsw_wd_ctx_t wd;
     TEST_ASSERT_EQUAL_INT(OBSW_WD_ERR_PARAM, obsw_wd_init(&wd, 0, on_expire, NULL));
 }
 
+/* @verifies OBSW-SRS-184 */
 void test_init_null_cb_fails(void)
 {
     obsw_wd_ctx_t wd;
@@ -51,6 +54,7 @@ void test_init_null_cb_fails(void)
 /* Expiry                                                              */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-184 */
 void test_expires_after_timeout_ticks(void)
 {
     obsw_wd_ctx_t wd = make_wd(3);
@@ -62,6 +66,7 @@ void test_expires_after_timeout_ticks(void)
     TEST_ASSERT_EQUAL_INT(1, expire_count);
 }
 
+/* @verifies OBSW-SRS-184 */
 void test_callback_fires_only_once(void)
 {
     obsw_wd_ctx_t wd = make_wd(2);
@@ -75,6 +80,7 @@ void test_callback_fires_only_once(void)
 /* Kick                                                                */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-184 */
 void test_kick_prevents_expiry(void)
 {
     obsw_wd_ctx_t wd = make_wd(3);
@@ -87,6 +93,7 @@ void test_kick_prevents_expiry(void)
     TEST_ASSERT_EQUAL_INT(0, expire_count);
 }
 
+/* @verifies OBSW-SRS-184 */
 void test_kick_reloads_countdown(void)
 {
     obsw_wd_ctx_t wd = make_wd(3);
@@ -98,6 +105,7 @@ void test_kick_reloads_countdown(void)
     TEST_ASSERT_FALSE(obsw_wd_expired(&wd));
 }
 
+/* @verifies OBSW-SRS-184 */
 void test_late_kick_still_expires(void)
 {
     obsw_wd_ctx_t wd = make_wd(2);
@@ -111,6 +119,7 @@ void test_late_kick_still_expires(void)
 /* FSM integration                                                     */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-185 */
 void test_watchdog_triggers_fsm_safe(void)
 {
     obsw_fsm_ctx_t fsm;

@@ -4,6 +4,27 @@ All notable changes to openobsw. Versions follow the release trains in the
 README roadmap. Releases before v0.16 are described on the
 [GitHub releases page](https://github.com/lipofefeyt/openobsw/releases).
 
+## [Unreleased] — v0.17 Qualification baseline
+
+### Added
+
+- `docs/SRS.md`: software requirements (OBSW-SRS-NNN) with area, status and
+  verification method.
+- Test traceability: C tests carry `@verifies` tags, Python tests
+  `@pytest.mark.requirement`; `tools/trace.py` fails CI on untested
+  requirements or unknown IDs, checks `libobsw.a` for allocator calls and
+  writable globals, and publishes the matrix as a CI artifact.
+- `test/system`: pytest suite driving `obsw_sim` over wire protocol v3
+  (framing, SAFE gate, TM(1,2) codes, S6, S9, HK encoding, TC(3,1), S8 modes).
+- SRDB loader tests.
+
+### Fixed
+
+- TC(8,1) with an argument length larger than the TC carries was passed to
+  the function callback; it is now rejected with TM(1,2) `0x0005`.
+- Malformed user data in S3 enable/disable, S8 and S20 now reports `0x0005`
+  (was `0x0003`), consistent with S6, S9 and TC(3,1).
+
 ## [v0.16] — Tell the truth
 
 Consolidates the untagged v0.12–v0.15 work and makes the documentation match

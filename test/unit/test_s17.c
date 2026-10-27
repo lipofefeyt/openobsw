@@ -33,6 +33,7 @@ static void setup_ctx(void)
     tc.user_data_len = 0;
 }
 
+/* @verifies OBSW-SRS-160 */
 void test_ping_enqueues_three_packets(void)
 {
     setup_ctx();
@@ -41,6 +42,7 @@ void test_ping_enqueues_three_packets(void)
     TEST_ASSERT_EQUAL_size_t(3, obsw_tm_store_count(&store));
 }
 
+/* @verifies OBSW-SRS-160 */
 void test_ping_first_packet_is_tm11(void)
 {
     setup_ctx();
@@ -55,6 +57,7 @@ void test_ping_first_packet_is_tm11(void)
     TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[2]); /* subsvc = 1 */
 }
 
+/* @verifies OBSW-SRS-160 */
 void test_ping_second_packet_is_tm172(void)
 {
     setup_ctx();
@@ -72,6 +75,7 @@ void test_ping_second_packet_is_tm172(void)
     TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-160 */
 void test_ping_third_packet_is_tm17(void)
 {
     setup_ctx();
@@ -88,6 +92,7 @@ void test_ping_third_packet_is_tm17(void)
     TEST_ASSERT_EQUAL_UINT8(7, pkt.payload[2]); /* subsvc = 7 */
 }
 
+/* @verifies OBSW-SRS-160 */
 void test_null_ctx_returns_error(void)
 {
     setup_ctx();

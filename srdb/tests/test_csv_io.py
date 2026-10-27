@@ -9,6 +9,8 @@ import pytest
 from obsw_srdb.loader import SRDBLoader
 from obsw_srdb.csv_io import export_csv, import_csv
 
+pytestmark = pytest.mark.requirement("OBSW-SRS-224")
+
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 

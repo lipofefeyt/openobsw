@@ -19,12 +19,19 @@ int obsw_s8_perform(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
 
     if (!tc->user_data || tc->user_data_len < S8_MIN_LEN) {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_SUBSVC);
+        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
 
     uint16_t fn_id      = obsw_be16(tc->user_data);
     uint8_t args_len    = tc->user_data[2];
+
+    /* args_len must not claim bytes the TC does not carry */
+    if ((uint16_t)(S8_MIN_LEN + args_len) > tc->user_data_len) {
+        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        return -1;
+    }
+
     const uint8_t *args = (args_len > 0U) ? tc->user_data + 3U : NULL;
 
     /* Lookup */
