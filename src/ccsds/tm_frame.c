@@ -27,8 +27,10 @@
 static void write_idle_packet(uint8_t *buf, uint16_t len)
 {
     if (len < 7U)
+    {
         return; /* minimum: 6 header + 1 data byte */
-    memset(buf, 0, len);
+    }
+    (void)memset(buf, 0, len);
     /* Primary header: type=TM, APID=0x7FF, seq=unsegmented, data_len=len-7 */
     buf[0] = 0x07U; /* version=0, type=TM, no sec hdr, APID[10:8]=0x7 */
     buf[1] = 0xFFU; /* APID[7:0] */
@@ -48,35 +50,37 @@ int obsw_tm_frame_build(const obsw_tm_frame_config_t *cfg,
                         size_t *written)
 {
     if (!cfg || !buf || !written)
+    {
         return OBSW_TM_FRAME_ERR_NULL;
+    }
     if (!payload && payload_len)
+    {
         return OBSW_TM_FRAME_ERR_NULL;
+    }
 
     uint8_t fecf = cfg->enable_fecf ? 1U : 0U;
     size_t total = (size_t)OBSW_TM_FRAME_PRIMARY_HDR_LEN + cfg->frame_data_field_len + (fecf ? OBSW_TM_FRAME_FECF_LEN : 0U);
 
     if (buf_len < total)
+    {
         return OBSW_TM_FRAME_ERR_BUF_SMALL;
+    }
 
     /* ---- Primary header ---- */
     uint16_t fhp = (payload_len > 0U) ? FHP_START_ZERO : FHP_NO_PACKET;
 
-    buf[0] = (uint8_t)(((cfg->spacecraft_id >> 4) & 0x3FU));
     /* TFVN=0b00 in top 2 bits, SCID[9:4] in lower 6 */
-    buf[0] |= (uint8_t)(0x00U); /* TFVN=0 already */
+    buf[0] = (uint8_t)(((cfg->spacecraft_id >> 4) & 0x3FU));
 
-    buf[1] = (uint8_t)(((cfg->spacecraft_id & 0x0FU) << 4) | ((cfg->virtual_channel_id & 0x07U) << 1) | 0x00U); /* OCF flag = 0 */
+    /* SCID[3:0], VCID, OCF flag = 0 (bit 0 left clear) */
+    buf[1] = (uint8_t)(((cfg->spacecraft_id & 0x0FU) << 4) | ((cfg->virtual_channel_id & 0x07U) << 1));
 
     buf[2] = cfg->master_channel_frame_count;
     buf[3] = cfg->virtual_channel_frame_count;
 
-    /* Data field status word: no secondary header, not sync, not packet order,
-       segment length ID = 0b11 (CCSDS unsegmented), FHP */
-    uint16_t dfst = (uint16_t)((0U << 15)   /* no secondary header   */
-                               | (0U << 14) /* sync flag = 0         */
-                               | (0U << 13) /* packet order = 0      */
-                               | (3U << 11) /* segment length = 0b11 */
-                               | (fhp & 0x07FFU));
+    /* Data field status word: bits 15..13 (secondary header, sync flag,
+       packet order) are 0; segment length ID = 0b11 (CCSDS unsegmented); FHP */
+    uint16_t dfst = (uint16_t)(((uint16_t)3U << 11) | (fhp & 0x07FFU));
     buf[4] = (uint8_t)(dfst >> 8);
     buf[5] = (uint8_t)(dfst & 0xFFU);
 
@@ -87,19 +91,21 @@ int obsw_tm_frame_build(const obsw_tm_frame_config_t *cfg,
     if (payload_len >= zone_len)
     {
         /* Payload fills or overfills the zone — truncate to zone */
-        memcpy(data_zone, payload, zone_len);
+        (void)memcpy(data_zone, payload, zone_len);
     }
     else
     {
         if (payload_len > 0U)
-            memcpy(data_zone, payload, payload_len);
+        {
+            (void)memcpy(data_zone, payload, payload_len);
+        }
         /* Fill remainder with an idle space packet */
         uint16_t fill = (uint16_t)(zone_len - payload_len);
         write_idle_packet(data_zone + payload_len, fill);
     }
 
     /* ---- FECF (CRC-16/CCITT) ---- */
-    if (fecf)
+    if (fecf != 0U)
     {
         uint16_t crc = obsw_crc16_ccitt(buf, total - OBSW_TM_FRAME_FECF_LEN);
         buf[total - 2U] = (uint8_t)(crc >> 8);

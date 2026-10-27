@@ -20,7 +20,9 @@ int obsw_tc_dispatcher_init(obsw_tc_dispatcher_t *d,
                             void *responder_ctx)
 {
     if (!d || !table || !responder)
+    {
         return OBSW_TC_ERR_NULL;
+    }
 
     d->table = table;
     d->table_len = table_len;
@@ -37,7 +39,9 @@ int obsw_tc_dispatcher_set_gate(obsw_tc_dispatcher_t *d,
                                 void *gate_ctx)
 {
     if (!d)
+    {
         return OBSW_TC_ERR_NULL;
+    }
 
     d->gate = gate;
     d->gate_ctx = gate_ctx;
@@ -50,16 +54,22 @@ int obsw_tc_dispatcher_feed(obsw_tc_dispatcher_t *d,
                             size_t frame_len)
 {
     if (!d || !frame)
+    {
         return OBSW_TC_ERR_NULL;
+    }
 
     /* Parse primary header */
     obsw_sp_packet_t pkt;
     if (obsw_sp_parse(frame, frame_len, &pkt) != OBSW_SP_OK)
+    {
         return OBSW_TC_ERR_PARSE;
+    }
 
     /* Extract PUS secondary header fields */
     if (!pkt.hdr.sec_hdr_flag || pkt.payload_len < PUS_TC_SEC_HDR_LEN)
+    {
         return OBSW_TC_ERR_PARSE;
+    }
 
     obsw_tc_t tc;
     tc.apid = pkt.hdr.apid;
@@ -86,7 +96,9 @@ int obsw_tc_dispatcher_feed(obsw_tc_dispatcher_t *d,
     {
         const obsw_tc_route_t *r = &d->table[i];
         if ((r->apid != 0xFFFFU && r->apid != tc.apid) || r->service != tc.service)
+        {
             continue;
+        }
         if (r->subservice == tc.subservice)
         {
             int rc = r->handler(&tc, d->responder, r->ctx);

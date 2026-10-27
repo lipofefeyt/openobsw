@@ -20,8 +20,9 @@
  static obsw_s20_param_t *find_param(obsw_s20_ctx_t *s, uint16_t id)
  {
      for (uint8_t i = 0; i < s->table_len; i++) {
-         if (s->table[i].param_id == id)
+         if (s->table[i].param_id == id) {
              return &s->table[i];
+         }
      }
      return NULL;
  }
@@ -40,7 +41,7 @@
      body[5] = (uint8_t)(val.u32 & 0xFFU);
  
      uint16_t seq = s->msg_counter++;
-     obsw_pus_tm_build(s->tm_store, s->apid, seq,
+     (void)obsw_pus_tm_build(s->tm_store, s->apid, seq,
                        20U, 2U, seq, 0U, s->timestamp,
                        body, 6U);
  }
@@ -51,13 +52,14 @@
  
  int obsw_s20_set(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
  {
-     (void)respond;
+     (void)&respond; /* unused: handlers report through S1 */
      obsw_s20_ctx_t *s = (obsw_s20_ctx_t *)ctx;
-     if (!s || !tc)
+     if (!s || !tc) {
          return -1;
+     }
  
      if (!tc->user_data || tc->user_data_len < S20_SET_LEN) {
-         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
          return -1;
      }
  
@@ -67,13 +69,13 @@
  
      obsw_s20_param_t *p = find_param(s, param_id);
      if (!p) {
-         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
+         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
          return -1;
      }
  
-     obsw_s1_accept_success(s->s1, tc);
+     (void)obsw_s1_accept_success(s->s1, tc);
      p->value = val;
-     obsw_s1_completion_success(s->s1, tc);
+     (void)obsw_s1_completion_success(s->s1, tc);
      return 0;
  }
  
@@ -83,13 +85,14 @@
  
  int obsw_s20_get(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
  {
-     (void)respond;
+     (void)&respond; /* unused: handlers report through S1 */
      obsw_s20_ctx_t *s = (obsw_s20_ctx_t *)ctx;
-     if (!s || !tc)
+     if (!s || !tc) {
          return -1;
+     }
  
      if (!tc->user_data || tc->user_data_len < S20_GET_LEN) {
-         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
          return -1;
      }
  
@@ -97,12 +100,12 @@
 
      obsw_s20_param_t *p = find_param(s, param_id);
      if (!p) {
-         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
+         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
          return -1;
      }
  
-     obsw_s1_accept_success(s->s1, tc);
+     (void)obsw_s1_accept_success(s->s1, tc);
      emit_tm20_2(s, param_id, p->value);
-     obsw_s1_completion_success(s->s1, tc);
+     (void)obsw_s1_completion_success(s->s1, tc);
      return 0;
  }

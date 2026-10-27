@@ -1,0 +1,24 @@
+# cppcheck suppressions for the core-library static analysis (CI job static-analysis).
+# Every entry is justified in docs/misra-deviations.md. Mandatory and Required
+# MISRA rules are never suppressed here.
+
+# System headers are not analysed
+missingIncludeSystem
+
+# Section 1: permanent Advisory deviations
+misra-c2012-15.5
+misra-c2012-11.5
+misra-c2012-18.4
+misra-c2012-19.2
+misra-c2012-11.4
+
+# Section 2: Advisory, not enforced yet
+misra-c2012-12.1
+misra-c2012-13.3
+misra-c2012-2.5
+misra-c2012-8.7
+misra-c2012-13.4
+misra-c2012-5.9
+misra-c2012-2.3
+misra-c2012-2.4
+misra-c2012-12.3

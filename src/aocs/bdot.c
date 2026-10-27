@@ -13,29 +13,32 @@
 
 void obsw_bdot_init(obsw_bdot_ctx_t *ctx, const obsw_bdot_config_t *config)
 {
-    if (!ctx || !config)
+    if (!ctx || !config) {
         return;
+    }
     ctx->config      = *config;
     ctx->initialised = false;
-    memset(ctx->b_prev,         0, sizeof(ctx->b_prev));
-    memset(ctx->dbdt_raw_prev,  0, sizeof(ctx->dbdt_raw_prev));
-    memset(ctx->dbdt_filt,      0, sizeof(ctx->dbdt_filt));
+    (void)memset(ctx->b_prev,         0, sizeof(ctx->b_prev));
+    (void)memset(ctx->dbdt_raw_prev,  0, sizeof(ctx->dbdt_raw_prev));
+    (void)memset(ctx->dbdt_filt,      0, sizeof(ctx->dbdt_filt));
 }
 
 void obsw_bdot_reset(obsw_bdot_ctx_t *ctx)
 {
-    if (!ctx)
+    if (!ctx) {
         return;
+    }
     ctx->initialised = false;
-    memset(ctx->b_prev,        0, sizeof(ctx->b_prev));
-    memset(ctx->dbdt_raw_prev, 0, sizeof(ctx->dbdt_raw_prev));
-    memset(ctx->dbdt_filt,     0, sizeof(ctx->dbdt_filt));
+    (void)memset(ctx->b_prev,        0, sizeof(ctx->b_prev));
+    (void)memset(ctx->dbdt_raw_prev, 0, sizeof(ctx->dbdt_raw_prev));
+    (void)memset(ctx->dbdt_filt,     0, sizeof(ctx->dbdt_filt));
 }
 
 void obsw_bdot_step(obsw_bdot_ctx_t *ctx, const float b[3], float dt, obsw_bdot_output_t *out)
 {
-    if (!ctx || !b || !out || dt <= 0.0f)
+    if (!ctx || !b || !out || dt <= 0.0f) {
         return;
+    }
 
     if (!ctx->initialised) {
         /* First measurement — no derivative yet, output zero */
@@ -83,10 +86,12 @@ void obsw_bdot_step(obsw_bdot_ctx_t *ctx, const float b[3], float dt, obsw_bdot_
     /* Saturate dipole commands */
     float max = ctx->config.max_dipole;
     for (int i = 0; i < 3; i++) {
-        if (m[i] > max)
+        if (m[i] > max) {
             m[i] = max;
-        if (m[i] < -max)
+        }
+        if (m[i] < -max) {
             m[i] = -max;
+        }
     }
 
     out->m_cmd[0]     = m[0];

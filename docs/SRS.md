@@ -390,8 +390,9 @@ CI shall fail when an IMPLEMENTED requirement with method T has no tagged test, 
 CI shall measure line coverage of the core library and fail below 90%.
 *Evidence: CI `coverage` job (`gcovr --fail-under-line 90` over `src/{ccsds,tc,tm,pus,fdir,aocs,time}`, after unit, integration and system tests).*
 
-**OBSW-SRS-263** `[QA]` `BASELINED` `I`
-CI shall run static analysis with a MISRA-C subset and fail on new findings. *(#74)*
+**OBSW-SRS-263** `[QA]` `IMPLEMENTED` `I`
+CI shall run static analysis on the core library with MISRA C:2012 checks, with no findings against Mandatory or Required rules, and fail on any finding not covered by a documented deviation. *(#74)*
+*Evidence: CI `static-analysis` job (cppcheck + `misra` addon, `--error-exitcode=1`); deviations in [misra-deviations.md](misra-deviations.md).*
 
 **OBSW-SRS-264** `[QA]` `BASELINED` `T`
 CI shall build the MSP430 target.

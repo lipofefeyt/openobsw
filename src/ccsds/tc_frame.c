@@ -18,10 +18,14 @@ uint16_t obsw_crc16_ccitt(const uint8_t *buf, size_t len)
         crc ^= (uint16_t)((uint16_t)buf[i] << 8);
         for (int j = 0; j < 8; j++)
         {
-            if (crc & 0x8000U)
+            if ((crc & 0x8000U) != 0U)
+            {
                 crc = (uint16_t)((crc << 1) ^ 0x1021U);
+            }
             else
+            {
                 crc = (uint16_t)(crc << 1);
+            }
         }
     }
     return crc;
@@ -41,15 +45,21 @@ int obsw_tc_frame_decode(const uint8_t *buf, size_t len,
                          obsw_tc_frame_t *frm)
 {
     if (!buf || !frm)
+    {
         return OBSW_TC_FRAME_ERR_NULL;
+    }
     if (len < OBSW_TC_FRAME_MIN_LEN)
+    {
         return OBSW_TC_FRAME_ERR_TOO_SHORT;
+    }
 
     /* CRC check: last 2 bytes are FECF, covers all preceding bytes */
     uint16_t computed = obsw_crc16_ccitt(buf, len - 2U);
     uint16_t received = (uint16_t)(((uint16_t)buf[len - 2U] << 8) | buf[len - 1U]);
     if (computed != received)
+    {
         return OBSW_TC_FRAME_ERR_CRC;
+    }
 
     /* Parse primary header */
     obsw_tc_frame_header_t *h = &frm->header;
@@ -65,7 +75,9 @@ int obsw_tc_frame_decode(const uint8_t *buf, size_t len,
 
     /* frame_len field = total octets - 1 (CCSDS convention) */
     if ((size_t)(h->frame_len + 1U) != len)
+    {
         return OBSW_TC_FRAME_ERR_TOO_SHORT;
+    }
 
     frm->data = buf + OBSW_TC_FRAME_PRIMARY_HDR_LEN;
     frm->data_len = (uint16_t)(len - OBSW_TC_FRAME_PRIMARY_HDR_LEN - OBSW_TC_FRAME_CRC_LEN);

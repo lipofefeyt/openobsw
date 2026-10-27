@@ -21,10 +21,12 @@ int obsw_pus_tm_build(obsw_tm_store_t *store,
                       const uint8_t *data,
                       uint16_t data_len)
 {
-    if (!store)
+    if (!store) {
         return OBSW_PUS_TM_ERR_NULL;
-    if (data_len > 0 && !data)
+    }
+    if (data_len > 0U && !data) {
         return OBSW_PUS_TM_ERR_NULL;
+    }
 
     /* Total payload = PUS secondary header + application data */
     uint16_t payload_len = (uint16_t)(OBSW_PUS_TM_SEC_HDR_LEN + data_len);
@@ -32,8 +34,9 @@ int obsw_pus_tm_build(obsw_tm_store_t *store,
     uint16_t pkt_data_len = (uint16_t)(payload_len - 1U);
 
     uint16_t total = (uint16_t)(OBSW_SP_PRIMARY_HEADER_LEN + payload_len);
-    if (total > OBSW_TM_MAX_PACKET_LEN)
+    if (total > OBSW_TM_MAX_PACKET_LEN) {
         return OBSW_PUS_TM_ERR_TOO_LARGE;
+    }
 
     uint8_t buf[OBSW_TM_MAX_PACKET_LEN];
 
@@ -47,7 +50,7 @@ int obsw_pus_tm_build(obsw_tm_store_t *store,
         .seq_count = seq_count,
         .data_len = pkt_data_len,
     };
-    obsw_sp_encode_primary(&hdr, buf);
+    (void)obsw_sp_encode_primary(&hdr, buf);
 
     /* ---- PUS-C TM secondary header ---- */
     uint8_t *p = buf + OBSW_SP_PRIMARY_HEADER_LEN;
@@ -64,8 +67,9 @@ int obsw_pus_tm_build(obsw_tm_store_t *store,
     *p++ = (uint8_t)(timestamp & 0xFFU);
 
     /* ---- Application data ---- */
-    if (data_len > 0U)
-        memcpy(p, data, data_len);
+    if (data_len > 0U) {
+        (void)memcpy(p, data, data_len);
+    }
 
     int rc = obsw_tm_store_enqueue(store, buf, total);
     return (rc == OBSW_TM_OK) ? OBSW_PUS_TM_OK : OBSW_PUS_TM_ERR_STORE;

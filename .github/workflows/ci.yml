@@ -162,6 +162,53 @@ jobs:
           retention-days: 90
 
   # ------------------------------------------------------------------ #
+  # Static analysis (OBSW-SRS-263): cppcheck + MISRA C:2012 addon on   #
+  # the core library. Required rules at zero; Advisory suppressions    #
+  # are justified in docs/misra-deviations.md                          #
+  # ------------------------------------------------------------------ #
+  static-analysis:
+    name: cppcheck + MISRA (core)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc cppcheck python3-pip
+          pip install pydantic pyyaml --break-system-packages
+          pip install -e srdb/ --break-system-packages
+          cppcheck --version
+
+      - name: Generate SRDB header
+        run: |
+          cmake -B build -G Ninja -DOBSW_BUILD_TESTS=OFF -DOBSW_BUILD_SIM=OFF
+          cmake --build build --target srdb_codegen
+
+      # Guards against a run that reports nothing because the addon did not
+      # load or style-severity findings were filtered out
+      - name: MISRA canary (addon must report)
+        run: |
+          out=$(cppcheck --std=c11 --enable=style \
+            --addon=misra --addon-python=/usr/bin/python3 \
+            tools/misra-canary.c 2>&1)
+          echo "$out"
+          echo "$out" | grep -q 'misra-c2012-15.6' \
+            || { echo "::error::MISRA addon produced no findings on the canary"; exit 1; }
+
+      - name: cppcheck + MISRA
+        run: |
+          cppcheck --std=c11 \
+            --enable=warning,style,performance,portability \
+            --addon=misra --addon-python=/usr/bin/python3 \
+            --inline-suppr --suppressions-list=tools/cppcheck-suppressions.txt \
+            --error-exitcode=1 --quiet \
+            -I include -I build/include \
+            src/ccsds src/tc src/tm src/pus src/fdir src/aocs src/time
+
+  # ------------------------------------------------------------------ #
   # ZynqMP bare-metal binary — build and publish as workflow artifact  #
   # Runs on main pushes + monthly schedule (not PRs)                   #
   # ------------------------------------------------------------------ #
