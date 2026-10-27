@@ -1,22 +1,70 @@
 # OpenOBSW
 
-**Open-source spacecraft On-Board Software stack — C11, PUS-C, validated on real hardware**
+**Open-source, flight-oriented spacecraft on-board software — C11, PUS-C, no dynamic allocation**
 
 [![CI](https://github.com/lipofefeyt/openobsw/actions/workflows/ci.yml/badge.svg)](https://github.com/lipofefeyt/openobsw/actions/workflows/ci.yml)
 
-OpenOBSW is a flight software stack for small satellites. It implements the PUS-C service protocol, b-dot detumbling, ADCS PD attitude control, and FDIR — in portable C11 with zero dynamic allocation. It runs on MSP430FR5969 hardware, STM32H750VBT6 hardware, x86_64 host simulation, aarch64 QEMU, and ZynqMP Renode emulation. It is validated by [OpenSVF](https://github.com/lipofefeyt/opensvf) in closed-loop SIL against a 6-DOF physics engine.
+OpenOBSW is a small, permissively licensed PUS-C flight-software stack that
+runs unchanged from 16-bit microcontrollers to 64-bit SoCs, and comes with an
+open validation facility, [OpenSVF](https://github.com/lipofefeyt/opensvf).
+
+It implements CCSDS TC/TM framing, the PUS-C services listed below, a
+STANDBY/SAFE/NOMINAL mode machine with FDIR, B-dot detumbling and PD attitude
+control, in portable C11 with no `malloc` and no global state in the core.
+OpenSVF runs it closed loop (SIL) against a 6-DOF physics engine.
+
+> **Status:** flight-oriented, not flight-proven. It has not flown, and there
+> is no requirements baseline, static analysis or coverage gate yet; those are
+> the [v0.17 train](#roadmap). Hardware evidence is listed per target below.
 
 ---
 
-## Validated targets
+## Targets
 
-| Target | Architecture | Transport | Status |
-|---|---|---|---|
-| `obsw_msp430` | MSP430X (FR5969) | UCA0 UART 9600 baud | ✅ Hardware (LaunchPad) |
-| `obsw_sim` | x86_64 (host) | stdin/stdout pipe | ✅ CI + SVF SIL |
-| `obsw_sim_aarch64` | aarch64 (ZynqMP PS) | stdin/stdout pipe via QEMU | ✅ QEMU user-mode |
-| `obsw_zynqmp` | aarch64 bare-metal | Cadence UART @ 0xFF000000 | ✅ Renode ZynqMP |
-| `obsw_stm32h7` | Cortex-M7 (STM32H750) | USART3 PD8/PD9 | ✅ Hardware validated (ST-Link SWD) |
+| Target | Architecture | Transport | Evidence | In CI |
+|---|---|---|---|---|
+| `obsw_sim` | x86_64 host | stdin/stdout pipe | Unit + integration tests; OpenSVF closed-loop SIL | build, tests, ASAN/UBSAN |
+| `obsw_sim` (aarch64) | aarch64 Linux | pipe via QEMU user-mode | Runs under `qemu-aarch64` | — |
+| `obsw_zynqmp` | aarch64 bare metal | Cadence UART | Renode: TC(17,1) ping, S8 mode changes, NOMINAL AOCS test | binary |
+| `obsw_stm32h7` | Cortex-M7 (STM32H750), FreeRTOS | USART3 115200 | WeAct board: TC/TM ping over UART; Renode ping | binary |
+| `obsw_msp430` | MSP430FR5969, 2 KB SRAM | UCA0 UART 9600 | LaunchPad: TC/TM ping over UART | — |
+
+Not yet shown: the B-dot loop closed on real hardware (#52); the STM32H750 runs
+on the 64 MHz HSI, with PLL init to 480 MHz written but disabled (#72).
+
+---
+
+## PUS-C services
+
+A handler only acts in a build whose dispatcher routes a TC to it. Routed TCs
+per target:
+
+| Service | Host sim | STM32H7 FreeRTOS | ZynqMP | STM32H7 superloop | MSP430 |
+|---|---|---|---|---|---|
+| S1 TC verification | every TC; rejections as TM(1,2) | same | same | same | same |
+| S3 housekeeping | 3,1 3,5 3,6 | 3,1 3,5 3,6 | — | — | 3,5 3,6 |
+| S5 event reporting | TM only | TM only | — | — | TM only |
+| S6 memory management | 6,2 6,5 6,9 | 6,2 6,5 6,9 | — | — | — |
+| S8 function management | 8,1 | 8,1 | 8,1 | — | 8,1 |
+| S9 time management | 9,128 | 9,128 | — | — | — |
+| S17 are-you-alive | 17,1 | 17,1 | 17,1 | 17,1 | 17,1 |
+| S20 parameter management | 20,1 20,3 | 20,1 20,3 | — | 20,1 20,3 | — |
+
+| Service | Subservices | Notes |
+|---|---|---|
+| S1 | TM(1,1) accept, TM(1,2) fail, TM(1,7) complete, TM(1,8) fail | TM(1,2) codes: `0x0002` unknown service, `0x0003` unknown subservice, `0x0005` bad data, `0x0006` S6 address, `0x0007` not allowed in this mode |
+| S3 | TC(3,1) define, TC(3,5/6) enable/disable, TM(3,25) report | Parameters big-endian; TC(3,1) builds sets from S20 parameter IDs |
+| S5 | TM(5,1–4) info/low/medium/high | High-severity events drive the FSM to SAFE |
+| S6 | TC(6,2) load, TC(6,5) check, TC(6,9) dump | Region table with READ/WRITE access; fails closed |
+| S8 | TC(8,1) perform | Function 1 recover NOMINAL, 2 SAFE, 3 STANDBY |
+| S9 | TC(9,128) set OBT | Mission-specific subservice, CUC-4,2 |
+| S17 | TC(17,1) ping, TM(17,2) pong | Heartbeat for OpenSVF and YAMCS |
+| S20 | TC(20,1) set, TC(20,3) get, TM(20,2) report | Static parameter table |
+
+**SAFE and STANDBY** accept only TC(17,1), (8,1), (9,128) and (20,3), on every
+target. The list comes from `safe_allowed` in `srdb/data/telecommands.yaml`.
+
+S11, S12 and S19 are not implemented; their scope is #79.
 
 ---
 
@@ -26,35 +74,31 @@ OpenOBSW is a flight software stack for small satellites. It implements the PUS-
 git clone https://github.com/lipofefeyt/openobsw
 cd openobsw
 
-# Install dependencies (Ubuntu/Debian)
-sudo apt-get install -y cmake ninja-build gcc clang \
-    gcc-arm-none-eabi python3-full python3-venv
+# Dev container (recommended): toolchains are installed by
+# scripts/setup-workspace.sh. Elsewhere, run that script on Ubuntu/Debian.
+source .venv/bin/activate
+source scripts/activate.sh   # aliases
+host-build                   # build host sim
+host-test                    # run the C tests
+```
 
-# Set up Python venv
+Without the aliases:
+
+```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e srdb/
-
-# Build host sim and run tests
+pip install -e "srdb/[dev]"   # SRDB codegen runs at build time
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug \
     -DOBSW_BUILD_TESTS=ON -DOBSW_BUILD_SIM=ON -G Ninja
 cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
+pytest srdb/tests
 ```
 
-Or with the dev container (recommended):
+### Tests
 
-```bash
-# Open in VS Code dev container — all toolchains pre-installed
-source scripts/activate.sh   # load aliases
-host-build                   # build host sim
-host-test                    # run 18 C unit tests
-```
-
-```
-100% tests passed, 0 tests failed out of 18
-```
-
-18 unit tests + 1 integration test cover TC/TM framing, all PUS services, FDIR state machine, watchdog, and AOCS algorithms.
+- 20 ctest suites (19 unit, 1 integration), 194 Unity test cases.
+- 65 SRDB Python tests.
+- Core line coverage 92%, branch 77% (gcov, CCSDS/dispatcher/PUS/FDIR/AOCS/TM/time). Measured locally; not yet gated in CI.
 
 ---
 
@@ -63,65 +107,32 @@ host-test                    # run 18 C unit tests
 ```
 openobsw/
 ├── src/
-│   ├── pus/
-│   │   ├── s1.c      TC verification (TM 1,1/2/3/7/8)
-│   │   ├── s3.c      Housekeeping reporting
-│   │   ├── s5.c      Event reporting + FDIR triggers
-│   │   ├── s6.c      Memory management (load/check/dump)
-│   │   ├── s8.c      Function management (recover_nominal)
-│   │   ├── s17.c     Are-you-alive ping/pong
-│   │   └── s20.c     On-board parameter get/set
-│   ├── aocs/
-│   │   ├── bdot.c    B-dot detumbling (SAFE mode)
-│   │   └── adcs.c    PD attitude control (NOMINAL mode)
-│   ├── fdir/
-│   │   ├── fsm.c     Mode FSM (SAFE ↔ NOMINAL)
-│   │   └── watchdog.c  Software watchdog
-│   ├── hal/
-│   │   ├── msp430/uart.c   MSP430FR5969 UCA0 UART
-│   │   ├── stm32h7/uart.c  STM32H750 USART3 UART
-│   │   └── zynqmp/uart.c   ZynqMP Cadence UART (register-level)
-│   └── platform/
-│       ├── stm32h7/
-│       │   ├── main.c      STM32H750 entry point
-│       │   ├── startup.S   Cortex-M7 minimal startup
-│       │   └── stm32h750.ld Linker script
-│       └── zynqmp/
-│           ├── main.c      ZynqMP bare-metal entry point
-│           ├── startup.S   AArch64 minimal startup
-│           └── zynqmp.ld   Linker script (load at 0x400000)
-├── sim/
-│   └── main.c        Host sim — wire protocol v3 over stdin/stdout
-├── renode/
-│   ├── zynqmp_obsw.resc     Renode ZynqMP platform script
-│   └── test_ping_zynqmp.py  TC(17,1) ping validation via socket
-└── srdb/
-    └── data/
-        ├── parameters.yaml  TM parameter definitions (ID, type, limits)
-        └── spacecraft.yaml  APID, modes, default gains
+│   ├── ccsds/       TC transfer frame (CRC-16), space packet, TM transfer frame
+│   ├── tc/          TC dispatcher: static routes, acceptance gate
+│   ├── tm/          TM store: fixed ring buffer
+│   ├── pus/         S1 S3 S5 S6 S8 S9 S17 S20
+│   ├── fdir/        mode FSM (STANDBY/SAFE/NOMINAL), watchdog
+│   ├── aocs/        B-dot with dB/dt high-pass filter; PD quaternion control
+│   ├── time/        CUC-4,2 on-board time
+│   ├── task/        FreeRTOS tasks: tmtc, pus, aocs, fdir, mode
+│   ├── hal/         UART, I2C, QMC5883L, LCD per target
+│   └── platform/    STM32H7 and ZynqMP entry points, startup, linker scripts
+├── targets/msp430-fr5969/   MSP430 build
+├── sim/             host sim: wire protocol v3 over stdin/stdout
+├── renode/          ZynqMP and STM32H7 Renode platforms and ping tests
+└── srdb/            Spacecraft Resource Database: YAML → C header + XTCE
 ```
 
-See [docs/architecture.md](docs/architecture.md) for full module descriptions, data flow diagrams, and AOCS algorithm documentation.
-
----
-
-## PUS-C services
-
-| Service | Subservices | Notes |
-|---|---|---|
-| S1 TC Verification | TM(1,1) accept, TM(1,2) fail, TM(1,7) complete, TM(1,8) fail | All TC handlers emit S1 reports |
-| S3 HK Reporting | TC(3,1) define, TC(3,5/6) enable/disable, TM(3,25) report | Essential sets auto-enabled at boot |
-| S5 Event Reporting | TM(5,1–4) info/low/medium/high | High-severity events trigger safe mode |
-| S6 Memory Management | TC(6,2) load, TC(6,5) check, TC(6,9) dump | CRC-16/CCITT verification |
-| S8 Function Management | TC(8,1) perform | Function ID 1 = recover to NOMINAL |
-| S17 Are-You-Alive | TC(17,1) ping, TM(17,2) pong | Used as heartbeat by SVF and YAMCS |
-| S20 Parameter Management | TC(20,1) set, TC(20,3) get, TM(20,2) report | Static parameter table, zero allocation |
+See [docs/architecture.md](docs/architecture.md),
+[docs/freertos-architecture.md](docs/freertos-architecture.md) and
+[docs/mission-config.md](docs/mission-config.md) (values to set before flight).
 
 ---
 
 ## Wire protocol v3
 
-The same protocol runs over stdin/stdout (host sim), QEMU pipe, and Renode socket:
+The same framing runs over stdin/stdout (host sim), the QEMU pipe and the
+Renode socket:
 
 ```
 Host/SVF → OBSW:
@@ -134,51 +145,45 @@ OBSW → Host/SVF:
   [0xFF]                                    End of tick (sync byte)
 ```
 
-`sensor_frame_t` (47 bytes, packed, little-endian): MAG xyz + valid, ST quaternion + valid, GYRO xyz + valid, sim_time.
+`sensor_frame_t` (47 bytes, packed, little-endian): MAG xyz + valid, ST
+quaternion + valid, GYRO xyz + valid, sim_time.
 
-`actuator_frame_t` (29 bytes, packed, little-endian): MTQ dipoles xyz, RW torques xyz, controller byte, sim_time.
+`actuator_frame_t` (29 bytes, packed, little-endian): MTQ dipoles xyz, RW
+torques xyz, controller byte, sim_time.
+
+PUS TC/TM content is big-endian, per PUS-C.
 
 ---
 
-## Renode ZynqMP emulation
+## Running on targets
+
+### Renode ZynqMP
 
 ```bash
-# Terminal 1
-renode renode/zynqmp_obsw.resc
-
-# Terminal 2 — validated: TM(1,1) + TM(17,2) + TM(1,7)
-python3 renode/test_ping_zynqmp.py
+renode renode/zynqmp_obsw.resc        # terminal 1
+python3 renode/test_ping_zynqmp.py    # terminal 2: TM(1,1) + TM(17,2) + TM(1,7)
 ```
 
-OpenSVF connects to the same Renode socket and runs full closed-loop campaigns against the ZynqMP binary.
+OpenSVF connects to the same Renode socket for closed-loop campaigns.
 
----
-
-## STM32H750 hardware validation
-
-Tested on WeAct STM32H750VBT6 board via ST-Link V2 SWD:
+### STM32H750 (WeAct board, ST-Link V2)
 
 ```bash
-# Attach ST-Link to WSL2 (PowerShell admin on Windows)
+# WSL2: attach the ST-Link (PowerShell, admin)
 usbipd bind --busid <busid>
 usbipd attach --wsl --busid <busid>
 
-# Flash via OpenOCD (inside dev container)
+# Build and flash (dev container)
+stm32h7-build
 openocd -f interface/stlink.cfg -f target/stm32h7x.cfg \
     -c "program build_stm32h7/obsw_stm32h7.bin 0x08000000 verify reset exit"
 ```
 
-UART on USART3 PD8/PD9 at 115200 baud (HSI 64MHz, BRR=555). PLL init (480MHz) is written but disabled — debugging in progress via ST-Link GDB.
+USART3 on PD8/PD9 at 115200 baud.
 
----
+### MSP430FR5969 LaunchPad
 
-## MSP430 hardware validation
-
-Tested on MSP430FR5969 LaunchPad:
-
-- UCA0 UART (not UCA1) at 9600 baud, 1MHz MCLK
-- `PM5CTL0 &= ~LOCKLPM5` to unlock GPIO
-- Watchdog disabled at startup
+UCA0 UART at 9600 baud, 1 MHz MCLK. See [docs/msp430-build.md](docs/msp430-build.md).
 
 ```bash
 MSPFlasher -i USB -w build_msp430/obsw_msp430.hex -v -z [VCC]
@@ -188,43 +193,31 @@ MSPFlasher -i USB -w build_msp430/obsw_msp430.hex -v -z [VCC]
 
 ## Toolchains
 
-| Target | Toolchain | Install |
-|---|---|---|
-| Host sim | System GCC / Clang | `apt install gcc clang` |
-| MSP430 | msp430-elf-gcc 9.3.1 | TI toolchain installer |
-| aarch64 Linux | aarch64-linux-gnu-gcc | `apt install gcc-aarch64-linux-gnu` |
-| aarch64 bare-metal | aarch64-none-elf-gcc 12.3 | [ARM Developer](https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads) |
-| STM32H7 | arm-none-eabi-gcc | `apt install gcc-arm-none-eabi` |
+| Target | Toolchain |
+|---|---|
+| Host sim | GCC or Clang |
+| MSP430 | TI msp430-elf-gcc 9.3.1 |
+| aarch64 Linux | aarch64-linux-gnu-gcc |
+| aarch64 bare metal | aarch64-none-elf-gcc 12.3 |
+| STM32H7 | arm-none-eabi-gcc |
 
-The dev container installs all toolchains automatically via `post-create.sh`.
-
----
-
-## Local development (WSL2 + Dev Containers)
-
-```bash
-# Windows (PowerShell admin)
-wsl --install -d Ubuntu-24.04
-winget install -e --id Docker.DockerDesktop --source winget
-winget install -e --id dorssel.usbipd-win --source winget
-
-# WSL2
-git clone https://github.com/lipofefeyt/openobsw ~/workspace/openobsw
-code ~/workspace/openobsw   # VS Code → Reopen in Container
-```
+`scripts/setup-workspace.sh` installs all of them; the dev container runs it
+on creation.
 
 ---
 
 ## Roadmap
 
-| Version | Status |
-|---|---|
-| v0.1–v0.4 — Core PUS stack (S1, S3, S5, S17), CCSDS framing | ✅ Done |
-| v0.5 — FDIR, b-dot, ADCS PD, MSP430 hardware validation | ✅ Done |
-| v0.6 — ZynqMP aarch64 SIL, S6/S8, SRDB, Renode emulation | ✅ Done |
-| v0.7 — S20 parameter management, SVF closed-loop via Renode socket | ✅ Done |
-| v0.8 — STM32H750 PLL clock init, USB CDC, MSP430 Renode emulation | 🔄 In progress |
-| v0.9 — Dual-OBC topology (ZynqMP + MSP430 lockstep) | 🔄 Planned |
+| Train | Theme | Contents | Status |
+|---|---|---|---|
+| v0.16 | Tell the truth | Tag the v0.12–v0.15 work; S6, TC(3,1) and S9 routed; rejected TCs reach TM(1,2) (#80); SAFE whitelist on every target (#86); HK big-endian (#82); SRDB tests and `-Werror` in CI; README rewrite | ✅ Done |
+| v0.17 | Qualification baseline | SRS with requirement IDs and a traceability matrix; gcov coverage floor in CI; cppcheck/clang-tidy with a MISRA-C subset (#74); MSP430 build in CI | Next |
+| v0.18 | Service parity with OpenSVF | S11/S12/S19 scope (#79); S15 and S23; S3 HK in the FreeRTOS PUS task (#51); TC(3,3) delete | Planned |
+| v0.19 | Hardware loop | B-dot HPF validation on opensvf-kde (#70); STM32H750 PLL at 480 MHz (#72); B-dot HIL and ICM-42688 gyro (#52, #53); STM32H750 Renode transport and SIL (#54, #55); convergence harness (#67, #68) | Planned |
+| v1.0 | QUBIK | STM32L476 HAL target; link-layer decision (OSDLP or proven interoperability); separate GPL mission build; HIL on a QUBIK COMMS board | Proposed |
+
+Parked: dual-OBC (#29–#31), USB CDC (#27), INA219 (#39), ground CLI (#50),
+AOCS step refactor (#40), BOM docs (#41). See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
