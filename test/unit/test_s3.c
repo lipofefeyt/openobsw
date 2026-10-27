@@ -204,6 +204,32 @@ void test_on_demand_report_emits_tm3_25(void)
     TEST_ASSERT_EQUAL_UINT8(25, pkt.payload[2]);
 }
 
+/* TM(3,25) app data at payload[11]: set_id then parameters, big-endian (#82) */
+void test_report_params_are_big_endian(void)
+{
+    setup_ctx();
+    obsw_s3_report(&s3, 1);
+    uint8_t pkt_buf[256];
+    obsw_sp_packet_t pkt = dequeue_pkt(pkt_buf, sizeof(pkt_buf));
+    const uint8_t expected[] = {1, 0xAB, 0x12, 0x34, 0xDE, 0xAD, 0xBE, 0xEF};
+    TEST_ASSERT_EQUAL_UINT16(11U + sizeof(expected), pkt.payload_len);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, pkt.payload + 11, sizeof(expected));
+}
+
+void test_report_float_is_big_endian_ieee754(void)
+{
+    static float f = 1.0f; /* 0x3F800000 */
+    static obsw_s3_param_t fparams[] = {{.ptr = &f, .size = OBSW_S3_PARAM_U32}};
+    static obsw_s3_set_t fset[] = {{.set_id = 7, .params = fparams, .param_count = 1}};
+    setup_ctx();
+    s3.sets = fset;
+    obsw_s3_report(&s3, 7);
+    uint8_t pkt_buf[256];
+    obsw_sp_packet_t pkt = dequeue_pkt(pkt_buf, sizeof(pkt_buf));
+    const uint8_t expected[] = {7, 0x3F, 0x80, 0x00, 0x00};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, pkt.payload + 11, sizeof(expected));
+}
+
 void test_on_demand_unknown_set_returns_error(void)
 {
     setup_ctx();
@@ -223,5 +249,7 @@ int main(void)
     RUN_TEST(test_tick_report_is_tm3_25);
     RUN_TEST(test_on_demand_report_emits_tm3_25);
     RUN_TEST(test_on_demand_unknown_set_returns_error);
+    RUN_TEST(test_report_params_are_big_endian);
+    RUN_TEST(test_report_float_is_big_endian_ieee754);
     return UNITY_END();
 }

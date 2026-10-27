@@ -43,6 +43,9 @@ extern "C"
     /**
      * A single housekeeping parameter — a non-owning pointer into the
      * application's live state, plus its width.
+     *
+     * @c ptr points to a native-endian variable of @c size bytes (U32 also
+     * covers int32_t and float). TM(3,25) carries it big-endian.
      */
     typedef struct
     {

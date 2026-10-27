@@ -25,7 +25,27 @@ static obsw_s3_set_t *find_set(obsw_s3_ctx_t *ctx, uint8_t set_id)
     return NULL;
 }
 
-/** Serialise all parameters of a set into buf; returns byte count, or 0 on overflow. */
+/** Read a native-endian value of @p size bytes and write it big-endian. */
+static void put_be(uint8_t *dst, const void *src, obsw_s3_param_size_t size)
+{
+    uint32_t v = 0;
+    if (size == OBSW_S3_PARAM_U8) {
+        uint8_t u8;
+        memcpy(&u8, src, 1);
+        v = u8;
+    } else if (size == OBSW_S3_PARAM_U16) {
+        uint16_t u16;
+        memcpy(&u16, src, 2);
+        v = u16;
+    } else {
+        memcpy(&v, src, 4); /* uint32_t, int32_t or float */
+    }
+    for (uint8_t i = 0; i < (uint8_t)size; i++)
+        dst[i] = (uint8_t)(v >> (8U * ((uint8_t)size - 1U - i)));
+}
+
+/** Serialise all parameters of a set into buf, big-endian (PUS-C);
+ *  returns byte count, or 0 on overflow. */
 static uint16_t serialise_set(const obsw_s3_set_t *set,
                               uint8_t *buf, uint16_t buf_len)
 {
@@ -35,7 +55,7 @@ static uint16_t serialise_set(const obsw_s3_set_t *set,
         const obsw_s3_param_t *p = &set->params[i];
         if (offset + p->size > buf_len)
             return 0;
-        memcpy(buf + offset, p->ptr, p->size);
+        put_be(buf + offset, p->ptr, p->size);
         offset = (uint16_t)(offset + p->size);
     }
     return offset;
