@@ -214,8 +214,8 @@ on creation.
 | Train | Theme | Contents | Status |
 |---|---|---|---|
 | v0.16 | Tell the truth | Tag the v0.12–v0.15 work; S6, TC(3,1) and S9 routed; rejected TCs reach TM(1,2) (#80); SAFE whitelist on every target (#86); HK big-endian (#82); SRDB tests and `-Werror` in CI; README rewrite | ✅ Done |
-| v0.17 | Qualification baseline | SRS with requirement IDs and a traceability matrix; gcov coverage floor in CI; cppcheck/clang-tidy with a MISRA-C subset (#74); MSP430 build in CI | Next |
-| v0.18 | Service parity with OpenSVF | S11/S12/S19 scope (#79); S15 and S23; S3 HK in the FreeRTOS PUS task (#51); TC(3,3) delete | Planned |
+| v0.17 | Qualification baseline | SRS (78 requirements) with test traceability in CI; `obsw_sim` system tests; coverage gate ≥ 90% core lines; cppcheck + MISRA C:2012, Required rules at zero (#74); MSP430 build in CI | ✅ Done |
+| v0.18 | Service parity with OpenSVF | S11/S12/S19 scope (#79); S15 and S23; S3 HK in the FreeRTOS PUS task (#51); TC(3,3) delete (#91); repeated TC arguments in the SRDB (#92) | Next |
 | v0.19 | Hardware loop | B-dot HPF validation on opensvf-kde (#70); STM32H750 PLL at 480 MHz (#72); B-dot HIL and ICM-42688 gyro (#52, #53); STM32H750 Renode transport and SIL (#54, #55); convergence harness (#67, #68) | Planned |
 | v1.0 | QUBIK | STM32L476 HAL target; link-layer decision (OSDLP or proven interoperability); separate GPL mission build; HIL on a QUBIK COMMS board | Proposed |
 
