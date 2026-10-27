@@ -145,15 +145,6 @@ static void compute_nadir_quat(float t_s, float alt_km, float inc_deg,
 }
 
 /* ------------------------------------------------------------------ */
-/* No-op responder                                                     */
-/* ------------------------------------------------------------------ */
-
-static void noop_responder(uint8_t flag, const obsw_tc_t *tc, void *ctx)
-{
-    (void)flag; (void)tc; (void)ctx;
-}
-
-/* ------------------------------------------------------------------ */
 /* S8 FSM callbacks                                                    */
 /* ------------------------------------------------------------------ */
 
@@ -186,13 +177,14 @@ int main(void)
     obsw_tm_store_init(&tm_store);
 
     /* FSM */
+    static const obsw_fsm_tc_entry_t safe_whitelist[] = SRDB_SAFE_TC_WHITELIST;
     obsw_fsm_ctx_t fsm_ctx = {0};
     obsw_fsm_config_t fsm_cfg = {
         .on_enter_safe     = NULL,
         .on_exit_safe      = NULL,
         .hook_ctx          = NULL,
-        .safe_tc_whitelist = NULL,
-        .whitelist_len     = 0,
+        .safe_tc_whitelist = safe_whitelist,
+        .whitelist_len     = SRDB_SAFE_TC_COUNT,
     };
     obsw_fsm_init(&fsm_ctx, &fsm_cfg);
 
@@ -239,7 +231,8 @@ int main(void)
     obsw_tc_dispatcher_t dispatcher;
     obsw_tc_dispatcher_init(&dispatcher, routes,
                             sizeof(routes) / sizeof(routes[0]),
-                            noop_responder, NULL);
+                            obsw_s1_dispatch_responder, &s1_ctx);
+    obsw_tc_dispatcher_set_gate(&dispatcher, obsw_fsm_tc_gate, &fsm_ctx);
 
     float last_sim_time = 0.0f;
     uint8_t frame[256];

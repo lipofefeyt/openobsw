@@ -101,6 +101,35 @@ void test_msg_counter_increments(void)
     TEST_ASSERT_EQUAL_size_t(2, obsw_tm_store_count(&store));
 }
 
+/* TM(1,2) app data: tc ref(4) then failure code(2) at payload[15..16] */
+static uint16_t dequeue_tm12_code(void)
+{
+    uint8_t buf[256];
+    obsw_sp_packet_t pkt = dequeue_pkt(buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[1]);
+    TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
+    return (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]);
+}
+
+void test_dispatch_responder_reject_codes(void)
+{
+    setup_ctx();
+    obsw_s1_dispatch_responder(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_SVC, &tc, &s1);
+    obsw_s1_dispatch_responder(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_SUBSVC, &tc, &s1);
+    obsw_s1_dispatch_responder(OBSW_TC_ACK_REJECT | OBSW_TC_REJECT_GATED, &tc, &s1);
+    TEST_ASSERT_EQUAL_size_t(3, obsw_tm_store_count(&store));
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_SVC, dequeue_tm12_code());
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_SUBSVC, dequeue_tm12_code());
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_MODE_GATED, dequeue_tm12_code());
+}
+
+void test_dispatch_responder_ignores_non_reject(void)
+{
+    setup_ctx();
+    obsw_s1_dispatch_responder(OBSW_TC_ACK_ACCEPT | OBSW_TC_ACK_COMPLETE, &tc, &s1);
+    TEST_ASSERT_EQUAL_size_t(0, obsw_tm_store_count(&store));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -110,5 +139,7 @@ int main(void)
     RUN_TEST(test_completion_failure_enqueues_tm18);
     RUN_TEST(test_null_args_rejected);
     RUN_TEST(test_msg_counter_increments);
+    RUN_TEST(test_dispatch_responder_reject_codes);
+    RUN_TEST(test_dispatch_responder_ignores_non_reject);
     return UNITY_END();
 }

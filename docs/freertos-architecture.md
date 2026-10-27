@@ -85,19 +85,17 @@ even under continuous UART traffic.
 | Trigger | Blocks on TC frame queue from TMTC |
 | Stack | Static |
 
-Consumes `obsw_tc_frame_item_t` items from the TMTC queue. Before dispatching,
-applies the FSM TC gate:
+Consumes `obsw_tc_frame_item_t` items from the TMTC queue and feeds each to
+the TC dispatcher (S3, S6, S8, S9, S17, S20). The dispatcher applies the FSM
+TC gate before route lookup:
 
 ```c
-if (!obsw_fsm_tc_allowed(fsm, frame[12], frame[13]))
-    continue;   /* drop TC in SAFE mode if not whitelisted */
+obsw_tc_dispatcher_init(&d, routes, n, obsw_s1_dispatch_responder, &s1_ctx);
+obsw_tc_dispatcher_set_gate(&d, obsw_fsm_tc_gate, obsw_mode_get_fsm());
 ```
 
-Service/subservice are read from known byte offsets (5-byte TC transfer frame
-header + 6-byte CCSDS primary header + 1-byte PUS version/ack byte → service
-at byte [12], subservice at [13]).
-
-After the gate, the frame is fed to the TC dispatcher (S1, S8, S17, S20).
+A TC refused by the gate in SAFE/STANDBY gets TM(1,2) code `0x0007`; an
+unrouted TC gets `0x0002` (unknown service) or `0x0003` (unknown subservice).
 S8 function ID 1 (`OBSW_S8_FN_RECOVER_NOMINAL`) calls `obsw_fsm_to_nominal()`
 on the FSM owned by the FDIR task. After each dispatch, TMTC is notified to
 flush the TM store.
@@ -173,8 +171,10 @@ Each 1 s tick:
 
 A stuck FDIR task causes IWDG expiry and hardware reset within 4 s.
 
-TC whitelist in SAFE mode: `{8,1}` (S8 recover), `{17,1}` (ping), `{20,3}`
-(parameter get).
+TC whitelist in SAFE and STANDBY: `{17,1}` (ping), `{8,1}` (S8 mode
+functions), `{9,128}` (set OBT), `{20,3}` (parameter get). It is generated
+from `safe_allowed: true` in `srdb/data/telecommands.yaml` as
+`SRDB_SAFE_TC_WHITELIST` and shared by every target.
 
 ---
 

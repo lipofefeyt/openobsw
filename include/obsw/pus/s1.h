@@ -34,6 +34,7 @@ extern "C"
 #define OBSW_S1_FAIL_EXEC_ERROR 0x0004U
 #define OBSW_S1_FAIL_ILLEGAL_APP_DATA 0x0005U
 #define OBSW_S1_FAIL_MEM_ACCESS 0x0006U /**< S6 range outside allowed regions */
+#define OBSW_S1_FAIL_MODE_GATED 0x0007U /**< TC not allowed in current mode */
 
     /* ------------------------------------------------------------------ */
     /* Context                                                             */
@@ -64,6 +65,19 @@ extern "C"
     /** TM(1,8) — completion failure. */
     int obsw_s1_completion_failure(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc,
                                    uint16_t failure_code);
+
+    /* ------------------------------------------------------------------ */
+    /* Dispatcher responder                                                */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * obsw_tc_responder_t that reports dispatcher rejections as TM(1,2).
+     * Pass it to obsw_tc_dispatcher_init() with an obsw_s1_ctx_t as ctx.
+     * OBSW_TC_REJECT_SVC, _SUBSVC and _GATED map to OBSW_S1_FAIL_ILLEGAL_SVC,
+     * _ILLEGAL_SUBSVC and _MODE_GATED. Non-reject flags are ignored:
+     * handlers report their own acceptance and completion.
+     */
+    void obsw_s1_dispatch_responder(uint8_t flags, const obsw_tc_t *tc, void *ctx);
 
 #ifdef __cplusplus
 }

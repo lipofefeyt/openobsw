@@ -139,6 +139,19 @@ void test_safe_blocks_non_whitelisted_tc(void)
     TEST_ASSERT_FALSE(obsw_fsm_tc_allowed(&fsm, 99, 1));
 }
 
+void test_tc_gate_adapter(void)
+{
+    obsw_fsm_ctx_t fsm = make_fsm();
+    obsw_fsm_to_safe(&fsm);
+    obsw_tc_t ping = {.service = 17, .subservice = 1};
+    obsw_tc_t hk   = {.service = 3, .subservice = 5};
+    TEST_ASSERT_TRUE(obsw_fsm_tc_gate(&ping, &fsm));
+    TEST_ASSERT_FALSE(obsw_fsm_tc_gate(&hk, &fsm));
+    TEST_ASSERT_FALSE(obsw_fsm_tc_gate(NULL, &fsm));
+    obsw_fsm_to_nominal(&fsm);
+    TEST_ASSERT_TRUE(obsw_fsm_tc_gate(&hk, &fsm));
+}
+
 void test_standby_whitelist_enforced(void)
 {
     /* Whitelist applies in STANDBY as well as SAFE. */
@@ -196,6 +209,7 @@ int main(void)
     RUN_TEST(test_safe_allows_whitelisted_tc);
     RUN_TEST(test_safe_blocks_non_whitelisted_tc);
     RUN_TEST(test_standby_whitelist_enforced);
+    RUN_TEST(test_tc_gate_adapter);
     RUN_TEST(test_standby_to_nominal_skips_exit_hook);
     RUN_TEST(test_standby_safe_nominal_chain);
     return UNITY_END();

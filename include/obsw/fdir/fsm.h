@@ -100,6 +100,12 @@ void obsw_fsm_to_nominal(obsw_fsm_ctx_t *fsm);
 
 bool obsw_fsm_tc_allowed(const obsw_fsm_ctx_t *fsm, uint8_t svc, uint8_t subsvc);
 
+/**
+ * obsw_tc_gate_t adapter for obsw_fsm_tc_allowed(); @p fsm is the
+ * obsw_fsm_ctx_t. Install with obsw_tc_dispatcher_set_gate().
+ */
+bool obsw_fsm_tc_gate(const obsw_tc_t *tc, void *fsm);
+
 /* ------------------------------------------------------------------ */
 /* Accessors                                                           */
 /* ------------------------------------------------------------------ */

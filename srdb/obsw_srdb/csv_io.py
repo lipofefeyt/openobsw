@@ -86,7 +86,7 @@ def _export_telecommands(srdb: SRDB, path: Path) -> None:
         w = csv.writer(f)
         w.writerow([
             "name", "description", "apid_hex",
-            "service", "subservice", "parameters",
+            "service", "subservice", "parameters", "safe_allowed",
         ])
         for tc in srdb.telecommands:
             params_str = ";".join(
@@ -95,6 +95,7 @@ def _export_telecommands(srdb: SRDB, path: Path) -> None:
             w.writerow([
                 tc.name, tc.description, f"0x{tc.apid:03X}",
                 tc.service, tc.subservice, params_str,
+                str(tc.safe_allowed).lower(),
             ])
 
 
@@ -217,6 +218,7 @@ def _import_telecommands(path: Path) -> list[Telecommand]:
                 service=int(row["service"]),
                 subservice=int(row["subservice"]),
                 parameters=params,
+                safe_allowed=row.get("safe_allowed", "false").lower() == "true",
             ))
     return tcs
 

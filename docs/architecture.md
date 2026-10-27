@@ -232,7 +232,13 @@ int handle_s17_ping(const obsw_tc_t *tc,
 }
 ```
 
-If no route matches, the responder is called with `OBSW_TC_ACK_REJECT`.
+An optional gate (`obsw_tc_dispatcher_set_gate()`) is asked first; every
+target installs `obsw_fsm_tc_gate` there. A TC refused by the gate, or
+matching no route, is passed to the responder with `OBSW_TC_ACK_REJECT` and
+a reason (`OBSW_TC_REJECT_GATED`, `_SVC` or `_SUBSVC`). Targets use
+`obsw_s1_dispatch_responder`, which reports it as TM(1,2) with code
+`0x0007`, `0x0002` or `0x0003`. The gate runs before route lookup, so in
+SAFE an unknown TC is reported as mode-gated.
 
 ---
 
@@ -304,8 +310,8 @@ stateDiagram-v2
     NOMINAL --> STANDBY : obsw_mode_request_standby() [TC(8,1) fid=3]
 ```
 
-**STANDBY** is the boot state. AOCS is off; TCs are accepted but AOCS
-algorithms do not run. After 300 s the Mode Manager automatically transitions
+**STANDBY** is the boot state. AOCS is off; only whitelisted TCs are
+accepted, as in SAFE. After 300 s the Mode Manager automatically transitions
 to SAFE.
 
 **SAFE** is the fault-containment mode. Only B-dot AOCS runs (magnetometer +
@@ -318,10 +324,12 @@ wheels and star tracker.
 `obsw_fsm_config_t`. On entry to SAFE: switch to safe beacon. On exit to
 NOMINAL: re-enable nominal operations. Neither hook is mandatory.
 
-**TC whitelist** controls which commands are accepted in SAFE mode. All
-others are rejected with `TM(1,2)`. The dispatcher calls
-`obsw_fsm_tc_allowed()` before routing. The whitelist is defined in the
-Mode Manager init (see `src/task/mode.c`).
+**TC whitelist** controls which commands are accepted in SAFE and STANDBY.
+All others are rejected with TM(1,2) code `0x0007`. The dispatcher gate
+(`obsw_fsm_tc_gate` → `obsw_fsm_tc_allowed()`) runs before routing on every
+target. The whitelist is `SRDB_SAFE_TC_WHITELIST`, generated from
+`safe_allowed: true` in `srdb/data/telecommands.yaml`: TC(17,1), (8,1),
+(9,128) and (20,3).
 
 **Mode Manager public API** (`include/obsw/task/mode.h`):
 

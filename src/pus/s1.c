@@ -83,3 +83,17 @@ int obsw_s1_completion_failure(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc,
                              1, 8, seq, 0, ctx->timestamp,
                              data, sizeof(data));
 }
+
+void obsw_s1_dispatch_responder(uint8_t flags, const obsw_tc_t *tc, void *ctx)
+{
+    if (!(flags & OBSW_TC_ACK_REJECT))
+        return;
+
+    uint16_t code = OBSW_S1_FAIL_ILLEGAL_SVC;
+    if (flags & OBSW_TC_REJECT_GATED)
+        code = OBSW_S1_FAIL_MODE_GATED;
+    else if (flags & OBSW_TC_REJECT_SUBSVC)
+        code = OBSW_S1_FAIL_ILLEGAL_SUBSVC;
+
+    obsw_s1_accept_failure((obsw_s1_ctx_t *)ctx, tc, code);
+}

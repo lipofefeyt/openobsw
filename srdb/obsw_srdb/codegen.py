@@ -209,6 +209,23 @@ def generate_header(srdb: SRDB) -> str:
             "",
         ]
 
+    safe_tcs = srdb.safe_tc_whitelist()
+    lines += [
+        "/* ---------------------------------------------------------------- */",
+        "/* SAFE/STANDBY TC whitelist (for obsw_fsm_config_t)                */",
+        "/* ---------------------------------------------------------------- */",
+        "",
+        f"#define SRDB_SAFE_TC_COUNT  {len(safe_tcs)}U",
+        "",
+    ]
+    if safe_tcs:
+        pair_list = ", ".join(f"{{{svc}U, {sub}U}}" for svc, sub in safe_tcs)
+        lines += [
+            "/** Initialiser for obsw_fsm_tc_entry_t[], from telecommands safe_allowed */",
+            f"#define SRDB_SAFE_TC_WHITELIST  {{ {pair_list} }}",
+            "",
+        ]
+
     lines += [
         "/* ---------------------------------------------------------------- */",
         "/* Telecommand routing                                              */",

@@ -11,6 +11,8 @@
 #include "obsw/ccsds/tc_frame.h"
 #include "obsw/ccsds/tm_frame.h"
 #include "obsw/ccsds/space_packet.h"
+#include "obsw/fdir/fsm.h"
+#include "obsw/pus/s1.h"
 #include "obsw/tc/dispatcher.h"
 #include "obsw/tm/store.h"
 #include <string.h>
@@ -182,6 +184,76 @@ void test_pipeline_bad_crc_rejected(void)
                           obsw_tc_frame_decode(tc_raw, tc_len, &frm));
 }
 
+/* Dispatcher with the flight wiring (S1 responder + FSM gate) in SAFE:
+ * a gated TC and an unrouted TC must each produce exactly one TM(1,2)
+ * carrying the TC's APID/sequence and the right failure code. */
+static uint16_t expect_tm12(uint16_t *tc_seq)
+{
+    uint8_t pkt[64];
+    uint16_t len = 0;
+    TEST_ASSERT_EQUAL_INT(OBSW_TM_OK, obsw_tm_store_dequeue(&tm_store, pkt, sizeof(pkt), &len));
+    obsw_sp_packet_t sp;
+    TEST_ASSERT_EQUAL_INT(OBSW_SP_OK, obsw_sp_parse(pkt, len, &sp));
+    TEST_ASSERT_EQUAL_UINT8(1, sp.payload[1]);
+    TEST_ASSERT_EQUAL_UINT8(2, sp.payload[2]);
+    *tc_seq = (uint16_t)(((sp.payload[13] & 0x3FU) << 8) | sp.payload[14]);
+    return (uint16_t)((sp.payload[15] << 8) | sp.payload[16]);
+}
+
+void test_pipeline_rejections_reach_tm12(void)
+{
+    obsw_tm_store_init(&tm_store);
+    handler_called = 0;
+
+    static const obsw_fsm_tc_entry_t whitelist[] = {{17, 1}};
+    obsw_fsm_ctx_t fsm;
+    obsw_fsm_config_t fsm_cfg = {
+        .safe_tc_whitelist = whitelist,
+        .whitelist_len     = 1,
+    };
+    obsw_fsm_init(&fsm, &fsm_cfg);
+    obsw_fsm_to_safe(&fsm);
+
+    obsw_s1_ctx_t s1 = {.tm_store = &tm_store, .apid = 0x010};
+    obsw_tc_route_t routes[] = {
+        {.apid = 0xFFFF, .service = 17, .subservice = 1, .handler = s17_handler, .ctx = NULL},
+        {.apid = 0xFFFF, .service = 3, .subservice = 5, .handler = s17_handler, .ctx = NULL},
+    };
+    obsw_tc_dispatcher_t dispatcher;
+    obsw_tc_dispatcher_init(&dispatcher, routes, 2, obsw_s1_dispatch_responder, &s1);
+    obsw_tc_dispatcher_set_gate(&dispatcher, obsw_fsm_tc_gate, &fsm);
+
+    uint8_t tc_raw[32];
+    obsw_tc_frame_t frm;
+    uint16_t seq = 0;
+
+    /* Routed but not whitelisted in SAFE -> MODE_GATED, handler not run */
+    size_t n = make_tc_frame_with_pus(tc_raw, sizeof(tc_raw), 0x001, 0x010, 3, 5, 0);
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_FRAME_OK, obsw_tc_frame_decode(tc_raw, n, &frm));
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_GATED,
+                          obsw_tc_dispatcher_feed(&dispatcher, frm.data, frm.data_len));
+    TEST_ASSERT_EQUAL_INT(0, handler_called);
+    TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&tm_store));
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_MODE_GATED, expect_tm12(&seq));
+    TEST_ASSERT_EQUAL_UINT16(1, seq);
+
+    /* In NOMINAL: unknown subservice of a routed service -> ILLEGAL_SUBSVC */
+    obsw_fsm_to_nominal(&fsm);
+    n = make_tc_frame_with_pus(tc_raw, sizeof(tc_raw), 0x001, 0x010, 17, 9, 1);
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_FRAME_OK, obsw_tc_frame_decode(tc_raw, n, &frm));
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_NO_ROUTE,
+                          obsw_tc_dispatcher_feed(&dispatcher, frm.data, frm.data_len));
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_SUBSVC, expect_tm12(&seq));
+
+    /* Unknown service -> ILLEGAL_SVC */
+    n = make_tc_frame_with_pus(tc_raw, sizeof(tc_raw), 0x001, 0x010, 99, 1, 2);
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_FRAME_OK, obsw_tc_frame_decode(tc_raw, n, &frm));
+    TEST_ASSERT_EQUAL_INT(OBSW_TC_ERR_NO_ROUTE,
+                          obsw_tc_dispatcher_feed(&dispatcher, frm.data, frm.data_len));
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_SVC, expect_tm12(&seq));
+    TEST_ASSERT_TRUE(obsw_tm_store_empty(&tm_store));
+}
+
 /* ------------------------------------------------------------------ */
 /* Runner                                                              */
 /* ------------------------------------------------------------------ */
@@ -191,5 +263,6 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_full_uplink_downlink_pipeline);
     RUN_TEST(test_pipeline_bad_crc_rejected);
+    RUN_TEST(test_pipeline_rejections_reach_tm12);
     return UNITY_END();
 }

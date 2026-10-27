@@ -165,6 +165,7 @@ class Telecommand(BaseModel):
     service:     int
     subservice:  int
     parameters:  List[TCParameter] = []
+    safe_allowed: bool = False
 
     @field_validator("apid")
     @classmethod
@@ -289,3 +290,11 @@ class SRDB(BaseModel):
     def safe_trigger_event_ids(self) -> List[int]:
         """Return list of event IDs that trigger safe mode transition."""
         return [e.id for e in self.events if e.safe_trigger]
+
+    def safe_tc_whitelist(self) -> List[tuple[int, int]]:
+        """Return unique (service, subservice) pairs allowed in SAFE/STANDBY."""
+        pairs: List[tuple[int, int]] = []
+        for tc in self.telecommands:
+            if tc.safe_allowed and (tc.service, tc.subservice) not in pairs:
+                pairs.append((tc.service, tc.subservice))
+        return pairs
