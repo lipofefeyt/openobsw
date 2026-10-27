@@ -19,6 +19,9 @@ README roadmap. Releases before v0.16 are described on the
 - SRDB loader tests.
 - `OBSW_ENABLE_COVERAGE` CMake option and a CI coverage gate: core library
   line coverage below 90% fails the build; HTML report kept as an artifact.
+- Static analysis in CI: cppcheck with the MISRA C:2012 addon on the core
+  library. Required rules are at zero; Advisory deviations are documented in
+  `docs/misra-deviations.md` (#74).
 
 ### Fixed
 
@@ -26,6 +29,15 @@ README roadmap. Releases before v0.16 are described on the
   the function callback; it is now rejected with TM(1,2) `0x0005`.
 - Malformed user data in S3 enable/disable, S8 and S20 now reports `0x0005`
   (was `0x0003`), consistent with S6, S9 and TC(3,1).
+- `obsw_adcs_set_target()` stored a zero-norm target, which silently
+  stopped attitude control in NOMINAL. It now returns `bool` and keeps the
+  previous target.
+
+### Changed
+
+- Core library brought to MISRA C:2012 Required-rule compliance: braced
+  bodies, explicit `(void)` on ignored results, explicit Boolean tests and
+  typed operands. No behaviour change.
 
 ## [v0.16] — Tell the truth
 
