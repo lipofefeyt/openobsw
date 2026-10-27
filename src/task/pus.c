@@ -22,6 +22,7 @@
 #include "obsw/pus/s1.h"
 #include "obsw/pus/s3.h"
 #include "obsw/pus/s8.h"
+#include "obsw/pus/s9.h"
 #include "obsw/pus/s17.h"
 #include "obsw/pus/s20.h"
 #include "obsw/tc/dispatcher.h"
@@ -47,6 +48,8 @@ static obsw_s1_ctx_t  s1_ctx  = {0};
 static obsw_s17_ctx_t s17_ctx = {0};
 static obsw_s20_ctx_t s20_ctx = {0};
 static obsw_s8_ctx_t  s8_ctx  = {0};
+static obsw_obt_t     s_obt   = {0};
+static obsw_s9_ctx_t  s9_ctx  = {.obt = &s_obt};
 
 static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_OBC_UPTIME,            .value = {.u32 = 0}},
@@ -87,6 +90,16 @@ static obsw_s8_entry_t s8_table[] = {
     {.function_id = OBSW_S8_FN_REQUEST_STANDBY, .fn = fn_request_standby, .ctx = NULL},
 };
 
+/* OBT is advanced by the FDIR task and set here by TC(9,128); the critical
+ * section keeps the 6-byte coarse/fine update from tearing across tasks. */
+static int s9_set_obt_locked(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
+{
+    taskENTER_CRITICAL();
+    int rc = obsw_s9_set_obt(tc, respond, ctx);
+    taskEXIT_CRITICAL();
+    return rc;
+}
+
 /* S3 route ctx pointers are filled in at init time from obsw_fdir_get_s3_ctx(). */
 static obsw_tc_route_t s_routes[] = {
     {.apid = 0xFFFF, .service = 3,  .subservice = 5,
@@ -101,6 +114,8 @@ static obsw_tc_route_t s_routes[] = {
      .handler = obsw_s20_set,    .ctx = &s20_ctx},
     {.apid = 0xFFFF, .service = 20, .subservice = 3,
      .handler = obsw_s20_get,    .ctx = &s20_ctx},
+    {.apid = 0xFFFF, .service = SRDB_TC_SET_OBT_SVC, .subservice = SRDB_TC_SET_OBT_SUBSVC,
+     .handler = s9_set_obt_locked, .ctx = &s9_ctx},
 };
 
 static obsw_tc_dispatcher_t s_dispatcher;
@@ -184,6 +199,8 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
     s20_ctx.table     = s20_params;
     s20_ctx.table_len = sizeof(s20_params) / sizeof(s20_params[0]);
 
+    s9_ctx.s1         = &s1_ctx;
+
     s8_ctx.tm_store   = tm_store;
     s8_ctx.s1         = &s1_ctx;
     s8_ctx.apid       = SRDB_APID_DEFAULT;
@@ -204,6 +221,13 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
 
     xTaskCreateStatic(pus_task, "PUS", PUS_STACK_DEPTH,
                       NULL, PUS_PRIORITY, s_stack, &s_tcb);
+}
+
+void obsw_pus_obt_advance(uint32_t dt_ms)
+{
+    taskENTER_CRITICAL();
+    obsw_obt_advance(&s_obt, dt_ms);
+    taskEXIT_CRITICAL();
 }
 
 float obsw_pus_s20_get_float(uint16_t param_id, float default_val)

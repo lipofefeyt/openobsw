@@ -9,7 +9,7 @@
 /*
  * Initialise the PUS task.
  *
- * PUS owns: TC dispatcher, S1/S8/S17/S20 service contexts.
+ * PUS owns: TC dispatcher, S1/S8/S9/S17/S20 service contexts and the OBT.
  * It reads TC frames from tc_queue, applies the FSM TC gate (via the Mode
  * Manager's shared FSM), dispatches allowed TCs, and notifies tmtc_handle
  * when new TM is ready to drain.
@@ -26,5 +26,11 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
  * Safe to call from any task — 32-bit float read is atomic on single-core ARM.
  */
 float obsw_pus_s20_get_float(uint16_t param_id, float default_val);
+
+/*
+ * Advance the on-board time by dt_ms. Called from the FDIR full tick;
+ * guarded against a concurrent TC(9,128) set from the PUS task.
+ */
+void obsw_pus_obt_advance(uint32_t dt_ms);
 
 #endif /* OBSW_TASK_PUS_H */

@@ -10,12 +10,14 @@ add_library(obsw STATIC
     pus/s5.c
     pus/s6.c
     pus/s8.c
+    pus/s9.c
     pus/s17.c
     pus/s20.c
     fdir/fsm.c
     fdir/watchdog.c
     aocs/bdot.c
     aocs/adcs.c
+    time/obt.c
 )
 
 target_include_directories(obsw PUBLIC

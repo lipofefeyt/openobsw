@@ -59,3 +59,18 @@ telecommands:
       - name: args_len
         type: uint8
         description: "Length of arguments in bytes"
+
+  # ---- S9 - Time Management ---------------------------------------------
+
+  - name: set_obt
+    description: "TC(9,128) set on-board time (mission-specific subservice), CUC-4,2"
+    apid: 0x010
+    service: 9
+    subservice: 128
+    parameters:
+      - name: coarse
+        type: uint32
+        description: "Whole seconds"
+      - name: fine
+        type: uint16
+        description: "Fractional seconds, 1/65536 s units"
