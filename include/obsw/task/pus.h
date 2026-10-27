@@ -9,7 +9,8 @@
 /*
  * Initialise the PUS task.
  *
- * PUS owns: TC dispatcher, S1/S8/S9/S17/S20 service contexts and the OBT.
+ * PUS owns: TC dispatcher, S1/S6/S8/S9/S17/S20 service contexts, the OBT
+ * and the S6 patch RAM.
  * It reads TC frames from tc_queue, applies the FSM TC gate (via the Mode
  * Manager's shared FSM), dispatches allowed TCs, and notifies tmtc_handle
  * when new TM is ready to drain.

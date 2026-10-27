@@ -83,6 +83,7 @@ add_library(obsw_stm32h7 STATIC
     ${OBSW_ROOT}/src/pus/s1.c
     ${OBSW_ROOT}/src/pus/s3.c
     ${OBSW_ROOT}/src/pus/s5.c
+    ${OBSW_ROOT}/src/pus/s6.c
     ${OBSW_ROOT}/src/pus/s8.c
     ${OBSW_ROOT}/src/pus/s9.c
     ${OBSW_ROOT}/src/pus/s17.c
