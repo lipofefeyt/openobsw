@@ -256,9 +256,12 @@ regardless of scheduler state.
 
 ## S3 Housekeeping
 
-S3 HK is owned by the **FDIR task**. PUS registers the TC(3,5)/(3,6) routes
-at init time (after FDIR) and backfills `s3_ctx.s1` so TC verification TM is
-generated. The FDIR 1 Hz loop calls `obsw_s3_tick()` — interval units are
+S3 HK is owned by the **FDIR task**. PUS registers the TC(3,1)/(3,5)/(3,6)
+routes at init time (after FDIR) and backfills `s3_ctx.s1` so TC verification
+TM is generated, and `s3_ctx.param_table` so TC(3,1) can reference S20
+parameters. TC(3,1) runs in a critical section because it appends to the set
+table the FDIR task is ticking; 4 free set slots and a 32-entry parameter pool
+are reserved for it. The FDIR 1 Hz loop calls `obsw_s3_tick()` — interval units are
 seconds on this path.
 
 ### HK sets on the FreeRTOS path
@@ -275,9 +278,9 @@ All sets are **disabled at boot**. Enable via TC(3,5) over CP2102:
 # (hex-encode and send via ping_uart.py --raw or a custom script)
 ```
 
-**Encoding note:** float parameters (`bdot_mag_x/y/z`, `m_cmd_x/y/z`) are
-reported as raw 4-byte little-endian IEEE 754 (native ARM byte order). Decode
-on the ground with `struct.unpack('<f', bytes)`.
+**Encoding note:** all parameters are big-endian (PUS-C). Floats
+(`bdot_mag_x/y/z`, `m_cmd_x/y/z`) are 4-byte IEEE 754; decode on the ground
+with `struct.unpack('>f', bytes)`. Before #82 they went out little-endian.
 
 ---
 

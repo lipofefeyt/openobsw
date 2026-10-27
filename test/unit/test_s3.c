@@ -26,7 +26,7 @@ static obsw_s3_param_t params[] = {
     {.ptr = &app_u32, .size = OBSW_S3_PARAM_U32},
 };
 
-static obsw_s3_set_t sets[] = {
+static obsw_s3_set_t sets[4] = {
     {
         .set_id         = 1,
         .params         = params,
@@ -51,6 +51,12 @@ static void setup_ctx(void)
     s3.timestamp           = 0;
     s3.sets                = sets;
     s3.set_count           = 1;
+    s3.set_capacity        = 0; /* TC(3,1) disabled unless setup_define() */
+    s3.param_pool          = NULL;
+    s3.param_pool_len      = 0;
+    s3.param_pool_used     = 0;
+    s3.param_table         = NULL;
+    s3.param_table_len     = 0;
     sets[0].enabled        = false;
     sets[0].interval_ticks = 0;
     sets[0].countdown      = 0;
@@ -230,6 +236,194 @@ void test_report_float_is_big_endian_ieee754(void)
     TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, pkt.payload + 11, sizeof(expected));
 }
 
+/* ---- TC(3,1) define ---------------------------------------------- */
+
+static obsw_s20_param_t s20_table[] = {
+    {.param_id = 0x2001, .value = {.u32 = 0x01020304}},
+    {.param_id = 0x2002, .value = {.f32 = 1.0f}},
+};
+static obsw_s3_param_t pool[4];
+
+static void setup_define(void)
+{
+    setup_ctx();
+    s3.set_capacity    = 4;
+    s3.param_pool      = pool;
+    s3.param_pool_len  = 4;
+    s3.param_table     = s20_table;
+    s3.param_table_len = 2;
+}
+
+/* set_id(1) | interval(4 BE) | n(1) | param_id(2 BE) x n */
+static obsw_tc_t make_define_tc(uint8_t *buf, uint8_t set_id, uint32_t interval,
+                                const uint16_t *ids, uint8_t n)
+{
+    buf[0] = set_id;
+    buf[1] = (uint8_t)(interval >> 24);
+    buf[2] = (uint8_t)(interval >> 16);
+    buf[3] = (uint8_t)(interval >> 8);
+    buf[4] = (uint8_t)interval;
+    buf[5] = n;
+    for (uint8_t i = 0; i < n; i++) {
+        buf[6 + 2 * i] = (uint8_t)(ids[i] >> 8);
+        buf[7 + 2 * i] = (uint8_t)ids[i];
+    }
+    obsw_tc_t tc = {
+        .apid          = 0x010,
+        .service       = 3,
+        .subservice    = 1,
+        .seq_count     = 3,
+        .user_data     = buf,
+        .user_data_len = (uint16_t)(6 + 2 * n),
+    };
+    return tc;
+}
+
+/* Expect exactly one TM(1,2) with @p code and nothing else */
+static void assert_define_rejected(const obsw_tc_t *tc, uint16_t code)
+{
+    TEST_ASSERT_NOT_EQUAL(0, obsw_s3_define(tc, NULL, &s3));
+    TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&store));
+    uint8_t pkt_buf[256];
+    obsw_sp_packet_t pkt = dequeue_pkt(pkt_buf, sizeof(pkt_buf));
+    TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[1]);
+    TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
+    TEST_ASSERT_EQUAL_HEX16(code, (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]));
+    TEST_ASSERT_EQUAL_UINT8(1, s3.set_count);
+    TEST_ASSERT_EQUAL_UINT16(0, s3.param_pool_used);
+}
+
+void test_define_creates_disabled_set(void)
+{
+    setup_define();
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2002, 0x2001};
+    obsw_tc_t tc = make_define_tc(buf, 9, 3, ids, 2);
+    TEST_ASSERT_EQUAL_INT(0, obsw_s3_define(&tc, NULL, &s3));
+    TEST_ASSERT_EQUAL_UINT8(2, s3.set_count);
+    TEST_ASSERT_EQUAL_UINT16(2, s3.param_pool_used);
+    TEST_ASSERT_EQUAL_UINT8(9, sets[1].set_id);
+    TEST_ASSERT_EQUAL_UINT8(2, sets[1].param_count);
+    TEST_ASSERT_EQUAL_UINT32(3, sets[1].interval_ticks);
+    TEST_ASSERT_FALSE(sets[1].enabled);
+
+    /* TM(1,1) then TM(1,7) */
+    TEST_ASSERT_EQUAL_size_t(2, obsw_tm_store_count(&store));
+    uint8_t pkt_buf[256];
+    obsw_sp_packet_t pkt = dequeue_pkt(pkt_buf, sizeof(pkt_buf));
+    TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[2]);
+    pkt = dequeue_pkt(pkt_buf, sizeof(pkt_buf));
+    TEST_ASSERT_EQUAL_UINT8(7, pkt.payload[2]);
+}
+
+void test_defined_set_reports_live_s20_values_in_order(void)
+{
+    setup_define();
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2002, 0x2001};
+    obsw_tc_t tc = make_define_tc(buf, 9, 1, ids, 2);
+    obsw_s3_define(&tc, NULL, &s3);
+    obsw_tm_store_init(&store);
+
+    s20_table[0].value.u32 = 0x0A0B0C0D; /* changed after define: report is live */
+    obsw_s3_report(&s3, 9);
+    uint8_t pkt_buf[256];
+    obsw_sp_packet_t pkt = dequeue_pkt(pkt_buf, sizeof(pkt_buf));
+    const uint8_t expected[] = {9, 0x3F, 0x80, 0x00, 0x00, 0x0A, 0x0B, 0x0C, 0x0D};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, pkt.payload + 11, sizeof(expected));
+    s20_table[0].value.u32 = 0x01020304;
+}
+
+void test_defined_set_runs_after_enable(void)
+{
+    setup_define();
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2001};
+    obsw_tc_t tc = make_define_tc(buf, 9, 1, ids, 1);
+    obsw_s3_define(&tc, NULL, &s3);
+    obsw_s3_tick(&s3);
+    obsw_tm_store_init(&store);
+    obsw_s3_tick(&s3);
+    TEST_ASSERT_TRUE(obsw_tm_store_empty(&store)); /* still disabled */
+
+    uint8_t ebuf[5];
+    obsw_tc_t en = make_enable_tc(9, 1, ebuf);
+    obsw_s3_enable(&en, NULL, &s3);
+    obsw_tm_store_init(&store);
+    obsw_s3_tick(&s3);
+    TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&store));
+}
+
+void test_define_rejects_existing_set_id(void)
+{
+    setup_define();
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2001};
+    obsw_tc_t tc = make_define_tc(buf, 1, 1, ids, 1);
+    assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+}
+
+void test_define_rejects_unknown_param(void)
+{
+    setup_define();
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2001, 0x7777};
+    obsw_tc_t tc = make_define_tc(buf, 9, 1, ids, 2);
+    assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+}
+
+void test_define_rejects_length_mismatch(void)
+{
+    setup_define();
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2001, 0x2002};
+    obsw_tc_t tc = make_define_tc(buf, 9, 1, ids, 2);
+    tc.user_data_len--; /* last param_id truncated */
+    assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+    tc.user_data_len = 5; /* shorter than the fixed header */
+    obsw_tm_store_init(&store);
+    assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+}
+
+void test_define_rejects_zero_params(void)
+{
+    setup_define();
+    uint8_t buf[16];
+    obsw_tc_t tc = make_define_tc(buf, 9, 1, NULL, 0);
+    assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+}
+
+void test_define_rejects_when_pool_full(void)
+{
+    setup_define();
+    s3.param_pool_len = 1;
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2001, 0x2002};
+    obsw_tc_t tc = make_define_tc(buf, 9, 1, ids, 2);
+    assert_define_rejected(&tc, OBSW_S1_FAIL_EXEC_ERROR);
+}
+
+void test_define_rejects_when_no_set_slot(void)
+{
+    setup_define();
+    s3.set_capacity = 1;
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2001};
+    obsw_tc_t tc = make_define_tc(buf, 9, 1, ids, 1);
+    assert_define_rejected(&tc, OBSW_S1_FAIL_EXEC_ERROR);
+}
+
+void test_define_rejected_without_pool(void)
+{
+    setup_ctx(); /* default ctx: no pool, no capacity */
+    s3.param_table     = s20_table;
+    s3.param_table_len = 2;
+    uint8_t buf[16];
+    const uint16_t ids[] = {0x2001};
+    obsw_tc_t tc = make_define_tc(buf, 9, 1, ids, 1);
+    assert_define_rejected(&tc, OBSW_S1_FAIL_EXEC_ERROR);
+}
+
 void test_on_demand_unknown_set_returns_error(void)
 {
     setup_ctx();
@@ -251,5 +445,15 @@ int main(void)
     RUN_TEST(test_on_demand_unknown_set_returns_error);
     RUN_TEST(test_report_params_are_big_endian);
     RUN_TEST(test_report_float_is_big_endian_ieee754);
+    RUN_TEST(test_define_creates_disabled_set);
+    RUN_TEST(test_defined_set_reports_live_s20_values_in_order);
+    RUN_TEST(test_defined_set_runs_after_enable);
+    RUN_TEST(test_define_rejects_existing_set_id);
+    RUN_TEST(test_define_rejects_unknown_param);
+    RUN_TEST(test_define_rejects_length_mismatch);
+    RUN_TEST(test_define_rejects_zero_params);
+    RUN_TEST(test_define_rejects_when_pool_full);
+    RUN_TEST(test_define_rejects_when_no_set_slot);
+    RUN_TEST(test_define_rejected_without_pool);
     return UNITY_END();
 }

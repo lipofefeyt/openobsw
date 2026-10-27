@@ -8,8 +8,13 @@
  * interval countdowns and emits TM(3,25) reports automatically.
  *
  * TC handlers registered in the dispatcher routing table:
+ *   TC(3,1)  Create a HK parameter report structure  → obsw_s3_define()
  *   TC(3,5)  Enable periodic HK report generation    → obsw_s3_enable()
  *   TC(3,6)  Disable periodic HK report generation   → obsw_s3_disable()
+ *
+ * TC(3,1) builds a set at run time from S20 parameter IDs. It needs free
+ * set slots (set_capacity > set_count) and a parameter pool in the
+ * context; without them it is rejected. Defined sets persist until reset.
  *
  * Reports emitted:
  *   TM(3,25) Housekeeping parameter report
@@ -19,6 +24,7 @@
 
 #include "obsw/pus/pus_tm.h"
 #include "obsw/pus/s1.h"
+#include "obsw/pus/s20.h"
 #include "obsw/tc/dispatcher.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -85,12 +91,34 @@ extern "C"
         uint16_t msg_counter;
         uint32_t timestamp;
         obsw_s3_set_t *sets; /**< Caller-owned static set array      */
-        uint8_t set_count;
+        uint8_t set_count;   /**< Sets in use, sets[0..set_count)    */
+
+        /* TC(3,1) — all optional; zero/NULL rejects every TC(3,1) */
+        uint8_t set_capacity;          /**< Length of sets[] (>= set_count) */
+        obsw_s3_param_t *param_pool;   /**< Storage for defined sets' params */
+        uint16_t param_pool_len;
+        uint16_t param_pool_used;
+        const obsw_s20_param_t *param_table; /**< IDs TC(3,1) may reference */
+        uint8_t param_table_len;
     } obsw_s3_ctx_t;
 
     /* ------------------------------------------------------------------ */
     /* TC handlers                                                         */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * TC(3,1) — create a housekeeping parameter report structure.
+     * User data field: [set_id (1)] [interval_ticks (4 BE)] [N (1)]
+     *                  [param_id (2 BE)] x N
+     * Each param_id must be in param_table; it is reported as its 32-bit
+     * S20 value. The set is created disabled (enable with TC(3,5)).
+     * TM(1,2) 0x0005 if malformed, the set_id exists, a param_id is
+     * unknown or the report would not fit one TM packet; 0x0004 if no
+     * set slot or pool space is left.
+     */
+    int obsw_s3_define(const obsw_tc_t *tc,
+                       obsw_tc_responder_t respond,
+                       void *ctx);
 
     /**
      * TC(3,5) — enable periodic HK report generation for a set.

@@ -135,10 +135,15 @@ static obsw_s3_param_t s_fdir_hk_params[] = {
     {.ptr = &s_wdg_ticks_rem,   .size = OBSW_S3_PARAM_U32},
 };
 
-/* SID 7 — AOCS B-dot HK (floats reported as raw 4-byte LE IEEE 754) */
+/* SID 7 — AOCS B-dot HK (floats reported as big-endian IEEE 754) */
 static obsw_s3_param_t s_aocs_bdot_hk_params[7]; /* filled in init from AOCS HK ptr */
 
-static obsw_s3_set_t s_hk_sets[] = {
+/* 2 static sets plus free slots and a parameter pool for TC(3,1) */
+#define HK_STATIC_SETS  2U
+#define HK_SET_SLOTS    (HK_STATIC_SETS + 4U)
+static obsw_s3_param_t s_hk_define_pool[32];
+
+static obsw_s3_set_t s_hk_sets[HK_SET_SLOTS] = {
     {
         .set_id = SRDB_HK_FDIR_HK,
         .params = s_fdir_hk_params,
@@ -342,7 +347,11 @@ void obsw_fdir_task_init(obsw_tm_store_t *tm_store)
     s_s3.msg_counter = 0;
     s_s3.timestamp   = 0;
     s_s3.sets      = s_hk_sets;
-    s_s3.set_count = sizeof(s_hk_sets) / sizeof(s_hk_sets[0]);
+    s_s3.set_count = HK_STATIC_SETS;
+    s_s3.set_capacity   = HK_SET_SLOTS;
+    s_s3.param_pool     = s_hk_define_pool;
+    s_s3.param_pool_len = sizeof(s_hk_define_pool) / sizeof(s_hk_define_pool[0]);
+    /* param_table is set by the PUS task, which owns the S20 table */
 
     /* IWDG — arm it now; first kick occurs on the task's first tick (≤ 1 s). */
     iwdg_init();

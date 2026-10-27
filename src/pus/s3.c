@@ -2,7 +2,7 @@
  * @file s3.c
  * @brief PUS-C Service 3 — Housekeeping Reporting implementation.
  *
- * Manages periodic housekeeping sets: TC(3,5) enable, TC(3,6) disable,
+ * Manages periodic housekeeping sets: TC(3,1) define, TC(3,5) enable, TC(3,6) disable,
  * obsw_s3_tick() drives countdown timers, and TM(3,25) packets are emitted
  * when a set's countdown reaches zero.
  */
@@ -77,9 +77,90 @@ static int emit_hk_report(obsw_s3_ctx_t *ctx, obsw_s3_set_t *set)
                              buf, (uint16_t)(1U + param_len));
 }
 
+/** TM(3,25) data bytes available after primary + PUS secondary headers */
+#define S3_MAX_REPORT_DATA \
+    (OBSW_TM_MAX_PACKET_LEN - OBSW_SP_PRIMARY_HEADER_LEN - OBSW_PUS_TM_SEC_HDR_LEN)
+
+/** Look up an S20 parameter by ID; returns NULL if not in the table. */
+static const obsw_s20_param_t *find_param(const obsw_s3_ctx_t *ctx, uint16_t id)
+{
+    for (uint8_t i = 0; i < ctx->param_table_len; i++)
+    {
+        if (ctx->param_table[i].param_id == id)
+            return &ctx->param_table[i];
+    }
+    return NULL;
+}
+
 /* ------------------------------------------------------------------ */
 /* TC handlers                                                         */
 /* ------------------------------------------------------------------ */
+
+int obsw_s3_define(const obsw_tc_t *tc,
+                   obsw_tc_responder_t respond,
+                   void *ctx)
+{
+    (void)respond;
+    obsw_s3_ctx_t *s = (obsw_s3_ctx_t *)ctx;
+    if (!s || !tc)
+        return -1;
+
+    if (!tc->user_data || tc->user_data_len < 6U)
+    {
+        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        return -1;
+    }
+
+    uint8_t set_id    = tc->user_data[0];
+    uint32_t interval = obsw_be32(tc->user_data + 1);
+    uint8_t n         = tc->user_data[5];
+    const uint8_t *ids = tc->user_data + 6;
+
+    /* Exact length, a fresh SID, and a report that fits one TM(3,25) */
+    if (n == 0U || tc->user_data_len != 6U + 2U * (uint16_t)n || find_set(s, set_id) ||
+        1U + 4U * (uint32_t)n > S3_MAX_REPORT_DATA)
+    {
+        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        return -1;
+    }
+    for (uint8_t i = 0; i < n; i++)
+    {
+        if (!find_param(s, obsw_be16(ids + 2U * i)))
+        {
+            obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+            return -1;
+        }
+    }
+
+    if (!s->param_pool || s->set_count >= s->set_capacity ||
+        s->param_pool_len - s->param_pool_used < n)
+    {
+        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
+        return -1;
+    }
+
+    obsw_s1_accept_success(s->s1, tc);
+
+    obsw_s3_param_t *params = &s->param_pool[s->param_pool_used];
+    for (uint8_t i = 0; i < n; i++)
+    {
+        params[i].ptr  = &find_param(s, obsw_be16(ids + 2U * i))->value;
+        params[i].size = OBSW_S3_PARAM_U32;
+    }
+    s->param_pool_used = (uint16_t)(s->param_pool_used + n);
+
+    obsw_s3_set_t *set  = &s->sets[s->set_count];
+    set->set_id         = set_id;
+    set->params         = params;
+    set->param_count    = n;
+    set->interval_ticks = interval;
+    set->countdown      = interval;
+    set->enabled        = false;
+    s->set_count++; /* last, so obsw_s3_tick never sees a half-built set */
+
+    obsw_s1_completion_success(s->s1, tc);
+    return 0;
+}
 
 int obsw_s3_enable(const obsw_tc_t *tc,
                    obsw_tc_responder_t respond,

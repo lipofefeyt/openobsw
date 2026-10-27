@@ -139,7 +139,12 @@ static obsw_s3_param_t aocs_state_hk_params[] = {
     {.ptr = &hk_aocs_ctrl,    .size = OBSW_S3_PARAM_U8},
 };
 
-static obsw_s3_set_t hk_sets[] = {
+/* 5 static sets plus free slots and a parameter pool for TC(3,1) */
+#define HK_STATIC_SETS 5U
+#define HK_SET_SLOTS   (HK_STATIC_SETS + 4U)
+static obsw_s3_param_t hk_define_pool[32];
+
+static obsw_s3_set_t hk_sets[HK_SET_SLOTS] = {
     {.set_id = SRDB_HK_NOMINAL_HK, .params = nominal_hk_params,
      .param_count = 1, .interval_ticks = 10, .countdown = 10, .enabled = true},
     {.set_id = SRDB_HK_FDIR_HK, .params = fdir_hk_params,
@@ -356,6 +361,8 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s17_ping, .ctx = &s17_ctx},
     {.apid = 0xFFFF, .service = 8,  .subservice = 1,
      .handler = obsw_s8_perform, .ctx = &s8_ctx},
+    {.apid = 0xFFFF, .service = 3,  .subservice = 1,
+     .handler = obsw_s3_define, .ctx = &s3_ctx},
     {.apid = 0xFFFF, .service = 3,  .subservice = 5,
      .handler = obsw_s3_enable, .ctx = &s3_ctx},
     {.apid = 0xFFFF, .service = 3,  .subservice = 6,
@@ -430,7 +437,12 @@ int main(void)
     s3_ctx.s1        = &s1_ctx;
     s3_ctx.apid      = SRDB_APID_DEFAULT;
     s3_ctx.sets      = hk_sets;
-    s3_ctx.set_count = sizeof(hk_sets) / sizeof(hk_sets[0]);
+    s3_ctx.set_count = HK_STATIC_SETS;
+    s3_ctx.set_capacity    = HK_SET_SLOTS;
+    s3_ctx.param_pool      = hk_define_pool;
+    s3_ctx.param_pool_len  = sizeof(hk_define_pool) / sizeof(hk_define_pool[0]);
+    s3_ctx.param_table     = s20_params;
+    s3_ctx.param_table_len = sizeof(s20_params) / sizeof(s20_params[0]);
 
     s5_ctx.tm_store           = &tm_store;
     s5_ctx.apid               = SRDB_APID_DEFAULT;
