@@ -18,8 +18,9 @@
 bool obsw_quat_normalise(obsw_quat_t *q)
 {
     float norm = sqrtf(q->w * q->w + q->x * q->x + q->y * q->y + q->z * q->z);
-    if (norm < 1e-10f)
+    if (norm < 1e-10f) {
         return false;
+    }
     float inv = 1.0f / norm;
     q->w *= inv;
     q->x *= inv;
@@ -50,19 +51,26 @@ obsw_quat_t obsw_quat_multiply(const obsw_quat_t *a, const obsw_quat_t *b)
 
 void obsw_adcs_init(obsw_adcs_ctx_t *ctx, const obsw_adcs_config_t *config)
 {
-    if (!ctx || !config)
+    if (!ctx || !config) {
         return;
+    }
     ctx->config = *config;
     /* Target: identity quaternion */
     ctx->q_cmd = (obsw_quat_t){1.0f, 0.0f, 0.0f, 0.0f};
 }
 
-void obsw_adcs_set_target(obsw_adcs_ctx_t *ctx, const obsw_quat_t *q)
+bool obsw_adcs_set_target(obsw_adcs_ctx_t *ctx, const obsw_quat_t *q)
 {
-    if (!ctx || !q)
-        return;
-    ctx->q_cmd = *q;
-    obsw_quat_normalise(&ctx->q_cmd);
+    if (!ctx || !q) {
+        return false;
+    }
+    /* A zero target would zero q_err and silently drop attitude control */
+    obsw_quat_t target = *q;
+    if (!obsw_quat_normalise(&target)) {
+        return false;
+    }
+    ctx->q_cmd = target;
+    return true;
 }
 
 bool obsw_adcs_step(obsw_adcs_ctx_t *ctx,
@@ -70,13 +78,15 @@ bool obsw_adcs_step(obsw_adcs_ctx_t *ctx,
                     const float omega[3],
                     obsw_adcs_output_t *out)
 {
-    if (!ctx || !q_meas || !omega || !out)
+    if (!ctx || !q_meas || !omega || !out) {
         return false;
+    }
 
     /* Normalise measured quaternion */
     obsw_quat_t q_m = *q_meas;
-    if (!obsw_quat_normalise(&q_m))
+    if (!obsw_quat_normalise(&q_m)) {
         return false;
+    }
 
     /* Error quaternion: q_err = q_cmd* ⊗ q_meas  (body-to-ECI convention).
      * Gives q_err_vec in the TARGET body frame.  For any target q_cmd:
@@ -85,7 +95,8 @@ bool obsw_adcs_step(obsw_adcs_ctx_t *ctx,
      * τ = -Kp·q_err_vec correctly opposes it regardless of the target. */
     obsw_quat_t q_cmd_c = obsw_quat_conjugate(&ctx->q_cmd);
     obsw_quat_t q_err   = obsw_quat_multiply(&q_cmd_c, &q_m);
-    obsw_quat_normalise(&q_err);
+    /* Product of two unit quaternions: never zero, normalise only trims drift */
+    (void)obsw_quat_normalise(&q_err);
 
     /* Ensure short-path rotation (w >= 0) */
     if (q_err.w < 0.0f) {
@@ -106,10 +117,12 @@ bool obsw_adcs_step(obsw_adcs_ctx_t *ctx,
     /* Saturate */
     float max = ctx->config.max_torque;
     for (int i = 0; i < 3; i++) {
-        if (tau[i] > max)
+        if (tau[i] > max) {
             tau[i] = max;
-        if (tau[i] < -max)
+        }
+        if (tau[i] < -max) {
             tau[i] = -max;
+        }
     }
 
     out->torque_cmd[0] = tau[0];

@@ -155,6 +155,31 @@ void test_torque_saturation(void)
     }
 }
 
+/* @verifies OBSW-SRS-205 */
+void test_set_target_rejects_zero_and_keeps_previous(void)
+{
+    obsw_adcs_ctx_t ctx;
+    obsw_adcs_config_t cfg = default_cfg();
+    obsw_adcs_init(&ctx, &cfg);
+
+    float half         = (float)(M_PI / 4.0);
+    obsw_quat_t target = {cosf(half), sinf(half), 0.0f, 0.0f};
+    TEST_ASSERT_TRUE(obsw_adcs_set_target(&ctx, &target));
+
+    obsw_quat_t zero = {0.0f, 0.0f, 0.0f, 0.0f};
+    TEST_ASSERT_FALSE(obsw_adcs_set_target(&ctx, &zero));
+    TEST_ASSERT_FALSE(obsw_adcs_set_target(&ctx, NULL));
+    TEST_ASSERT_FALSE(obsw_adcs_set_target(NULL, &target));
+
+    /* Previous target still in force: measured = target gives zero torque */
+    float omega[3] = {0.0f, 0.0f, 0.0f};
+    obsw_adcs_output_t out;
+    obsw_adcs_step(&ctx, &target, omega, &out);
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0f, out.torque_cmd[0]);
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0f, out.torque_cmd[1]);
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0f, out.torque_cmd[2]);
+}
+
 /* @verifies OBSW-SRS-203 */
 void test_set_target(void)
 {
@@ -246,6 +271,7 @@ int main(void)
     RUN_TEST(test_attitude_error_drives_torque);
     RUN_TEST(test_torque_saturation);
     RUN_TEST(test_set_target);
+    RUN_TEST(test_set_target_rejects_zero_and_keeps_previous);
     RUN_TEST(test_null_inputs_return_false);
     RUN_TEST(test_runtime_kd_update);
     RUN_TEST(test_runtime_kp_update);

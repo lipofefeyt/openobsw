@@ -82,8 +82,10 @@ void obsw_adcs_init(obsw_adcs_ctx_t *ctx, const obsw_adcs_config_t *config);
 /**
  * Set the target attitude command.
  * @param q  Desired attitude quaternion (will be normalised internally).
+ * @return false, keeping the previous target, if ctx or q is NULL or q has
+ *         zero norm.
  */
-void obsw_adcs_set_target(obsw_adcs_ctx_t *ctx, const obsw_quat_t *q);
+bool obsw_adcs_set_target(obsw_adcs_ctx_t *ctx, const obsw_quat_t *q);
 
 /**
  * Run one PD control step.
