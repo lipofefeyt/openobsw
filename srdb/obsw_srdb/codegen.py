@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -161,6 +162,21 @@ def generate_header(srdb: SRDB) -> str:
         macro = f"SRDB_PARAM_{p.name.upper()}"
         lines.append(f"#define {macro:<40s} 0x{p.id:04X}U  /**< {p.description} */")
     lines.append("")
+
+    enum_params = [p for p in srdb.parameters if p.enumeration]
+    if enum_params:
+        lines += [
+            "/* ---------------------------------------------------------------- */",
+            "/* Parameter enumerations (raw values, as in XTCE)                  */",
+            "/* ---------------------------------------------------------------- */",
+            "",
+        ]
+        for p in enum_params:
+            for entry in p.enumeration or []:
+                label = re.sub(r"[^A-Za-z0-9]+", "_", entry.label).strip("_").upper()
+                macro = f"SRDB_ENUM_{p.name.upper()}_{label}"
+                lines.append(f"#define {macro:<48s} {entry.value}U")
+            lines.append("")
 
     lines += [
         "/* ---------------------------------------------------------------- */",
