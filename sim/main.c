@@ -95,11 +95,11 @@ static uint16_t param_safe_entry_count = 0;
 static uint32_t param_wd_kick_count    = 0;
 
 /* DHS OBC HK — reported in TM(3,25) set_id=3, consumed by opensvf */
-static uint8_t  param_obc_mode        = 0;   /* 0=SAFE, 1=NOMINAL            */
+static uint8_t  param_obc_mode        = 0;   /* SRDB_ENUM_OBC_MODE_*         */
 static uint32_t param_obc_obt         = 0;   /* on-board time [s]            */
-static uint8_t  param_obc_wd_status   = 0;   /* 0=nominal, 1=expired         */
+static uint8_t  param_obc_wd_status   = 0;   /* SRDB_ENUM_OBC_WATCHDOG_STATUS_* */
 static uint8_t  param_obc_mem_pct     = 0;   /* mass-memory fill % (stub)    */
-static uint8_t  param_obc_health      = 0;   /* 0=nominal (stub)             */
+static uint8_t  param_obc_health      = 0;   /* SRDB_ENUM_OBC_HEALTH_* (stub) */
 static uint16_t param_obc_reset_count = 0;   /* reset counter (stub = 0)     */
 static uint8_t  param_obc_cpu_load    = 0;   /* CPU utilisation % (stub)     */
 
@@ -132,7 +132,7 @@ static obsw_s3_param_t aocs_hk_params[] = {
 /* AOCS state HK (set_id=6): live attitude state as IEEE 754 floats */
 static float    hk_aocs_err   = 0.0f;  /* aocs_angle_err_rad */
 static float    hk_aocs_omega = 0.0f;  /* aocs_omega_mag     */
-static uint8_t  hk_aocs_ctrl  = 0;     /* aocs_controller: 0=off,1=bdot,2=PD */
+static uint8_t  hk_aocs_ctrl  = 0;     /* SRDB_ENUM_AOCS_CONTROLLER_*        */
 static obsw_s3_param_t aocs_state_hk_params[] = {
     {.ptr = &hk_aocs_err,   .size = OBSW_S3_PARAM_U32},
     {.ptr = &hk_aocs_omega, .size = OBSW_S3_PARAM_U32},
@@ -590,7 +590,7 @@ int main(void)
                         /* Update AOCS state HK (set_id=6) */
                         hk_aocs_err   = adcs_out.angle_err_rad;
                         hk_aocs_omega = sqrtf(omega[0]*omega[0] + omega[1]*omega[1] + omega[2]*omega[2]);
-                        hk_aocs_ctrl  = 2U; /* PD */
+                        hk_aocs_ctrl  = SRDB_ENUM_AOCS_CONTROLLER_PD;
                     }
                 } else if (cur_mode == OBSW_FSM_SAFE && sensor.mag_valid) {
                     float b[3] = {sensor.mag_x, sensor.mag_y, sensor.mag_z};
@@ -600,7 +600,7 @@ int main(void)
                     act.mtq_dipole_y = bdot_out.m_cmd[1];
                     act.mtq_dipole_z = bdot_out.m_cmd[2];
                     act.controller   = 0;
-                    hk_aocs_ctrl     = 1U; /* B-dot */
+                    hk_aocs_ctrl     = SRDB_ENUM_AOCS_CONTROLLER_BDOT;
                     /* Issue #70: log raw and HPF-filtered dB/dt to quantify orbital aliasing */
                     float dbdt_raw_mag = sqrtf(
                         bdot_out.dbdt[0]*bdot_out.dbdt[0] +
@@ -620,7 +620,7 @@ int main(void)
                         dbdt_filt_mag,
                         act.mtq_dipole_x, act.mtq_dipole_y, act.mtq_dipole_z);
                 } else {
-                    hk_aocs_ctrl = 0U; /* STANDBY or sensors invalid */
+                    hk_aocs_ctrl = SRDB_ENUM_AOCS_CONTROLLER_OFF; /* STANDBY or sensors invalid */
                 }
 
                 /* Drain any TM generated during sensor tick */
@@ -643,12 +643,14 @@ int main(void)
                 hk_adcs_kp   = s20_get_f32(SRDB_PARAM_ADCS_KP,   0.5f);
                 hk_adcs_kd   = s20_get_f32(SRDB_PARAM_ADCS_KD,   0.1f);
 
-                /* DHS OBC HK — live state for TM(3,25) set_id=3 */
-                param_obc_mode = (cur_mode == OBSW_FSM_STANDBY) ? 0U :
-                                 (cur_mode == OBSW_FSM_SAFE)    ? 1U : 2U;
+                /* DHS OBC HK — live state for TM(3,25) set_id=3. obc_mode uses the
+                 * SRDB enumeration, not obsw_fsm_mode_t's values (NOMINAL=0). */
+                param_obc_mode = (cur_mode == OBSW_FSM_STANDBY) ? SRDB_ENUM_OBC_MODE_STANDBY :
+                                 (cur_mode == OBSW_FSM_SAFE)    ? SRDB_ENUM_OBC_MODE_SAFE :
+                                                                  SRDB_ENUM_OBC_MODE_NOMINAL;
                 obsw_obt_advance(&obt, (uint32_t)(dt * 1000.0f + 0.5f));
                 param_obc_obt       = obsw_obt_seconds(&obt);
-                param_obc_wd_status = 0U;   /* nominal — watchdog kicked each tick */
+                param_obc_wd_status = SRDB_ENUM_OBC_WATCHDOG_STATUS_NOMINAL; /* kicked each tick */
 
                 obsw_wd_kick(&wd_ctx);
                 obsw_s3_tick(&s3_ctx);

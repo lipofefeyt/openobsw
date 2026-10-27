@@ -49,6 +49,21 @@ class TestCodegen:
         header = generate_header(srdb)
         assert "SRDB_SAFE_TRIGGER_IDS" in header
 
+    def test_enumeration_macros(self, srdb):
+        header = generate_header(srdb)
+        assert "#define SRDB_ENUM_OBC_MODE_STANDBY" in header
+        for label, value in (("STANDBY", 0), ("SAFE", 1), ("NOMINAL", 2)):
+            line = next(l for l in header.splitlines()
+                        if l.startswith(f"#define SRDB_ENUM_OBC_MODE_{label} "))
+            assert line.split()[-1] == f"{value}U"
+
+    def test_enumeration_labels_become_identifiers(self, srdb):
+        srdb = srdb.model_copy(deep=True)
+        p = next(p for p in srdb.parameters if p.enumeration)
+        p.enumeration[0].label = "b-dot on"
+        header = generate_header(srdb)
+        assert f"SRDB_ENUM_{p.name.upper()}_B_DOT_ON" in header
+
     def test_safe_tc_whitelist(self, srdb):
         header = generate_header(srdb)
         assert f"SRDB_SAFE_TC_COUNT  {len(srdb.safe_tc_whitelist())}U" in header
