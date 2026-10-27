@@ -57,7 +57,7 @@
          return -1;
  
      if (!tc->user_data || tc->user_data_len < S20_SET_LEN) {
-         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_SUBSVC);
+         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
          return -1;
      }
  
@@ -89,7 +89,7 @@
          return -1;
  
      if (!tc->user_data || tc->user_data_len < S20_GET_LEN) {
-         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_SUBSVC);
+         obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
          return -1;
      }
  

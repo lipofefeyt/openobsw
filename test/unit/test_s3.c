@@ -139,6 +139,21 @@ void test_enable_unknown_set_emits_failure(void)
     TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
 }
 
+void test_enable_truncated_emits_illegal_app_data(void)
+{
+    setup_ctx();
+    uint8_t buf[5];
+    obsw_tc_t tc = make_enable_tc(1, 5, buf);
+    tc.user_data_len = 4;
+    TEST_ASSERT_NOT_EQUAL(0, obsw_s3_enable(&tc, NULL, &s3));
+    uint8_t pkt_buf[256];
+    obsw_sp_packet_t pkt = dequeue_pkt(pkt_buf, sizeof(pkt_buf));
+    TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_APP_DATA,
+                            (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]));
+    TEST_ASSERT_FALSE(sets[0].enabled);
+}
+
 void test_disable_clears_enabled(void)
 {
     setup_ctx();
@@ -436,6 +451,7 @@ int main(void)
     RUN_TEST(test_enable_sets_interval_and_enabled);
     RUN_TEST(test_enable_emits_tm11_and_tm17);
     RUN_TEST(test_enable_unknown_set_emits_failure);
+    RUN_TEST(test_enable_truncated_emits_illegal_app_data);
     RUN_TEST(test_disable_clears_enabled);
     RUN_TEST(test_tick_does_not_emit_when_disabled);
     RUN_TEST(test_tick_emits_on_countdown_expiry);

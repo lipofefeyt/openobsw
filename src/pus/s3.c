@@ -173,7 +173,7 @@ int obsw_s3_enable(const obsw_tc_t *tc,
 
     if (!tc->user_data || tc->user_data_len < 5U)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_SUBSVC);
+        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
 
@@ -206,7 +206,7 @@ int obsw_s3_disable(const obsw_tc_t *tc,
 
     if (!tc->user_data || tc->user_data_len < 1U)
     {
-        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_SUBSVC);
+        obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
 

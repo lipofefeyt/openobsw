@@ -19,6 +19,18 @@ static obsw_s8_ctx_t s8;
 static obsw_fsm_ctx_t fsm;
 
 static int fn_call_count;
+static uint8_t fn_seen_args[4];
+static uint8_t fn_seen_len;
+static int fn_record(const uint8_t *args, uint8_t args_len, void *ctx)
+{
+    (void)ctx;
+    fn_call_count++;
+    fn_seen_len = args_len;
+    for (uint8_t i = 0; i < args_len && i < sizeof(fn_seen_args); i++)
+        fn_seen_args[i] = args[i];
+    return 0;
+}
+
 static int fn_recover(const uint8_t *args, uint8_t args_len, void *ctx)
 {
     (void)args;
@@ -39,6 +51,7 @@ static int fn_failing(const uint8_t *args, uint8_t args_len, void *ctx)
 static obsw_s8_entry_t table[] = {
     {.function_id = OBSW_S8_FN_RECOVER_NOMINAL, .fn = fn_recover, .ctx = &fsm},
     {.function_id = 99, .fn = fn_failing, .ctx = NULL},
+    {.function_id = 7, .fn = fn_record, .ctx = NULL},
 };
 
 static void setup_ctx(void)
@@ -59,7 +72,7 @@ static void setup_ctx(void)
     s8.msg_counter = 0;
     s8.timestamp   = 0;
     s8.table       = table;
-    s8.table_len   = 2;
+    s8.table_len   = 3;
 }
 
 /* Build TC(8,1) with given function_id and no args */
@@ -137,6 +150,63 @@ void test_failing_function_emits_tm18(void)
     TEST_ASSERT_EQUAL_UINT8(8, pkt.payload[2]); /* TM(1,8) completion failure */
 }
 
+/* TM(1,2) failure code at payload[15..16] */
+static uint16_t dequeue_tm12_code(void)
+{
+    uint8_t buf[256];
+    obsw_sp_packet_t pkt = dequeue_pkt(buf, sizeof(buf));
+    TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[1]);
+    TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
+    return (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]);
+}
+
+void test_args_passed_to_function(void)
+{
+    setup_ctx();
+    uint8_t ud[5] = {0x00, 0x07, 2, 0xAB, 0xCD};
+    obsw_tc_t tc = make_s8_tc(7, ud);
+    ud[2] = 2; /* make_s8_tc zeroes args_len */
+    tc.user_data_len = 5;
+    TEST_ASSERT_EQUAL_INT(0, obsw_s8_perform(&tc, NULL, &s8));
+    TEST_ASSERT_EQUAL_INT(1, fn_call_count);
+    TEST_ASSERT_EQUAL_UINT8(2, fn_seen_len);
+    TEST_ASSERT_EQUAL_HEX8(0xAB, fn_seen_args[0]);
+    TEST_ASSERT_EQUAL_HEX8(0xCD, fn_seen_args[1]);
+}
+
+void test_args_len_beyond_tc_rejected(void)
+{
+    setup_ctx();
+    uint8_t ud[4];
+    obsw_tc_t tc = make_s8_tc(7, ud);
+    ud[2] = 200; /* claims 200 argument bytes, TC carries 1 */
+    ud[3] = 0x00;
+    tc.user_data_len = 4;
+    TEST_ASSERT_NOT_EQUAL(0, obsw_s8_perform(&tc, NULL, &s8));
+    TEST_ASSERT_EQUAL_INT(0, fn_call_count);
+    TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&store));
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_APP_DATA, dequeue_tm12_code());
+}
+
+void test_truncated_user_data_rejected(void)
+{
+    setup_ctx();
+    uint8_t ud[3];
+    obsw_tc_t tc = make_s8_tc(1, ud);
+    tc.user_data_len = 2;
+    TEST_ASSERT_NOT_EQUAL(0, obsw_s8_perform(&tc, NULL, &s8));
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_APP_DATA, dequeue_tm12_code());
+}
+
+void test_unknown_function_code_is_exec_error(void)
+{
+    setup_ctx();
+    uint8_t ud[3];
+    obsw_tc_t tc = make_s8_tc(0xBEEF, ud);
+    obsw_s8_perform(&tc, NULL, &s8);
+    TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_EXEC_ERROR, dequeue_tm12_code());
+}
+
 void test_null_ctx_returns_error(void)
 {
     setup_ctx();
@@ -153,5 +223,9 @@ int main(void)
     RUN_TEST(test_unknown_function_emits_failure);
     RUN_TEST(test_failing_function_emits_tm18);
     RUN_TEST(test_null_ctx_returns_error);
+    RUN_TEST(test_args_passed_to_function);
+    RUN_TEST(test_args_len_beyond_tc_rejected);
+    RUN_TEST(test_truncated_user_data_rejected);
+    RUN_TEST(test_unknown_function_code_is_exec_error);
     return UNITY_END();
 }

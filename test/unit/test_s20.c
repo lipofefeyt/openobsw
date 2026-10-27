@@ -156,6 +156,11 @@
      };
      TEST_ASSERT_NOT_EQUAL(0, obsw_s20_set(&tc, NULL, &s20));
      TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&store));
+     uint8_t buf[64];
+     obsw_sp_packet_t pkt = dequeue_pkt(buf, sizeof(buf));
+     TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
+     TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_APP_DATA,
+                             (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]));
  }
  
  void test_set_null_ctx_returns_error(void)
@@ -238,6 +243,11 @@
      };
      TEST_ASSERT_NOT_EQUAL(0, obsw_s20_get(&tc, NULL, &s20));
      TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&store));
+     uint8_t buf[64];
+     obsw_sp_packet_t pkt = dequeue_pkt(buf, sizeof(buf));
+     TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
+     TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_APP_DATA,
+                             (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]));
  }
  
  void test_get_null_ctx_returns_error(void)
