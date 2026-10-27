@@ -105,6 +105,7 @@
  /* TC(20,1) — set tests                                                */
  /* ------------------------------------------------------------------ */
  
+ /* @verifies OBSW-SRS-170 */
  void test_set_known_param_returns_ok(void)
  {
      setup_ctx();
@@ -114,6 +115,7 @@
      TEST_ASSERT_EQUAL_UINT32(0xDEADBEEFU, table[0].value.u32);
  }
  
+ /* @verifies OBSW-SRS-170, OBSW-SRS-082 */
  void test_set_emits_tm11_and_tm17(void)
  {
      setup_ctx();
@@ -133,6 +135,7 @@
      TEST_ASSERT_EQUAL_UINT8(7, pkt.payload[2]); /* subsvc=7 — complete */
  }
  
+ /* @verifies OBSW-SRS-171 */
  void test_set_unknown_param_emits_tm12(void)
  {
      setup_ctx();
@@ -146,6 +149,7 @@
      TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]); /* TM(1,2) — accept fail */
  }
  
+ /* @verifies OBSW-SRS-171, OBSW-SRS-083 */
  void test_set_truncated_ud_emits_tm12(void)
  {
      setup_ctx();
@@ -163,6 +167,7 @@
                              (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]));
  }
  
+ /* @verifies OBSW-SRS-170 */
  void test_set_null_ctx_returns_error(void)
  {
      setup_ctx();
@@ -175,6 +180,7 @@
  /* TC(20,3) — get tests                                                */
  /* ------------------------------------------------------------------ */
  
+ /* @verifies OBSW-SRS-170 */
  void test_get_known_param_returns_ok(void)
  {
      setup_ctx();
@@ -183,6 +189,7 @@
      TEST_ASSERT_EQUAL_INT(0, obsw_s20_get(&tc, NULL, &s20));
  }
  
+ /* @verifies OBSW-SRS-170, OBSW-SRS-082 */
  void test_get_emits_tm11_tm20_2_tm17(void)
  {
      setup_ctx();
@@ -220,6 +227,7 @@
      TEST_ASSERT_EQUAL_UINT8(7, pkt.payload[2]);
  }
  
+ /* @verifies OBSW-SRS-171 */
  void test_get_unknown_param_emits_tm12(void)
  {
      setup_ctx();
@@ -233,6 +241,7 @@
      TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]); /* TM(1,2) */
  }
  
+ /* @verifies OBSW-SRS-171, OBSW-SRS-083 */
  void test_get_truncated_ud_emits_tm12(void)
  {
      setup_ctx();
@@ -250,6 +259,7 @@
                              (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]));
  }
  
+ /* @verifies OBSW-SRS-170 */
  void test_get_null_ctx_returns_error(void)
  {
      setup_ctx();
@@ -262,6 +272,7 @@
  /* Round-trip: set then get                                            */
  /* ------------------------------------------------------------------ */
  
+ /* @verifies OBSW-SRS-170 */
  void test_set_then_get_roundtrip(void)
  {
      setup_ctx();

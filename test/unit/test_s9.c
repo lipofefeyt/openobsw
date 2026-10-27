@@ -76,6 +76,7 @@ static obsw_sp_packet_t dequeue_pkt(uint8_t *buf, size_t buf_len)
 /* TC(9,128) - set OBT                                                 */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-152 */
 void test_set_obt_returns_ok(void)
 {
     setup_ctx();
@@ -86,6 +87,7 @@ void test_set_obt_returns_ok(void)
     TEST_ASSERT_EQUAL_UINT16(0x8000U, obt.fine);
 }
 
+/* @verifies OBSW-SRS-152 */
 void test_set_obt_overwrites_prior_value(void)
 {
     setup_ctx();
@@ -100,6 +102,7 @@ void test_set_obt_overwrites_prior_value(void)
     TEST_ASSERT_EQUAL_UINT16(0U, obt.fine);
 }
 
+/* @verifies OBSW-SRS-152, OBSW-SRS-082 */
 void test_set_obt_emits_tm11_and_tm17(void)
 {
     setup_ctx();
@@ -120,6 +123,7 @@ void test_set_obt_emits_tm11_and_tm17(void)
     TEST_ASSERT_EQUAL_UINT8(7, pkt.payload[2]); /* subsvc=7 - complete */
 }
 
+/* @verifies OBSW-SRS-152, OBSW-SRS-083 */
 void test_set_obt_truncated_ud_emits_tm12(void)
 {
     setup_ctx();
@@ -143,6 +147,7 @@ void test_set_obt_truncated_ud_emits_tm12(void)
     TEST_ASSERT_EQUAL_UINT32(0U, obt.coarse);
 }
 
+/* @verifies OBSW-SRS-152, OBSW-SRS-083 */
 void test_set_obt_null_user_data_emits_tm12(void)
 {
     setup_ctx();
@@ -158,6 +163,7 @@ void test_set_obt_null_user_data_emits_tm12(void)
     TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&store));
 }
 
+/* @verifies OBSW-SRS-152 */
 void test_set_obt_null_ctx_returns_error(void)
 {
     setup_ctx();

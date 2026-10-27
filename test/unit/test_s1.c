@@ -41,6 +41,7 @@ static obsw_sp_packet_t dequeue_pkt(uint8_t *buf, size_t buf_len)
     return pkt;
 }
 
+/* @verifies OBSW-SRS-080 */
 void test_accept_success_enqueues_tm11(void)
 {
     setup_ctx();
@@ -53,6 +54,7 @@ void test_accept_success_enqueues_tm11(void)
     TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-080, OBSW-SRS-081 */
 void test_accept_failure_enqueues_tm12(void)
 {
     setup_ctx();
@@ -64,6 +66,7 @@ void test_accept_failure_enqueues_tm12(void)
     TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-080 */
 void test_completion_success_enqueues_tm17(void)
 {
     setup_ctx();
@@ -74,6 +77,7 @@ void test_completion_success_enqueues_tm17(void)
     TEST_ASSERT_EQUAL_UINT8(7, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-080, OBSW-SRS-081 */
 void test_completion_failure_enqueues_tm18(void)
 {
     setup_ctx();
@@ -85,6 +89,7 @@ void test_completion_failure_enqueues_tm18(void)
     TEST_ASSERT_EQUAL_UINT8(8, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-080 */
 void test_null_args_rejected(void)
 {
     setup_ctx();
@@ -92,6 +97,7 @@ void test_null_args_rejected(void)
     TEST_ASSERT_NOT_EQUAL(OBSW_PUS_TM_OK, obsw_s1_accept_success(&s1, NULL));
 }
 
+/* @verifies OBSW-SRS-080 */
 void test_msg_counter_increments(void)
 {
     setup_ctx();
@@ -111,6 +117,7 @@ static uint16_t dequeue_tm12_code(void)
     return (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]);
 }
 
+/* @verifies OBSW-SRS-081, OBSW-SRS-061, OBSW-SRS-062 */
 void test_dispatch_responder_reject_codes(void)
 {
     setup_ctx();
@@ -123,6 +130,7 @@ void test_dispatch_responder_reject_codes(void)
     TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_MODE_GATED, dequeue_tm12_code());
 }
 
+/* @verifies OBSW-SRS-080 */
 void test_dispatch_responder_ignores_non_reject(void)
 {
     setup_ctx();

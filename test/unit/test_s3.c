@@ -104,6 +104,7 @@ static obsw_tc_t make_disable_tc(uint8_t set_id, uint8_t *buf)
     return tc;
 }
 
+/* @verifies OBSW-SRS-091 */
 void test_enable_sets_interval_and_enabled(void)
 {
     setup_ctx();
@@ -114,6 +115,7 @@ void test_enable_sets_interval_and_enabled(void)
     TEST_ASSERT_EQUAL_UINT32(10, sets[0].interval_ticks);
 }
 
+/* @verifies OBSW-SRS-091, OBSW-SRS-082 */
 void test_enable_emits_tm11_and_tm17(void)
 {
     setup_ctx();
@@ -127,6 +129,7 @@ void test_enable_emits_tm11_and_tm17(void)
     TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-091 */
 void test_enable_unknown_set_emits_failure(void)
 {
     setup_ctx();
@@ -139,6 +142,7 @@ void test_enable_unknown_set_emits_failure(void)
     TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-091, OBSW-SRS-083 */
 void test_enable_truncated_emits_illegal_app_data(void)
 {
     setup_ctx();
@@ -154,6 +158,7 @@ void test_enable_truncated_emits_illegal_app_data(void)
     TEST_ASSERT_FALSE(sets[0].enabled);
 }
 
+/* @verifies OBSW-SRS-091 */
 void test_disable_clears_enabled(void)
 {
     setup_ctx();
@@ -164,6 +169,7 @@ void test_disable_clears_enabled(void)
     TEST_ASSERT_FALSE(sets[0].enabled);
 }
 
+/* @verifies OBSW-SRS-090 */
 void test_tick_does_not_emit_when_disabled(void)
 {
     setup_ctx();
@@ -175,6 +181,7 @@ void test_tick_does_not_emit_when_disabled(void)
     TEST_ASSERT_TRUE(obsw_tm_store_empty(&store));
 }
 
+/* @verifies OBSW-SRS-090 */
 void test_tick_emits_on_countdown_expiry(void)
 {
     setup_ctx();
@@ -188,6 +195,7 @@ void test_tick_emits_on_countdown_expiry(void)
     TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&store));
 }
 
+/* @verifies OBSW-SRS-090 */
 void test_tick_reloads_countdown(void)
 {
     setup_ctx();
@@ -202,6 +210,7 @@ void test_tick_reloads_countdown(void)
     TEST_ASSERT_EQUAL_size_t(2, obsw_tm_store_count(&store));
 }
 
+/* @verifies OBSW-SRS-090 */
 void test_tick_report_is_tm3_25(void)
 {
     setup_ctx();
@@ -215,6 +224,7 @@ void test_tick_report_is_tm3_25(void)
     TEST_ASSERT_EQUAL_UINT8(25, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-095 */
 void test_on_demand_report_emits_tm3_25(void)
 {
     setup_ctx();
@@ -226,6 +236,7 @@ void test_on_demand_report_emits_tm3_25(void)
 }
 
 /* TM(3,25) app data at payload[11]: set_id then parameters, big-endian (#82) */
+/* @verifies OBSW-SRS-092 */
 void test_report_params_are_big_endian(void)
 {
     setup_ctx();
@@ -237,6 +248,7 @@ void test_report_params_are_big_endian(void)
     TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, pkt.payload + 11, sizeof(expected));
 }
 
+/* @verifies OBSW-SRS-092 */
 void test_report_float_is_big_endian_ieee754(void)
 {
     static float f = 1.0f; /* 0x3F800000 */
@@ -308,6 +320,7 @@ static void assert_define_rejected(const obsw_tc_t *tc, uint16_t code)
     TEST_ASSERT_EQUAL_UINT16(0, s3.param_pool_used);
 }
 
+/* @verifies OBSW-SRS-093, OBSW-SRS-082 */
 void test_define_creates_disabled_set(void)
 {
     setup_define();
@@ -331,6 +344,7 @@ void test_define_creates_disabled_set(void)
     TEST_ASSERT_EQUAL_UINT8(7, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-093 */
 void test_defined_set_reports_live_s20_values_in_order(void)
 {
     setup_define();
@@ -349,6 +363,7 @@ void test_defined_set_reports_live_s20_values_in_order(void)
     s20_table[0].value.u32 = 0x01020304;
 }
 
+/* @verifies OBSW-SRS-093, OBSW-SRS-091 */
 void test_defined_set_runs_after_enable(void)
 {
     setup_define();
@@ -369,6 +384,7 @@ void test_defined_set_runs_after_enable(void)
     TEST_ASSERT_EQUAL_size_t(1, obsw_tm_store_count(&store));
 }
 
+/* @verifies OBSW-SRS-094 */
 void test_define_rejects_existing_set_id(void)
 {
     setup_define();
@@ -378,6 +394,7 @@ void test_define_rejects_existing_set_id(void)
     assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
 }
 
+/* @verifies OBSW-SRS-094 */
 void test_define_rejects_unknown_param(void)
 {
     setup_define();
@@ -387,6 +404,7 @@ void test_define_rejects_unknown_param(void)
     assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
 }
 
+/* @verifies OBSW-SRS-094, OBSW-SRS-083 */
 void test_define_rejects_length_mismatch(void)
 {
     setup_define();
@@ -400,6 +418,7 @@ void test_define_rejects_length_mismatch(void)
     assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
 }
 
+/* @verifies OBSW-SRS-094 */
 void test_define_rejects_zero_params(void)
 {
     setup_define();
@@ -408,6 +427,7 @@ void test_define_rejects_zero_params(void)
     assert_define_rejected(&tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
 }
 
+/* @verifies OBSW-SRS-094 */
 void test_define_rejects_when_pool_full(void)
 {
     setup_define();
@@ -418,6 +438,7 @@ void test_define_rejects_when_pool_full(void)
     assert_define_rejected(&tc, OBSW_S1_FAIL_EXEC_ERROR);
 }
 
+/* @verifies OBSW-SRS-094 */
 void test_define_rejects_when_no_set_slot(void)
 {
     setup_define();
@@ -428,6 +449,7 @@ void test_define_rejects_when_no_set_slot(void)
     assert_define_rejected(&tc, OBSW_S1_FAIL_EXEC_ERROR);
 }
 
+/* @verifies OBSW-SRS-094 */
 void test_define_rejected_without_pool(void)
 {
     setup_ctx(); /* default ctx: no pool, no capacity */
@@ -439,6 +461,7 @@ void test_define_rejected_without_pool(void)
     assert_define_rejected(&tc, OBSW_S1_FAIL_EXEC_ERROR);
 }
 
+/* @verifies OBSW-SRS-095 */
 void test_on_demand_unknown_set_returns_error(void)
 {
     setup_ctx();

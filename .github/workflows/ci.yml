@@ -30,7 +30,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build gcc clang python3-pip
-          pip install pydantic pyyaml --break-system-packages
+          pip install pydantic pyyaml pytest --break-system-packages
           pip install -e srdb/ --break-system-packages
 
       - name: Configure
@@ -46,6 +46,23 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      - name: System tests (obsw_sim over wire protocol)
+        run: OBSW_SIM=build/sim/obsw_sim pytest test/system -v
+
+      # Requirements traceability: every IMPLEMENTED test-method requirement in
+      # docs/SRS.md has a verifying test, plus symbol checks on libobsw.a.
+      - name: Traceability
+        if: matrix.compiler == 'gcc' && matrix.build_type == 'Debug'
+        run: python3 tools/trace.py --lib build/src/libobsw.a --out build/traceability.md
+
+      - name: Upload traceability matrix
+        if: matrix.compiler == 'gcc' && matrix.build_type == 'Debug'
+        uses: actions/upload-artifact@v4
+        with:
+          name: traceability-matrix
+          path: build/traceability.md
+          retention-days: 90
 
   srdb:
     name: SRDB Python tests

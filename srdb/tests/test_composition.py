@@ -18,6 +18,8 @@ from obsw_srdb import (
     Telecommand,
 )
 
+pytestmark = pytest.mark.requirement("OBSW-SRS-223")
+
 
 def parameter(identifier: int = 0x6001, name: str = "external_voltage_mv") -> Parameter:
     return Parameter(

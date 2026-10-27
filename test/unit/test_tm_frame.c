@@ -26,6 +26,7 @@ static obsw_tm_frame_config_t default_cfg(void)
 /* Happy path                                                          */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-040 */
 void test_build_with_payload(void)
 {
     obsw_tm_frame_config_t cfg = default_cfg();
@@ -46,6 +47,7 @@ void test_build_with_payload(void)
                              sizeof(payload));
 }
 
+/* @verifies OBSW-SRS-041 */
 void test_build_no_payload_idle_fill(void)
 {
     obsw_tm_frame_config_t cfg = default_cfg();
@@ -62,6 +64,7 @@ void test_build_no_payload_idle_fill(void)
     TEST_ASSERT_EQUAL_HEX8(0xFFU, data[1]);
 }
 
+/* @verifies OBSW-SRS-042, OBSW-SRS-023 */
 void test_build_fecf_valid(void)
 {
     obsw_tm_frame_config_t cfg = default_cfg();
@@ -78,6 +81,7 @@ void test_build_fecf_valid(void)
     TEST_ASSERT_EQUAL_HEX16(expected_crc, appended_crc);
 }
 
+/* @verifies OBSW-SRS-042 */
 void test_build_no_fecf(void)
 {
     obsw_tm_frame_config_t cfg = default_cfg();
@@ -97,6 +101,7 @@ void test_build_no_fecf(void)
         written);
 }
 
+/* @verifies OBSW-SRS-040 */
 void test_build_frame_count_embedded(void)
 {
     obsw_tm_frame_config_t cfg = default_cfg();
@@ -115,6 +120,7 @@ void test_build_frame_count_embedded(void)
 /* Error paths                                                         */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-043 */
 void test_build_null_cfg(void)
 {
     uint8_t buf[128];
@@ -123,6 +129,7 @@ void test_build_null_cfg(void)
                           obsw_tm_frame_build(NULL, NULL, 0, buf, sizeof(buf), &written));
 }
 
+/* @verifies OBSW-SRS-043 */
 void test_build_null_buf(void)
 {
     obsw_tm_frame_config_t cfg = default_cfg();
@@ -131,6 +138,7 @@ void test_build_null_buf(void)
                           obsw_tm_frame_build(&cfg, NULL, 0, NULL, 0, &written));
 }
 
+/* @verifies OBSW-SRS-043 */
 void test_build_buf_too_small(void)
 {
     obsw_tm_frame_config_t cfg = default_cfg(); /* wants 72 bytes */
@@ -144,6 +152,7 @@ void test_build_buf_too_small(void)
 /* strerror                                                            */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-043 */
 void test_strerror_known_codes(void)
 {
     TEST_ASSERT_NOT_NULL(obsw_tm_frame_strerror(OBSW_TM_FRAME_OK));

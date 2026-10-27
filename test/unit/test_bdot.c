@@ -15,6 +15,7 @@ static obsw_bdot_config_t default_cfg(void)
     return (obsw_bdot_config_t){.gain = 1.0f, .max_dipole = 10.0f};
 }
 
+/* @verifies OBSW-SRS-200 */
 void test_init_zeroes_state(void)
 {
     obsw_bdot_ctx_t ctx;
@@ -26,6 +27,7 @@ void test_init_zeroes_state(void)
     TEST_ASSERT_EQUAL_FLOAT(0.0f, ctx.b_prev[2]);
 }
 
+/* @verifies OBSW-SRS-200 */
 void test_first_step_outputs_zero(void)
 {
     obsw_bdot_ctx_t ctx;
@@ -43,6 +45,7 @@ void test_first_step_outputs_zero(void)
     TEST_ASSERT_TRUE(ctx.initialised);
 }
 
+/* @verifies OBSW-SRS-200 */
 void test_step_computes_dipole(void)
 {
     obsw_bdot_ctx_t ctx;
@@ -62,6 +65,7 @@ void test_step_computes_dipole(void)
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, out.m_cmd[2]);
 }
 
+/* @verifies OBSW-SRS-201 */
 void test_saturation(void)
 {
     obsw_bdot_ctx_t ctx;
@@ -81,6 +85,7 @@ void test_saturation(void)
     TEST_ASSERT_FLOAT_WITHIN(0.001f, -5.0f, out.m_cmd[2]);
 }
 
+/* @verifies OBSW-SRS-200 */
 void test_reset_clears_state(void)
 {
     obsw_bdot_ctx_t ctx;
@@ -100,6 +105,7 @@ void test_reset_clears_state(void)
     TEST_ASSERT_EQUAL_FLOAT(0.0f, out.m_cmd[0]);
 }
 
+/* @verifies OBSW-SRS-200 */
 void test_opposing_field_reversal(void)
 {
     /* B-dot should oppose field change direction */
@@ -118,6 +124,7 @@ void test_opposing_field_reversal(void)
     TEST_ASSERT_TRUE(out.m_cmd[2] > 0.0f);
 }
 
+/* @verifies OBSW-SRS-204 */
 void test_runtime_gain_update(void)
 {
     /* Verify that updating config.gain mid-run changes the output magnitude */
@@ -143,6 +150,7 @@ void test_runtime_gain_update(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 2.0f * m_gain1, m_gain2);
 }
 
+/* @verifies OBSW-SRS-202 */
 void test_hpf_disabled_matches_raw(void)
 {
     /* hpf_tau = 0 → dbdt_filt must equal dbdt (no filtering) */
@@ -162,6 +170,7 @@ void test_hpf_disabled_matches_raw(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-9f, out.dbdt[2], out.dbdt_filt[2]);
 }
 
+/* @verifies OBSW-SRS-202 */
 void test_hpf_attenuates_dc_drift(void)
 {
     /* A slowly-rising field (orbital drift) must be attenuated by the HPF.
@@ -186,6 +195,7 @@ void test_hpf_attenuates_dc_drift(void)
     TEST_ASSERT_TRUE(fabsf(out.dbdt_filt[0]) < fabsf(out.dbdt[0]) * 0.01f);
 }
 
+/* @verifies OBSW-SRS-202 */
 void test_hpf_passes_attitude_rate(void)
 {
     /* A higher-frequency oscillation (attitude tumble rate) must pass through.

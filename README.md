@@ -94,11 +94,13 @@ ctest --test-dir build --output-on-failure
 pytest srdb/tests
 ```
 
-### Tests
+### Tests and traceability
 
-- 20 ctest suites (19 unit, 1 integration), 194 Unity test cases.
-- 65 SRDB Python tests.
-- Core line coverage 92%, branch 77% (gcov, CCSDS/dispatcher/PUS/FDIR/AOCS/TM/time). Measured locally; not yet gated in CI.
+- 20 ctest suites (19 unit, 1 integration).
+- System tests: `pytest test/system` drives the built `obsw_sim` over wire protocol v3 (set `OBSW_SIM` to another binary).
+- SRDB Python tests: `pytest srdb/tests`.
+- Requirements: [docs/SRS.md](docs/SRS.md). Every test names the requirements it verifies (`/* @verifies OBSW-SRS-NNN */` in C, `@pytest.mark.requirement` in Python). `python3 tools/trace.py --lib build/src/libobsw.a --out build/traceability.md` checks that every implemented requirement is tested and writes the matrix; CI runs it on every PR.
+- Core line coverage 92%, branch 77% (gcov). Measured locally; not yet gated in CI.
 
 ---
 

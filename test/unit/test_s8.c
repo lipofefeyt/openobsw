@@ -99,6 +99,7 @@ static obsw_sp_packet_t dequeue_pkt(uint8_t *buf, size_t buf_len)
     return pkt;
 }
 
+/* @verifies OBSW-SRS-140 */
 void test_perform_known_function(void)
 {
     setup_ctx();
@@ -111,6 +112,7 @@ void test_perform_known_function(void)
     TEST_ASSERT_FALSE(obsw_fsm_is_safe(&fsm));
 }
 
+/* @verifies OBSW-SRS-140, OBSW-SRS-082 */
 void test_perform_emits_tm11_and_tm17(void)
 {
     setup_ctx();
@@ -125,6 +127,7 @@ void test_perform_emits_tm11_and_tm17(void)
     TEST_ASSERT_EQUAL_UINT8(1, pkt.payload[2]);
 }
 
+/* @verifies OBSW-SRS-141 */
 void test_unknown_function_emits_failure(void)
 {
     setup_ctx();
@@ -137,6 +140,7 @@ void test_unknown_function_emits_failure(void)
     TEST_ASSERT_EQUAL_UINT8(2, pkt.payload[2]); /* TM(1,2) failure */
 }
 
+/* @verifies OBSW-SRS-140, OBSW-SRS-082 */
 void test_failing_function_emits_tm18(void)
 {
     setup_ctx();
@@ -160,6 +164,7 @@ static uint16_t dequeue_tm12_code(void)
     return (uint16_t)((pkt.payload[15] << 8) | pkt.payload[16]);
 }
 
+/* @verifies OBSW-SRS-140 */
 void test_args_passed_to_function(void)
 {
     setup_ctx();
@@ -174,6 +179,7 @@ void test_args_passed_to_function(void)
     TEST_ASSERT_EQUAL_HEX8(0xCD, fn_seen_args[1]);
 }
 
+/* @verifies OBSW-SRS-141, OBSW-SRS-083 */
 void test_args_len_beyond_tc_rejected(void)
 {
     setup_ctx();
@@ -188,6 +194,7 @@ void test_args_len_beyond_tc_rejected(void)
     TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_APP_DATA, dequeue_tm12_code());
 }
 
+/* @verifies OBSW-SRS-083 */
 void test_truncated_user_data_rejected(void)
 {
     setup_ctx();
@@ -198,6 +205,7 @@ void test_truncated_user_data_rejected(void)
     TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_ILLEGAL_APP_DATA, dequeue_tm12_code());
 }
 
+/* @verifies OBSW-SRS-141, OBSW-SRS-081 */
 void test_unknown_function_code_is_exec_error(void)
 {
     setup_ctx();
@@ -207,6 +215,7 @@ void test_unknown_function_code_is_exec_error(void)
     TEST_ASSERT_EQUAL_HEX16(OBSW_S1_FAIL_EXEC_ERROR, dequeue_tm12_code());
 }
 
+/* @verifies OBSW-SRS-140 */
 void test_null_ctx_returns_error(void)
 {
     setup_ctx();

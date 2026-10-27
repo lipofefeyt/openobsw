@@ -46,6 +46,7 @@ static size_t make_tc_frame(uint8_t *buf, size_t buf_len,
 /* CRC tests                                                           */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-021, OBSW-SRS-023 */
 void test_crc_known_vector(void)
 {
     /* CRC-16/CCITT of {0x31..0x39} = 0x29B1 (standard test vector) */
@@ -53,12 +54,14 @@ void test_crc_known_vector(void)
     TEST_ASSERT_EQUAL_HEX16(0x29B1U, obsw_crc16_ccitt(data, sizeof(data)));
 }
 
+/* @verifies OBSW-SRS-021, OBSW-SRS-023 */
 void test_crc_empty(void)
 {
     /* Empty buffer: init value returned unchanged */
     TEST_ASSERT_EQUAL_HEX16(0xFFFFU, obsw_crc16_ccitt(NULL, 0));
 }
 
+/* @verifies OBSW-SRS-021, OBSW-SRS-023 */
 void test_crc_single_byte(void)
 {
     uint8_t b = 0x00U;
@@ -72,6 +75,7 @@ void test_crc_single_byte(void)
 /* Decode — happy path                                                 */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-020 */
 void test_decode_valid_frame(void)
 {
     uint8_t payload[] = {0x11, 17, 1, 0x00};
@@ -91,6 +95,7 @@ void test_decode_valid_frame(void)
     TEST_ASSERT_EQUAL_MEMORY(payload, frm.data, sizeof(payload));
 }
 
+/* @verifies OBSW-SRS-020 */
 void test_decode_max_scid(void)
 {
     uint8_t payload[] = {0xAA};
@@ -110,6 +115,7 @@ void test_decode_max_scid(void)
 /* Decode — error paths                                                */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-022 */
 void test_decode_null_args(void)
 {
     uint8_t buf[16] = {0};
@@ -120,6 +126,7 @@ void test_decode_null_args(void)
                           obsw_tc_frame_decode(buf, 16, NULL));
 }
 
+/* @verifies OBSW-SRS-022 */
 void test_decode_too_short(void)
 {
     uint8_t buf[7] = {0};
@@ -129,6 +136,7 @@ void test_decode_too_short(void)
                           obsw_tc_frame_decode(buf, 7, &frm));
 }
 
+/* @verifies OBSW-SRS-021 */
 void test_decode_bad_crc(void)
 {
     uint8_t payload[] = {0x11, 17, 1, 0x00};
@@ -144,6 +152,7 @@ void test_decode_bad_crc(void)
                           obsw_tc_frame_decode(buf, len, &frm));
 }
 
+/* @verifies OBSW-SRS-022 */
 void test_decode_frame_len_mismatch(void)
 {
     uint8_t payload[] = {0x11, 17, 1, 0x00};
@@ -165,6 +174,7 @@ void test_decode_frame_len_mismatch(void)
 /* strerror                                                            */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-022 */
 void test_strerror_known_codes(void)
 {
     TEST_ASSERT_NOT_NULL(obsw_tc_frame_strerror(OBSW_TC_FRAME_OK));
@@ -178,6 +188,7 @@ void test_strerror_known_codes(void)
 /* Adversarial inputs                                                  */
 /* ------------------------------------------------------------------ */
 
+/* @verifies OBSW-SRS-020 */
 void test_decode_minimum_payload(void)
 {
     /* Minimum valid frame: 5-byte header + 1-byte payload + 2-byte CRC */
@@ -192,6 +203,7 @@ void test_decode_minimum_payload(void)
     TEST_ASSERT_EQUAL_UINT8(0xABU, frm.data[0]);
 }
 
+/* @verifies OBSW-SRS-021 */
 void test_decode_all_zeros(void)
 {
     /* An all-zero buffer should fail CRC (init value is 0xFFFF, not 0x0000) */
@@ -201,6 +213,7 @@ void test_decode_all_zeros(void)
                           obsw_tc_frame_decode(buf, sizeof(buf), &frm));
 }
 
+/* @verifies OBSW-SRS-021 */
 void test_decode_single_bit_flip(void)
 {
     /* Any single-bit corruption must be caught by CRC-16/CCITT */
@@ -216,6 +229,7 @@ void test_decode_single_bit_flip(void)
                           obsw_tc_frame_decode(buf, len, &frm));
 }
 
+/* @verifies OBSW-SRS-022 */
 void test_decode_frame_len_exceeds_buffer(void)
 {
     /* frame_len field claims more bytes than the buffer actually holds */
