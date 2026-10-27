@@ -209,6 +209,87 @@ jobs:
             src/ccsds src/tc src/tm src/pus src/fdir src/aocs src/time
 
   # ------------------------------------------------------------------ #
+  # MSP430FR5969 build (OBSW-SRS-264): the 16-bit, 2 KB SRAM target.  #
+  # Runs on PRs too, since it catches 16-bit and memory regressions.   #
+  # The linker fails the build if RAM or FRAM overflows.               #
+  # ------------------------------------------------------------------ #
+  build-msp430:
+    name: MSP430FR5969 binary
+    runs-on: ubuntu-latest
+    env:
+      MSP_DIR: /opt/msp430-gcc-9.3.1.11_linux64
+      MSP_URL: https://software-dl.ti.com/msp430/msp430_public_sw/mcu/msp430/MSPGCC/9_3_1_2/export
+      MSP_GCC_SHA256: b60851b61565e3ddd2193298a3fac5120c2402597174106cc5f8482b9e9986e6
+      MSP_SUPPORT_SHA256: 3b1a39f10a344dfefb767e60ac35becef4c065013be86993195b138a5fb0b8d6
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build python3-pip
+          pip install pydantic pyyaml --break-system-packages
+          pip install -e srdb/ --break-system-packages
+
+      - name: Cache TI msp430-elf-gcc
+        id: msp-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MSP_DIR }}
+          key: msp430-gcc-9.3.1.11-support-1.212
+
+      # TI toolchain and device support files, pinned by SHA-256
+      - name: Install TI msp430-elf-gcc
+        if: steps.msp-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o /tmp/msp430-gcc.tar.bz2 "$MSP_URL/msp430-gcc-9.3.1.11_linux64.tar.bz2"
+          curl -fsSL -o /tmp/msp430-support.zip "$MSP_URL/msp430-gcc-support-files-1.212.zip"
+          echo "$MSP_GCC_SHA256  /tmp/msp430-gcc.tar.bz2" | sha256sum -c -
+          echo "$MSP_SUPPORT_SHA256  /tmp/msp430-support.zip" | sha256sum -c -
+          sudo tar -xjf /tmp/msp430-gcc.tar.bz2 -C /opt
+          unzip -q /tmp/msp430-support.zip -d /tmp
+          sudo cp /tmp/msp430-gcc-support-files/include/*.h "$MSP_DIR/include/"
+          sudo cp /tmp/msp430-gcc-support-files/include/*.ld "$MSP_DIR/msp430-elf/lib/"
+
+      - name: Verify toolchain
+        run: |
+          echo "$MSP_DIR/bin" >> "$GITHUB_PATH"
+          "$MSP_DIR/bin/msp430-elf-gcc" --version | head -1
+
+      - name: Configure
+        run: |
+          cmake -S targets/msp430-fr5969 -B build-msp430 -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=$PWD/cmake/msp430-toolchain.cmake
+
+      - name: Build
+        run: cmake --build build-msp430
+
+      - name: Size report
+        run: |
+          elf=$(ls build-msp430/*.elf)
+          "$MSP_DIR/bin/msp430-elf-size" "$elf" | tee build-msp430/size.txt
+          read -r text data bss _ < <(tail -1 build-msp430/size.txt)
+          {
+            echo "### MSP430FR5969 memory"
+            echo "| Region | Used | Capacity |"
+            echo "|---|---|---|"
+            echo "| FRAM (text + data) | $((text + data)) B | 48000 B |"
+            echo "| SRAM, static (data + bss) | $((data + bss)) B | 2048 B |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload binary artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: obsw_msp430_bin
+          path: |
+            build-msp430/*.elf
+            build-msp430/size.txt
+          retention-days: 90
+
+  # ------------------------------------------------------------------ #
   # ZynqMP bare-metal binary — build and publish as workflow artifact  #
   # Runs on main pushes + monthly schedule (not PRs)                   #
   # ------------------------------------------------------------------ #

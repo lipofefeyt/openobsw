@@ -394,5 +394,6 @@ CI shall measure line coverage of the core library and fail below 90%.
 CI shall run static analysis on the core library with MISRA C:2012 checks, with no findings against Mandatory or Required rules, and fail on any finding not covered by a documented deviation. *(#74)*
 *Evidence: CI `static-analysis` job (cppcheck + `misra` addon, `--error-exitcode=1`); deviations in [misra-deviations.md](misra-deviations.md).*
 
-**OBSW-SRS-264** `[QA]` `BASELINED` `T`
-CI shall build the MSP430 target.
+**OBSW-SRS-264** `[QA]` `IMPLEMENTED` `I`
+CI shall build the MSP430 target on every pull request and report its memory use.
+*Evidence: CI `build-msp430` job (TI msp430-elf-gcc 9.3.1, pinned by SHA-256; linker enforces the 2 KB SRAM and 48 KB FRAM limits).*
