@@ -100,7 +100,7 @@ pytest srdb/tests
 - System tests: `pytest test/system` drives the built `obsw_sim` over wire protocol v3 (set `OBSW_SIM` to another binary).
 - SRDB Python tests: `pytest srdb/tests`.
 - Requirements: [docs/SRS.md](docs/SRS.md). Every test names the requirements it verifies (`/* @verifies OBSW-SRS-NNN */` in C, `@pytest.mark.requirement` in Python). `python3 tools/trace.py --lib build/src/libobsw.a --out build/traceability.md` checks that every implemented requirement is tested and writes the matrix; CI runs it on every PR.
-- Core line coverage 92%, branch 77% (gcov). Measured locally; not yet gated in CI.
+- Coverage: CI fails if unit, integration and system tests together cover less than 90% of core library lines (now 93.7% lines, 79.3% branches). Locally: configure with `-DOBSW_ENABLE_COVERAGE=ON` (GCC), run the tests, then `gcovr -r . --object-directory build --filter 'src/(ccsds|tc|tm|pus|fdir|aocs|time)/'`.
 
 ---
 
