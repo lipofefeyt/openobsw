@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Monthly rebuild keeps the target binary artifacts (90-day retention)
+  # alive for opensvf's cross-repo Renode test even when main is quiet.
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
 
 jobs:
   build-and-test:
@@ -33,13 +38,28 @@ jobs:
           cmake -B build \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DCMAKE_C_COMPILER=${{ matrix.compiler }}
+            -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
+            -DOBSW_WERROR=ON
 
       - name: Build
         run: cmake --build build
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  srdb:
+    name: SRDB Python tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install -e "srdb/[dev]" --break-system-packages
+
+      - name: Test
+        run: pytest srdb/tests/ -v
 
   asan:
     name: ASAN / UBSAN (gcc)
@@ -71,12 +91,12 @@ jobs:
 
   # ------------------------------------------------------------------ #
   # ZynqMP bare-metal binary — build and publish as workflow artifact  #
-  # Runs on push to main only (not PRs) to avoid unnecessary builds    #
+  # Runs on main pushes + monthly schedule (not PRs)                   #
   # ------------------------------------------------------------------ #
   build-zynqmp:
     name: ZynqMP bare-metal binary
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request'
 
     steps:
       - name: Checkout
@@ -122,7 +142,7 @@ jobs:
         with:
           name: obsw_zynqmp_bin
           path: build_zynqmp/obsw_zynqmp.bin
-          retention-days: 30
+          retention-days: 90
 
   # ------------------------------------------------------------------ #
   # STM32H750 bare-metal binary — build and publish as artifact        #
@@ -130,7 +150,7 @@ jobs:
   build-stm32h7:
     name: STM32H750 bare-metal binary
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request'
 
     steps:
       - name: Checkout
@@ -164,4 +184,4 @@ jobs:
         with:
           name: obsw_stm32h7_bin
           path: build_stm32h7/obsw_stm32h7.bin
-          retention-days: 30
+          retention-days: 90

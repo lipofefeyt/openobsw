@@ -42,7 +42,11 @@ def event(identifier: int = 0x5001, name: str = "external_voltage_event") -> Eve
     )
 
 
-def hk_set(identifier: int = 5, name: str = "external_hk", parameter_name: str = "external_voltage_mv") -> HKSet:
+# Contributed HK sets use a high ID so they never collide with base sets (1-7).
+EXTERNAL_HK_ID = 200
+
+
+def hk_set(identifier: int = EXTERNAL_HK_ID, name: str = "external_hk", parameter_name: str = "external_voltage_mv") -> HKSet:
     return HKSet(
         id=identifier,
         name=name,
@@ -105,7 +109,7 @@ def test_load_contribution_and_compose_without_mutating_base(srdb, tmp_path: Pat
     assert len(composed.hk_sets) == base_counts[2] + 1
     assert len(composed.events) == base_counts[3] + 1
     assert composed.parameter_by_id(0x6001).name == "external_voltage_mv"
-    assert composed.hk_set_by_id(5).parameters == ["external_voltage_mv"]
+    assert composed.hk_set_by_id(EXTERNAL_HK_ID).parameters == ["external_voltage_mv"]
     assert composed.event_by_id(0x5001).name == "external_voltage_event"
     assert composed.spacecraft == srdb.spacecraft
     assert composed.spacecraft is not srdb.spacecraft
@@ -157,7 +161,7 @@ def test_hk_id_and_name_collisions_are_rejected(srdb) -> None:
     with pytest.raises(SRDBCompositionError, match="Duplicate HK set name"):
         SRDBComposer.compose(
             srdb,
-            [SRDBContribution(hk_sets=(hk_set(5, existing.name, srdb.parameters[0].name),))],
+            [SRDBContribution(hk_sets=(hk_set(EXTERNAL_HK_ID, existing.name, srdb.parameters[0].name),))],
         )
 
 
@@ -200,7 +204,7 @@ def test_contributed_hk_can_reference_contributed_parameter(srdb) -> None:
         hk_sets=(hk_set(),),
     )
     composed = SRDBComposer.compose(srdb, [contribution])
-    assert composed.hk_set_by_id(5).parameters == ["external_voltage_mv"]
+    assert composed.hk_set_by_id(EXTERNAL_HK_ID).parameters == ["external_voltage_mv"]
 
 
 def test_loader_requires_explicit_target_files(tmp_path: Path) -> None:

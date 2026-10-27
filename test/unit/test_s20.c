@@ -202,7 +202,7 @@
      TEST_ASSERT_EQUAL_UINT8(2,  pkt.payload[2]); /* subsvc=2 */
      /* Payload after secondary header: param_id(2) | value(4) */
      /* PUS-C secondary header is 10 bytes in TM, so app data starts at offset 10 */
-     uint8_t *app = pkt.payload + 11; /* after PUS-C TM secondary header (11 bytes) */
+     const uint8_t *app = pkt.payload + 11; /* after PUS-C TM secondary header (11 bytes) */
      uint16_t reported_id = (uint16_t)(((uint16_t)app[0] << 8) | app[1]);
      uint32_t reported_val = ((uint32_t)app[2] << 24) | ((uint32_t)app[3] << 16)
                            | ((uint32_t)app[4] <<  8) |  (uint32_t)app[5];
