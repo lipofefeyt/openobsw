@@ -66,6 +66,8 @@ class TestCsvIoSuite:
                 assert tc1.service == tc2.service
                 assert tc1.subservice == tc2.subservice
                 assert tc1.safe_allowed == tc2.safe_allowed
+                assert [p.count_from for p in tc1.parameters] == \
+                       [p.count_from for p in tc2.parameters]
 
     def test_round_trip_hk_sets(self) -> None:
         """HK sets survive export → import unchanged."""

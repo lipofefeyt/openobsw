@@ -66,6 +66,17 @@ def _tc_param_bits(ptype: str) -> int:
             "int8": 8, "int16": 16, "int32": 32, "float32": 32}.get(ptype, 8)
 
 
+def _arg_type_name(ptype: str) -> str:
+    """XTCE ArgumentType name for a scalar TC argument type."""
+    bits = _tc_param_bits(ptype)
+    return f"{'int' if ptype.startswith('int') else 'uint'}{bits}_arg_t"
+
+
+def _array_arg_type_name(tc_name: str, arg_name: str) -> str:
+    """XTCE ArrayArgumentType name for a repeated TC argument."""
+    return f"{tc_name.upper()}_{arg_name.upper()}_array_t"
+
+
 def _type_name(p: Parameter) -> str:
     """XTCE ParameterType name for a mission parameter."""
     if p.enumeration or p.conversion or p.limits:
@@ -590,6 +601,23 @@ def _build_argument_type_set(parent: ET.Element, srdb: SRDB) -> None:
             enc.set("sizeInBits", str(bits))
             enc.set("encoding", "twosComplement" if signed else "unsigned")
 
+    # Repeated arguments: an array of the element type, N elements long,
+    # N being the value of the count argument (XTCE 1.2 DynamicValue)
+    for tc in srdb.telecommands:
+        for arg in tc.parameters:
+            if arg.count_from is None:
+                continue
+            el = ET.SubElement(ats, _t("ArrayArgumentType"))
+            el.set("name", _array_arg_type_name(tc.name, arg.name))
+            el.set("arrayTypeRef", _arg_type_name(arg.type.value))
+            dims = ET.SubElement(ET.SubElement(el, _t("DimensionList")), _t("Dimension"))
+            start = ET.SubElement(dims, _t("StartingIndex"))
+            ET.SubElement(start, _t("FixedValue")).text = "0"
+            end = ET.SubElement(ET.SubElement(dims, _t("EndingIndex")), _t("DynamicValue"))
+            ref = ET.SubElement(end, _t("ArgumentInstanceRef"))
+            ref.set("argumentRef", arg.count_from.upper())
+            ET.SubElement(end, _t("LinearAdjustment")).set("intercept", "-1")
+
 
 def _build_metacommand_set(parent: ET.Element, srdb: SRDB) -> None:
     mcs = ET.SubElement(parent, _t("MetaCommandSet"))
@@ -618,9 +646,8 @@ def _build_metacommand_set(parent: ET.Element, srdb: SRDB) -> None:
         if tc.parameters:
             al = ET.SubElement(mc, _t("ArgumentList"))
             for arg in tc.parameters:
-                bits = _tc_param_bits(arg.type.value)
-                signed = arg.type.value.startswith("int")
-                tname = f"{'int' if signed else 'uint'}{bits}_arg_t"
+                tname = (_array_arg_type_name(tc.name, arg.name) if arg.count_from
+                         else _arg_type_name(arg.type.value))
                 a = ET.SubElement(al, _t("Argument"))
                 a.set("name", arg.name.upper())
                 a.set("argumentTypeRef", tname)

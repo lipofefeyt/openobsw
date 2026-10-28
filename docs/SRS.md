@@ -366,8 +366,8 @@ The SRDB shall compose a base database with contributions, rejecting ID or name 
 **OBSW-SRS-224** `[SDB]` `IMPLEMENTED` `T`
 The SRDB shall export to and import from CSV without loss.
 
-**OBSW-SRS-225** `[SDB]` `BASELINED` `T`
-The SRDB shall describe telecommands with a repeated argument whose count is given by an earlier argument, and export them to XTCE. *(#92)*
+**OBSW-SRS-225** `[SDB]` `IMPLEMENTED` `T`
+The SRDB shall describe telecommands whose last argument repeats a number of times given by an earlier unsigned argument (`count_from`), reject any other use of `count_from` on load, and export such arguments to XTCE as an `ArrayArgumentType` sized by that argument. *(#92)*
 
 ---
 

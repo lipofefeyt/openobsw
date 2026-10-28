@@ -156,6 +156,9 @@ class TCParameter(BaseModel):
     name:        str
     type:        ParameterType
     description: Optional[str] = None
+    # Repeated argument: occurs N times, N being the value of the earlier
+    # unsigned argument named here (e.g. TC(3,1)'s param_ids after n)
+    count_from:  Optional[str] = None
 
 
 class Telecommand(BaseModel):
@@ -180,6 +183,29 @@ class Telecommand(BaseModel):
         if not (0 <= v <= 255):
             raise ValueError(f"Service/subservice {v} out of uint8 range")
         return v
+
+    @model_validator(mode="after")
+    def repeated_argument_is_last_and_counted(self) -> "Telecommand":
+        """A repeated argument must be the last one, counted by an earlier unsigned one."""
+        for i, arg in enumerate(self.parameters):
+            if arg.count_from is None:
+                continue
+            if i != len(self.parameters) - 1:
+                raise ValueError(
+                    f"TC '{self.name}': repeated argument '{arg.name}' must be the last argument"
+                )
+            earlier = {p.name: p for p in self.parameters[:i]}
+            count = earlier.get(arg.count_from)
+            if count is None:
+                raise ValueError(
+                    f"TC '{self.name}': '{arg.name}' count_from '{arg.count_from}' "
+                    f"is not an earlier argument"
+                )
+            if not count.type.value.startswith("uint") or count.count_from is not None:
+                raise ValueError(
+                    f"TC '{self.name}': count argument '{count.name}' must be a plain unsigned integer"
+                )
+        return self
 
 
 # ---------------------------------------------------------------------------

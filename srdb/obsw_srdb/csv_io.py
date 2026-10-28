@@ -90,7 +90,8 @@ def _export_telecommands(srdb: SRDB, path: Path) -> None:
         ])
         for tc in srdb.telecommands:
             params_str = ";".join(
-                f"{p.name}:{p.type.value}" for p in tc.parameters
+                f"{p.name}:{p.type.value}" + (f"*{p.count_from}" if p.count_from else "")
+                for p in tc.parameters
             )
             w.writerow([
                 tc.name, tc.description, f"0x{tc.apid:03X}",
@@ -207,9 +208,11 @@ def _import_telecommands(path: Path) -> list[Telecommand]:
             if row["parameters"]:
                 for item in row["parameters"].split(";"):
                     name, type_str = item.split(":")
+                    type_str, _, count_from = type_str.partition("*")
                     params.append(TCParameter(
                         name=name,
                         type=ParameterType(type_str),
+                        count_from=count_from or None,
                     ))
             tcs.append(Telecommand(
                 name=row["name"],
