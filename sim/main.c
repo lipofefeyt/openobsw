@@ -369,6 +369,8 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s8_perform, .ctx = &s8_ctx},
     {.apid = 0xFFFF, .service = 3,  .subservice = 1,
      .handler = obsw_s3_define, .ctx = &s3_ctx},
+    {.apid = 0xFFFF, .service = 3,  .subservice = 3,
+     .handler = obsw_s3_delete, .ctx = &s3_ctx},
     {.apid = 0xFFFF, .service = 3,  .subservice = 5,
      .handler = obsw_s3_enable, .ctx = &s3_ctx},
     {.apid = 0xFFFF, .service = 3,  .subservice = 6,

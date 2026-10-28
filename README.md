@@ -42,7 +42,7 @@ per target:
 | Service | Host sim | STM32H7 FreeRTOS | ZynqMP | STM32H7 superloop | MSP430 |
 |---|---|---|---|---|---|
 | S1 TC verification | every TC; rejections as TM(1,2) | same | same | same | same |
-| S3 housekeeping | 3,1 3,5 3,6 | 3,1 3,5 3,6 | — | — | 3,5 3,6 |
+| S3 housekeeping | 3,1 3,3 3,5 3,6 | 3,1 3,3 3,5 3,6 | — | — | 3,5 3,6 |
 | S5 event reporting | TM only | TM only | — | — | TM only |
 | S6 memory management | 6,2 6,5 6,9 | 6,2 6,5 6,9 | — | — | — |
 | S8 function management | 8,1 | 8,1 | 8,1 | — | 8,1 |
@@ -56,7 +56,7 @@ per target:
 | Service | Subservices | Notes |
 |---|---|---|
 | S1 | TM(1,1) accept, TM(1,2) fail, TM(1,7) complete, TM(1,8) fail | TM(1,2) codes: `0x0002` unknown service, `0x0003` unknown subservice, `0x0005` bad data, `0x0006` S6 address, `0x0007` not allowed in this mode |
-| S3 | TC(3,1) define, TC(3,5/6) enable/disable, TM(3,25) report | Parameters big-endian; TC(3,1) builds sets from S20 parameter IDs |
+| S3 | TC(3,1) define, TC(3,3) delete, TC(3,5/6) enable/disable, TM(3,25) report | Parameters big-endian; TC(3,1) builds sets from S20 parameter IDs, TC(3,3) removes them |
 | S5 | TM(5,1–4) info/low/medium/high | High-severity events drive the FSM to SAFE |
 | S6 | TC(6,2) load, TC(6,5) check, TC(6,9) dump | Region table with READ/WRITE access; fails closed |
 | S8 | TC(8,1) perform | Function 1 recover NOMINAL, 2 SAFE, 3 STANDBY |

@@ -8,6 +8,8 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Added
 
+- TC(3,3) delete housekeeping sets created by TC(3,1), all or nothing;
+  freed slots and parameter storage are reused (#91).
 - PUS S11 time-based scheduling: TC(11,4) inserts a CUC-4,2-tagged TC,
   released at OBT through the normal dispatcher (SAFE gate and S1 reports
   apply at release); TC(11,5)/(11,6) delete, TC(11,17)/(11,18)

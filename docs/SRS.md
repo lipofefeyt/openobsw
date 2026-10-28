@@ -216,8 +216,8 @@ The software shall reject TC(3,1) without changing state when the set ID exists,
 **OBSW-SRS-095** `[S3]` `IMPLEMENTED` `T`
 The software shall emit TM(3,25) for a set on demand, independent of its schedule.
 
-**OBSW-SRS-096** `[S3]` `BASELINED` `T`
-The software shall delete housekeeping sets created by TC(3,1) on TC(3,3), and refuse to delete boot-time sets or enabled sets. *(#91)*
+**OBSW-SRS-096** `[S3]` `IMPLEMENTED` `T`
+The software shall delete housekeeping sets created by TC(3,1) on TC(3,3) (`N | set_id × N`), all or nothing: TM(1,2) code `0x0005` with no set deleted if the data is malformed or any set is unknown, repeated, a boot-time set or enabled. Freed set slots and parameter storage shall be reusable by later TC(3,1). *(#91)*
 
 ---
 

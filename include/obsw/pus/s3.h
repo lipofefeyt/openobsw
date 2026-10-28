@@ -9,6 +9,7 @@
  *
  * TC handlers registered in the dispatcher routing table:
  *   TC(3,1)  Create a HK parameter report structure  → obsw_s3_define()
+ *   TC(3,3)  Delete HK parameter report structures   → obsw_s3_delete()
  *   TC(3,5)  Enable periodic HK report generation    → obsw_s3_enable()
  *   TC(3,6)  Disable periodic HK report generation   → obsw_s3_disable()
  *
@@ -117,6 +118,18 @@ extern "C"
      * set slot or pool space is left.
      */
     int obsw_s3_define(const obsw_tc_t *tc,
+                       obsw_tc_responder_t respond,
+                       void *ctx);
+
+    /**
+     * TC(3,3) — delete housekeeping sets created by TC(3,1).
+     * User data field: [N (1)] [set_id (1)] x N
+     * All-or-nothing: TM(1,2) 0x0005, with no set deleted, if the data is
+     * malformed or any set_id is unknown, repeated, a boot-time set (not
+     * created by TC(3,1)) or still enabled. Freed set slots and parameter
+     * pool space are reusable by later TC(3,1).
+     */
+    int obsw_s3_delete(const obsw_tc_t *tc,
                        obsw_tc_responder_t respond,
                        void *ctx);
 

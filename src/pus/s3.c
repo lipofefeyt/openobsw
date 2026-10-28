@@ -174,6 +174,98 @@ int obsw_s3_define(const obsw_tc_t *tc,
     return 0;
 }
 
+/* Pool offset of a set created by TC(3,1), or -1 for a boot-time set.
+ * Equality only: the pool and boot-time parameter arrays are distinct
+ * objects, so ordering comparisons between them would be undefined. */
+static int32_t pool_offset(const obsw_s3_ctx_t *ctx, const obsw_s3_set_t *set)
+{
+    for (uint16_t k = 0; k < ctx->param_pool_used; k++)
+    {
+        if (&ctx->param_pool[k] == set->params)
+        {
+            return (int32_t)k;
+        }
+    }
+    return -1;
+}
+
+/* Remove a TC(3,1) set: close its gap in the pool and in the set table */
+static void remove_defined(obsw_s3_ctx_t *ctx, const obsw_s3_set_t *set)
+{
+    uint16_t off = (uint16_t)pool_offset(ctx, set);
+    uint16_t n   = set->param_count;
+    uint16_t end = (uint16_t)(off + n);
+
+    /* Later TC(3,1) sets sit above this one in the pool: shift them down */
+    for (uint8_t i = 0; i < ctx->set_count; i++)
+    {
+        obsw_s3_set_t *other = &ctx->sets[i];
+        int32_t o = (other == set) ? -1 : pool_offset(ctx, other);
+        if (o >= (int32_t)end)
+        {
+            other->params = &ctx->param_pool[(uint16_t)o - n];
+        }
+    }
+    for (uint16_t k = end; k < ctx->param_pool_used; k++)
+    {
+        ctx->param_pool[k - n] = ctx->param_pool[k];
+    }
+    ctx->param_pool_used = (uint16_t)(ctx->param_pool_used - n);
+
+    /* Keep the remaining sets in order so reports keep their sequence */
+    uint8_t idx = 0U;
+    while (&ctx->sets[idx] != set)
+    {
+        idx++;
+    }
+    for (uint8_t i = idx; (uint8_t)(i + 1U) < ctx->set_count; i++)
+    {
+        ctx->sets[i] = ctx->sets[i + 1U];
+    }
+    ctx->set_count--;
+}
+
+int obsw_s3_delete(const obsw_tc_t *tc,
+                   obsw_tc_responder_t respond,
+                   void *ctx)
+{
+    (void)&respond; /* unused: handlers report through S1 */
+    obsw_s3_ctx_t *s = (obsw_s3_ctx_t *)ctx;
+    if ((s == NULL) || (tc == NULL))
+    {
+        return -1;
+    }
+
+    const uint8_t *u = tc->user_data;
+    uint8_t n        = ((u != NULL) && (tc->user_data_len >= 1U)) ? u[0] : 0U;
+    bool ok          = (n > 0U) && (s->param_pool != NULL) &&
+              (tc->user_data_len == (uint16_t)(1U + (uint16_t)n));
+
+    /* Check every set before deleting any */
+    for (uint8_t i = 0; ok && (i < n); i++)
+    {
+        const obsw_s3_set_t *set = find_set(s, u[1U + i]);
+        ok = (set != NULL) && !set->enabled && (pool_offset(s, set) >= 0);
+        for (uint8_t j = 0; ok && (j < i); j++)
+        {
+            ok = (u[1U + j] != u[1U + i]);
+        }
+    }
+    if (!ok)
+    {
+        (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
+        return -1;
+    }
+
+    (void)obsw_s1_accept_success(s->s1, tc);
+    for (uint8_t i = 0; i < n; i++)
+    {
+        remove_defined(s, find_set(s, u[1U + i]));
+    }
+    (void)obsw_s1_completion_success(s->s1, tc);
+    return 0;
+}
+
 int obsw_s3_enable(const obsw_tc_t *tc,
                    obsw_tc_responder_t respond,
                    void *ctx)
