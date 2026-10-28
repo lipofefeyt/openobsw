@@ -26,6 +26,17 @@ def test_each_sensor_frame_gives_actuator_frame_and_end_of_tick(run):
     assert all(len(e) == 29 for k, e in out.events if k == "act")
 
 
+@pytest.mark.requirement("OBSW-SRS-244")
+def test_hk_due_in_a_tick_leaves_before_that_ticks_end_marker(run):
+    s = Stream()
+    s.ticks(10)  # dhs_obc_hk (set 3) is due every 10 ticks
+    out = run(s)
+    eots = [i for i, (k, _) in enumerate(out.events) if k == "eot"]
+    assert len(eots) == 10
+    last_tick = out.events[eots[8] + 1:eots[9]]
+    assert any(k == "tm" and e.service == 3 and e.app[0] == HK_DHS_OBC for k, e in last_tick)
+
+
 @pytest.mark.requirement("OBSW-SRS-241")
 @pytest.mark.requirement("OBSW-SRS-160")
 def test_ping_reports_arrive_in_order_before_end_of_tick(run):
@@ -79,7 +90,7 @@ def test_s8_safe_and_standby_functions_change_reported_mode(run):
     s.tc(8, 1, struct.pack(">HB", 2, 0))  # SAFE
     s.ticks(10)
     s.tc(8, 1, struct.pack(">HB", 3, 0))  # STANDBY
-    s.ticks(11)  # HK from a tick leaves with the next frame
+    s.ticks(10)
     out = run(s)
     modes = [struct.unpack(DHS_OBC_FMT, p)[0] for p in out.hk(HK_DHS_OBC)]
     assert modes == [2, 1, 0]

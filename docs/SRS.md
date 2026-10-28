@@ -375,6 +375,9 @@ The host sim shall exchange framed messages over stdin/stdout: TC (0x01) and sen
 **OBSW-SRS-241** `[SIM]` `IMPLEMENTED` `T`
 The host sim shall answer every TC frame with all TM it produces before the next end-of-tick marker.
 
+**OBSW-SRS-244** `[SIM]` `IMPLEMENTED` `T`
+The host sim shall emit all TM produced during a sensor tick, including housekeeping and monitoring events, before that tick's end-of-tick marker.
+
 **OBSW-SRS-242** `[SIM]` `IMPLEMENTED` `T`
 The host sim shall boot in SAFE.
 
