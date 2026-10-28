@@ -36,7 +36,7 @@ void obsw_bdot_reset(obsw_bdot_ctx_t *ctx)
 
 void obsw_bdot_step(obsw_bdot_ctx_t *ctx, const float b[3], float dt, obsw_bdot_output_t *out)
 {
-    if (!ctx || !b || !out || dt <= 0.0f) {
+    if (!ctx || !b || !out || (dt <= 0.0f)) {
         return;
     }
 

@@ -37,7 +37,8 @@ int obsw_s1_accept_success(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc)
     }
     uint8_t data[4];
     encode_tc_ref(tc, data);
-    uint16_t seq = ctx->msg_counter++;
+    uint16_t seq = ctx->msg_counter;
+    ctx->msg_counter++;
     return obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
                              1, 1, seq, 0, ctx->timestamp,
                              data, sizeof(data));
@@ -53,7 +54,8 @@ int obsw_s1_accept_failure(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc,
     encode_tc_ref(tc, data);
     data[4] = (uint8_t)(failure_code >> 8);
     data[5] = (uint8_t)(failure_code & 0xFFU);
-    uint16_t seq = ctx->msg_counter++;
+    uint16_t seq = ctx->msg_counter;
+    ctx->msg_counter++;
     return obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
                              1, 2, seq, 0, ctx->timestamp,
                              data, sizeof(data));
@@ -66,7 +68,8 @@ int obsw_s1_completion_success(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc)
     }
     uint8_t data[4];
     encode_tc_ref(tc, data);
-    uint16_t seq = ctx->msg_counter++;
+    uint16_t seq = ctx->msg_counter;
+    ctx->msg_counter++;
     return obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
                              1, 7, seq, 0, ctx->timestamp,
                              data, sizeof(data));
@@ -82,7 +85,8 @@ int obsw_s1_completion_failure(obsw_s1_ctx_t *ctx, const obsw_tc_t *tc,
     encode_tc_ref(tc, data);
     data[4] = (uint8_t)(failure_code >> 8);
     data[5] = (uint8_t)(failure_code & 0xFFU);
-    uint16_t seq = ctx->msg_counter++;
+    uint16_t seq = ctx->msg_counter;
+    ctx->msg_counter++;
     return obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
                              1, 8, seq, 0, ctx->timestamp,
                              data, sizeof(data));

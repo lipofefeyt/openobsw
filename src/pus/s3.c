@@ -74,12 +74,14 @@ static int emit_hk_report(obsw_s3_ctx_t *ctx, const obsw_s3_set_t *set)
     buf[0] = set->set_id;
     uint16_t param_len = serialise_set(set, buf + 1U,
                                        (uint16_t)(sizeof(buf) - 1U));
-    if (param_len == 0U && set->param_count > 0U)
+    if ((param_len == 0U) && (set->param_count > 0U))
     {
         return OBSW_PUS_TM_ERR_TOO_LARGE;
     }
 
-    uint16_t seq = ctx->msg_counter++;
+    uint16_t seq = ctx->msg_counter;
+
+    ctx->msg_counter++;
     return obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
                              3, 25, seq, 0, ctx->timestamp,
                              buf, (uint16_t)(1U + param_len));
@@ -117,7 +119,7 @@ int obsw_s3_define(const obsw_tc_t *tc,
         return -1;
     }
 
-    if (!tc->user_data || tc->user_data_len < 6U)
+    if (!tc->user_data || (tc->user_data_len < 6U))
     {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
@@ -129,23 +131,23 @@ int obsw_s3_define(const obsw_tc_t *tc,
     const uint8_t *ids = tc->user_data + 6;
 
     /* Exact length, a fresh SID, and a report that fits one TM(3,25) */
-    if (n == 0U || tc->user_data_len != 6U + 2U * (uint16_t)n || find_set(s, set_id) ||
-        1U + 4U * (uint32_t)n > S3_MAX_REPORT_DATA)
+    if ((n == 0U) || (tc->user_data_len != (6U + (2U * (uint16_t)n))) || find_set(s, set_id) ||
+        ((1U + (4U * (uint32_t)n)) > S3_MAX_REPORT_DATA))
     {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
     for (uint8_t i = 0; i < n; i++)
     {
-        if (!find_param(s, obsw_be16(ids + 2U * i)))
+        if (!find_param(s, obsw_be16(ids + (2U * i))))
         {
             (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
             return -1;
         }
     }
 
-    if (!s->param_pool || s->set_count >= s->set_capacity ||
-        s->param_pool_len - s->param_pool_used < n)
+    if (!s->param_pool || (s->set_count >= s->set_capacity) ||
+        ((s->param_pool_len - s->param_pool_used) < n))
     {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
         return -1;
@@ -156,7 +158,7 @@ int obsw_s3_define(const obsw_tc_t *tc,
     obsw_s3_param_t *params = &s->param_pool[s->param_pool_used];
     for (uint8_t i = 0; i < n; i++)
     {
-        params[i].ptr  = &find_param(s, obsw_be16(ids + 2U * i))->value;
+        params[i].ptr  = &find_param(s, obsw_be16(ids + (2U * i)))->value;
         params[i].size = OBSW_S3_PARAM_U32;
     }
     s->param_pool_used = (uint16_t)(s->param_pool_used + n);
@@ -277,7 +279,7 @@ int obsw_s3_enable(const obsw_tc_t *tc,
         return -1;
     }
 
-    if (!tc->user_data || tc->user_data_len < 5U)
+    if (!tc->user_data || (tc->user_data_len < 5U))
     {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
@@ -312,7 +314,7 @@ int obsw_s3_disable(const obsw_tc_t *tc,
         return -1;
     }
 
-    if (!tc->user_data || tc->user_data_len < 1U)
+    if (!tc->user_data || (tc->user_data_len < 1U))
     {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
@@ -369,7 +371,7 @@ void obsw_s3_tick(obsw_s3_ctx_t *ctx)
     for (uint8_t i = 0; i < ctx->set_count; i++)
     {
         obsw_s3_set_t *set = &ctx->sets[i];
-        if (!set->enabled || set->interval_ticks == 0U)
+        if (!set->enabled || (set->interval_ticks == 0U))
         {
             continue;
         }

@@ -10,8 +10,8 @@ void obsw_obt_advance(obsw_obt_t *obt, uint32_t dt_ms)
         return;
     }
 
-    uint32_t scaled   = dt_ms * 65536U + (uint32_t)obt->rem;
-    uint32_t new_fine = (uint32_t)obt->fine + scaled / 1000U;
+    uint32_t scaled   = (dt_ms * 65536U) + (uint32_t)obt->rem;
+    uint32_t new_fine = (uint32_t)obt->fine + (scaled / 1000U);
 
     obt->rem = (uint16_t)(scaled % 1000U);
 

@@ -19,7 +19,7 @@ int obsw_s5_report(obsw_s5_ctx_t *ctx,
     {
         return OBSW_PUS_TM_ERR_NULL;
     }
-    if (data_len > 0U && !data)
+    if ((data_len > 0U) && !data)
     {
         return OBSW_PUS_TM_ERR_NULL;
     }
@@ -33,16 +33,18 @@ int obsw_s5_report(obsw_s5_ctx_t *ctx,
         (void)memcpy(buf + 2U, data, data_len);
     }
 
-    uint16_t seq = ctx->msg_counter++;
+    uint16_t seq = ctx->msg_counter;
+
+    ctx->msg_counter++;
     int rc = obsw_pus_tm_build(ctx->tm_store, ctx->apid, seq,
                                5, (uint8_t)severity, seq, 0,
                                ctx->timestamp,
                                buf, (uint16_t)((uint16_t)data_len + 2U));
 
     /* FDIR coupling: HIGH severity + matching event ID → safe mode */
-    if (rc == OBSW_PUS_TM_OK &&
-        severity == OBSW_S5_HIGH &&
-        ctx->fsm != NULL)
+    if ((rc == OBSW_PUS_TM_OK) &&
+        (severity == OBSW_S5_HIGH) &&
+        (ctx->fsm != NULL))
     {
         for (uint8_t i = 0; i < ctx->safe_trigger_count; i++)
         {

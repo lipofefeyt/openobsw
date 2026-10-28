@@ -82,7 +82,7 @@ int obsw_tc_dispatcher_feed(obsw_tc_dispatcher_t *d,
     }
 
     /* Extract PUS secondary header fields */
-    if (!pkt.hdr.sec_hdr_flag || pkt.payload_len < PUS_TC_SEC_HDR_LEN)
+    if (!pkt.hdr.sec_hdr_flag || (pkt.payload_len < PUS_TC_SEC_HDR_LEN))
     {
         return OBSW_TC_ERR_PARSE;
     }
@@ -94,7 +94,7 @@ int obsw_tc_dispatcher_feed(obsw_tc_dispatcher_t *d,
     tc.subservice = pkt.payload[2];
     /* source ID in bytes 3-4, skip for now */
     tc.user_data = (pkt.payload_len > PUS_TC_SEC_HDR_LEN)
-                       ? pkt.payload + PUS_TC_SEC_HDR_LEN
+                       ? (pkt.payload + PUS_TC_SEC_HDR_LEN)
                        : NULL;
     tc.user_data_len = (pkt.payload_len > PUS_TC_SEC_HDR_LEN)
                            ? (uint16_t)(pkt.payload_len - PUS_TC_SEC_HDR_LEN)
@@ -111,7 +111,7 @@ int obsw_tc_dispatcher_feed(obsw_tc_dispatcher_t *d,
     for (size_t i = 0; i < d->table_len; i++)
     {
         const obsw_tc_route_t *r = &d->table[i];
-        if ((r->apid != 0xFFFFU && r->apid != tc.apid) || r->service != tc.service)
+        if (((r->apid != 0xFFFFU) && (r->apid != tc.apid)) || (r->service != tc.service))
         {
             continue;
         }

@@ -21,7 +21,8 @@ int obsw_s17_ping(const obsw_tc_t *tc,
     (void)obsw_s1_accept_success(s->s1, tc);
 
     /* TM(17,2) — are-you-alive response */
-    uint16_t seq = s->msg_counter++;
+    uint16_t seq = s->msg_counter;
+    s->msg_counter++;
     (void)obsw_pus_tm_build(s->tm_store, s->apid, seq,
                       17, 2, seq, 0, s->timestamp,
                       NULL, 0);

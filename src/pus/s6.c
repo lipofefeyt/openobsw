@@ -37,11 +37,11 @@ s6_resolve(const obsw_s6_ctx_t *s, uint32_t addr, uint16_t len, uint8_t access)
 
     for (uint8_t i = 0; i < s->region_count; i++) {
         const obsw_s6_region_t *r = &s->regions[i];
-        if ((r->access & access) != access || addr < r->start) {
+        if (((r->access & access) != access) || (addr < r->start)) {
             continue;
         }
         uint32_t off = addr - r->start;
-        if (off > r->size || len > r->size - off) {
+        if ((off > r->size) || (len > (r->size - off))) {
             continue;
         }
         return r->base + off;
@@ -61,7 +61,7 @@ int obsw_s6_load(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    if (!tc->user_data || tc->user_data_len < OBSW_S6_LOAD_MIN_LEN) {
+    if (!tc->user_data || (tc->user_data_len < OBSW_S6_LOAD_MIN_LEN)) {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
@@ -70,7 +70,7 @@ int obsw_s6_load(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
     uint16_t data_len = obsw_be16(tc->user_data + 4);
 
     /* 32-bit sum: MIN_LEN + data_len must not wrap past a short TC */
-    if ((uint32_t)OBSW_S6_LOAD_MIN_LEN + data_len > tc->user_data_len) {
+    if (((uint32_t)OBSW_S6_LOAD_MIN_LEN + data_len) > tc->user_data_len) {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
@@ -102,7 +102,7 @@ int obsw_s6_check(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    if (!tc->user_data || tc->user_data_len < OBSW_S6_CHECK_LEN) {
+    if (!tc->user_data || (tc->user_data_len < OBSW_S6_CHECK_LEN)) {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
@@ -127,7 +127,8 @@ int obsw_s6_check(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         uint8_t data[6];
         (void)memcpy(data, tc->user_data, 4);         /* start_addr */
         (void)memcpy(data + 4, tc->user_data + 4, 2); /* length     */
-        uint16_t seq = s->msg_counter++;
+        uint16_t seq = s->msg_counter;
+        s->msg_counter++;
         (void)obsw_pus_tm_build(
             s->tm_store, s->apid, seq, 6, 10, seq, 0, s->timestamp, data, sizeof(data));
         (void)obsw_s1_completion_success(s->s1, tc);
@@ -138,7 +139,8 @@ int obsw_s6_check(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         (void)memcpy(data + 4, tc->user_data + 4, 2);
         data[6]      = (uint8_t)(actual >> 8);
         data[7]      = (uint8_t)(actual & 0xFFU);
-        uint16_t seq = s->msg_counter++;
+        uint16_t seq = s->msg_counter;
+        s->msg_counter++;
         (void)obsw_pus_tm_build(
             s->tm_store, s->apid, seq, 6, 11, seq, 0, s->timestamp, data, sizeof(data));
         (void)obsw_s1_completion_failure(s->s1, tc, OBSW_S1_FAIL_EXEC_ERROR);
@@ -159,7 +161,7 @@ int obsw_s6_dump(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    if (!tc->user_data || tc->user_data_len < OBSW_S6_DUMP_LEN) {
+    if (!tc->user_data || (tc->user_data_len < OBSW_S6_DUMP_LEN)) {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
@@ -190,7 +192,9 @@ int obsw_s6_dump(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
     buf[4] = mem_id;
     (void)memcpy(buf + 5U, src, length);
 
-    uint16_t seq = s->msg_counter++;
+    uint16_t seq = s->msg_counter;
+
+    s->msg_counter++;
     (void)obsw_pus_tm_build(
         s->tm_store, s->apid, seq, 6, 6, seq, 0, s->timestamp, buf, (uint16_t)(5U + length));
 

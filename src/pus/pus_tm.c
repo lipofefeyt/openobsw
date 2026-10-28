@@ -24,7 +24,7 @@ int obsw_pus_tm_build(obsw_tm_store_t *store,
     if (!store) {
         return OBSW_PUS_TM_ERR_NULL;
     }
-    if (data_len > 0U && !data) {
+    if ((data_len > 0U) && !data) {
         return OBSW_PUS_TM_ERR_NULL;
     }
 
@@ -54,17 +54,18 @@ int obsw_pus_tm_build(obsw_tm_store_t *store,
 
     /* ---- PUS-C TM secondary header ---- */
     uint8_t *p = buf + OBSW_SP_PRIMARY_HEADER_LEN;
-    *p++ = OBSW_PUS_VERSION;
-    *p++ = svc;
-    *p++ = subsvc;
-    *p++ = (uint8_t)(msg_counter >> 8);
-    *p++ = (uint8_t)(msg_counter & 0xFFU);
-    *p++ = (uint8_t)(dest_id >> 8);
-    *p++ = (uint8_t)(dest_id & 0xFFU);
-    *p++ = (uint8_t)(timestamp >> 24);
-    *p++ = (uint8_t)(timestamp >> 16);
-    *p++ = (uint8_t)(timestamp >> 8);
-    *p++ = (uint8_t)(timestamp & 0xFFU);
+    p[0]  = OBSW_PUS_VERSION;
+    p[1]  = svc;
+    p[2]  = subsvc;
+    p[3]  = (uint8_t)(msg_counter >> 8);
+    p[4]  = (uint8_t)(msg_counter & 0xFFU);
+    p[5]  = (uint8_t)(dest_id >> 8);
+    p[6]  = (uint8_t)(dest_id & 0xFFU);
+    p[7]  = (uint8_t)(timestamp >> 24);
+    p[8]  = (uint8_t)(timestamp >> 16);
+    p[9]  = (uint8_t)(timestamp >> 8);
+    p[10] = (uint8_t)(timestamp & 0xFFU);
+    p += OBSW_PUS_TM_SEC_HDR_LEN;
 
     /* ---- Application data ---- */
     if (data_len > 0U) {

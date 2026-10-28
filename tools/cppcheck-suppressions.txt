@@ -13,8 +13,6 @@ misra-c2012-19.2
 misra-c2012-11.4
 
 # Section 2: Advisory, not enforced yet
-misra-c2012-12.1
-misra-c2012-13.3
 misra-c2012-2.5
 misra-c2012-8.7
 misra-c2012-13.4
