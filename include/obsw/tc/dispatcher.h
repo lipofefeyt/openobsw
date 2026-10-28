@@ -139,6 +139,16 @@ int obsw_tc_dispatcher_init(obsw_tc_dispatcher_t *d,
                              void *responder_ctx);
 
 /**
+ * Check that @p pkt is a complete PUS TC space packet (TC type, secondary
+ * header present, length consistent) without dispatching it. Used by
+ * services that store TCs for later dispatch (S11, S19).
+ *
+ * @param service  If non-NULL, receives the packet's service type.
+ * @return OBSW_TC_OK, OBSW_TC_ERR_NULL or OBSW_TC_ERR_PARSE.
+ */
+int obsw_tc_packet_check(const uint8_t *pkt, size_t len, uint8_t *service);
+
+/**
  * Install an acceptance gate (e.g. obsw_fsm_tc_gate for the SAFE whitelist).
  *
  * @param d         Initialised dispatcher.

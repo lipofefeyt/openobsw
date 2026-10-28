@@ -82,6 +82,8 @@ static obsw_s12_ctx_t  s12_ctx = {0};
 static obsw_s12_def_t  s12_defs[16];
 static obsw_s19_ctx_t  s19_ctx = {0};
 static obsw_s19_def_t  s19_defs[8];
+static obsw_s11_ctx_t  s11_ctx = {0};
+static obsw_s11_activity_t s11_acts[8];
 static obsw_s6_ctx_t  s6_ctx  = {0};
 static obsw_fsm_ctx_t fsm_ctx = {0};
 
@@ -394,6 +396,16 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s12_delete, .ctx = &s12_ctx},
     {.apid = 0xFFFF, .service = 12, .subservice = 5,
      .handler = obsw_s12_delete_all, .ctx = &s12_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 4,
+     .handler = obsw_s11_insert, .ctx = &s11_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 5,
+     .handler = obsw_s11_delete, .ctx = &s11_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 6,
+     .handler = obsw_s11_delete_all, .ctx = &s11_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 17,
+     .handler = obsw_s11_enable, .ctx = &s11_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 18,
+     .handler = obsw_s11_disable, .ctx = &s11_ctx},
     {.apid = 0xFFFF, .service = 19, .subservice = 1,
      .handler = obsw_s19_add, .ctx = &s19_ctx},
     {.apid = 0xFFFF, .service = 19, .subservice = 2,
@@ -512,6 +524,8 @@ int main(void)
     s5_ctx.on_event     = obsw_s19_on_event;
     s5_ctx.on_event_ctx = &s19_ctx;
 
+    obsw_s11_init(&s11_ctx, &s1_ctx, s11_acts, (uint8_t)(sizeof(s11_acts) / sizeof(s11_acts[0])));
+
     /* Watchdog */
     obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
 
@@ -574,7 +588,9 @@ int main(void)
         } else if (type == OBSW_FRAME_SENSOR) {
             obsw_sensor_frame_t sensor;
             if (obsw_sim_parse_sensor(frame, frame_len, &sensor)) {
-                /* S19 actions queued by last tick's events run first */
+                /* Due S11 activities, then S19 actions queued by last
+                 * tick's events, run before the control step */
+                (void)obsw_s11_run(&s11_ctx, &obt, &dispatcher);
                 (void)obsw_s19_run(&s19_ctx, &dispatcher);
 
                 float dt = sensor.sim_time - last_sim_time;

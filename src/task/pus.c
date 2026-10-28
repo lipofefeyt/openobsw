@@ -22,6 +22,7 @@
 #include "obsw/pus/s6.h"
 #include "obsw/pus/s8.h"
 #include "obsw/pus/s9.h"
+#include "obsw/pus/s11.h"
 #include "obsw/pus/s12.h"
 #include "obsw/pus/s19.h"
 #include "obsw/pus/s17.h"
@@ -36,7 +37,7 @@
  * obsw_s6_dump plus the 1 KB packet buffer in obsw_pus_tm_build. */
 #define PUS_STACK_DEPTH 1024U
 #define PUS_PRIORITY    3U   /* Med-high — TC processing */
-#define S19_POLL_MS     100U /* Longest wait before queued S19 actions run */
+#define PUS_POLL_MS     100U /* Longest wait before due S11 or S19 TCs run */
 
 /* ── PUS service state ────────────────────────────────────────────── */
 
@@ -59,6 +60,10 @@ static obsw_s5_ctx_t  s12_s5  = {0};
  * S12 check's critical section); the PUS task dispatches them. */
 static obsw_s19_ctx_t s19_ctx = {0};
 static obsw_s19_def_t s19_defs[4];
+
+/* S11: only the PUS task touches the schedule; OBT is read under the lock */
+static obsw_s11_ctx_t      s11_ctx = {0};
+static obsw_s11_activity_t s11_acts[4];
 
 /* S6 memory map. Patch RAM sits at ground address 0, as in the host sim
  * and opensvf, so S6 campaigns are target-independent. Internal flash is
@@ -188,6 +193,16 @@ static obsw_tc_route_t s_routes[] = {
      .handler = run_locked, .ctx = &s12_delete_l},
     {.apid = 0xFFFF, .service = 12, .subservice = 5,
      .handler = run_locked, .ctx = &s12_delete_all_l},
+    {.apid = 0xFFFF, .service = 11, .subservice = 4,
+     .handler = obsw_s11_insert, .ctx = &s11_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 5,
+     .handler = obsw_s11_delete, .ctx = &s11_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 6,
+     .handler = obsw_s11_delete_all, .ctx = &s11_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 17,
+     .handler = obsw_s11_enable, .ctx = &s11_ctx},
+    {.apid = 0xFFFF, .service = 11, .subservice = 18,
+     .handler = obsw_s11_disable, .ctx = &s11_ctx},
     {.apid = 0xFFFF, .service = 19, .subservice = 1,
      .handler = run_locked, .ctx = &s19_add_l},
     {.apid = 0xFFFF, .service = 19, .subservice = 2,
@@ -226,16 +241,23 @@ static void pus_task(void *param)
     obsw_tc_frame_item_t item;
 
     for (;;) {
-        /* Wake at least every S19_POLL_MS so queued S19 actions run even
+        /* Wake at least every PUS_POLL_MS so due S11 and S19 TCs run even
          * without uplink traffic. */
-        bool have_tc = xQueueReceive(s_tc_queue, &item, pdMS_TO_TICKS(S19_POLL_MS)) == pdTRUE;
+        bool have_tc = xQueueReceive(s_tc_queue, &item, pdMS_TO_TICKS(PUS_POLL_MS)) == pdTRUE;
         if (have_tc)
             obsw_tc_dispatcher_feed(&s_dispatcher, item.data, item.len);
+
+        /* Due S11 activities: OBT is advanced by the FDIR task, copy it under
+         * the lock. The schedule itself belongs to this task. */
+        taskENTER_CRITICAL();
+        obsw_obt_t now = s_obt;
+        taskEXIT_CRITICAL();
+        uint8_t ran = obsw_s11_run(&s11_ctx, &now, &s_dispatcher);
 
         /* The FDIR task queues S19 actions; the lock keeps the queue and the
          * definitions consistent while the batch runs (a few short TCs). */
         taskENTER_CRITICAL();
-        uint8_t ran = obsw_s19_run(&s19_ctx, &s_dispatcher);
+        ran = (uint8_t)(ran + obsw_s19_run(&s19_ctx, &s_dispatcher));
         taskEXIT_CRITICAL();
 
         /* Wake TMTC to drain any TM we just produced. */
@@ -279,6 +301,7 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
     obsw_s19_init(&s19_ctx, &s1_ctx, s19_defs, (uint8_t)(sizeof(s19_defs) / sizeof(s19_defs[0])));
     s12_s5.on_event     = obsw_s19_on_event;
     s12_s5.on_event_ctx = &s19_ctx;
+    obsw_s11_init(&s11_ctx, &s1_ctx, s11_acts, (uint8_t)(sizeof(s11_acts) / sizeof(s11_acts[0])));
 
     s6_ctx.tm_store     = tm_store;
     s6_ctx.s1           = &s1_ctx;

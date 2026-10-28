@@ -379,13 +379,36 @@ The host sim shall answer every TC frame with all TM it produces before the next
 The host sim shall boot in SAFE.
 
 **OBSW-SRS-243** `[SIM]` `IMPLEMENTED` `T`
-The host sim shall route S3, S6, S8, S9, S12, S17, S19 and S20 and expose 4 KB of readable and writable S6 memory at ground address 0.
+The host sim shall route S3, S6, S8, S9, S11, S12, S17, S19 and S20 and expose 4 KB of readable and writable S6 memory at ground address 0.
 
 ---
 
-## 21. On-board monitoring [S12]
+## 21. Time-based scheduling [S11]
 
-Scope (#79): S11, S12 and S19 are in scope for v0.18; S15 is deferred and S23 out of scope. Subtype numbers and data layouts follow opensvf's `PusService12` codec so the same campaigns run against both; alignment with the ECSS-E-ST-70-41C subtype numbering is to be reviewed.
+Scope (#79): S11, S12 and S19 are in scope for v0.18; S15 is deferred and S23 out of scope. For all three, subtype numbers and data layouts follow opensvf's `PusService11`, `PusService12` and `PusService19` codecs so the same campaigns run against both; alignment with the ECSS-E-ST-70-41C subtype numbering is to be reviewed.
+
+**OBSW-SRS-280** `[S11]` `IMPLEMENTED` `T`
+The software shall insert a time-tagged activity on TC(11,4), holding a CUC-4,2 release time and a complete TC space packet, and give it the next request ID in insertion order since boot (starting at 1, never 0, never one in use).
+
+**OBSW-SRS-281** `[S11]` `IMPLEMENTED` `T`
+The software shall reject TC(11,4) without changing state when the embedded TC is not a PUS TC space packet, is longer than `OBSW_S11_TC_MAX_LEN` (64 bytes) or is itself an S11 TC (code `0x0005`), and when the schedule is full (code `0x0004`).
+
+**OBSW-SRS-282** `[S11]` `IMPLEMENTED` `T`
+Each control tick, while the schedule is enabled, the software shall release every activity whose time tag is at or before OBT, earliest first and in insertion order for equal tags, removing it from the schedule and dispatching it through the TC dispatcher, so it gets the acceptance checks, SAFE/STANDBY gate and S1 reports of an uplinked TC at release time. A tag already in the past shall be released on the next tick.
+
+**OBSW-SRS-283** `[S11]` `IMPLEMENTED` `T`
+The software shall delete the activity with a given request ID on TC(11,5), rejecting an unknown ID with code `0x0005`, and delete all activities on TC(11,6).
+
+**OBSW-SRS-284** `[S11]` `IMPLEMENTED` `T`
+The software shall disable the schedule on TC(11,18), holding activities without releasing or dropping them, and enable it on TC(11,17), after which overdue activities are released.
+
+**OBSW-SRS-285** `[S11]` `IMPLEMENTED` `T`
+The host sim and STM32H7 FreeRTOS builds shall route TC(11,4), (11,5), (11,6), (11,17) and (11,18) and run the schedule against OBT every control tick (FreeRTOS: the PUS task, at least every 100 ms).
+*Evidence: `test/system` for the host sim; inspection of `src/task/pus.c` for FreeRTOS.*
+
+---
+
+## 22. On-board monitoring [S12]
 
 **OBSW-SRS-290** `[S12]` `IMPLEMENTED` `T`
 The software shall add, or replace for the same parameter, a monitoring definition on TC(12,3): S20 parameter ID, low and high limits (IEEE 754 float, NaN disabling that check), low and high event IDs and severity.
@@ -411,9 +434,7 @@ The host sim and STM32H7 FreeRTOS builds shall route TC(12,1) to TC(12,5) and ru
 
 ---
 
-## 22. Event-action [S19]
-
-Subtype numbers and data layouts follow opensvf's `PusService19` codec; alignment with the ECSS-E-ST-70-41C subtype numbering is to be reviewed.
+## 23. Event-action [S19]
 
 **OBSW-SRS-300** `[S19]` `IMPLEMENTED` `T`
 The software shall add, or replace for the same event, an event-action definition on TC(19,1): an S5 event ID and the action TC as a complete space packet.
@@ -439,7 +460,7 @@ The host sim shall route TC(19,1) to TC(19,5) and react to every S5 event it rai
 
 ---
 
-## 23. Product assurance [QA]
+## 24. Product assurance [QA]
 
 **OBSW-SRS-260** `[QA]` `IMPLEMENTED` `I`
 Each release shall be tagged and described in `CHANGELOG.md`.

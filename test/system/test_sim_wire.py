@@ -251,3 +251,37 @@ def test_s19_action_is_still_mode_gated_in_safe(run):
     out = run(s)
     [rej] = out.s1_for(0x3FFF)
     assert (rej.subservice, rej.failure_code) == (2, FAIL_MODE_GATED)
+
+
+# ---- S11 ---------------------------------------------------------------------
+
+@pytest.mark.requirement("OBSW-SRS-282")
+@pytest.mark.requirement("OBSW-SRS-285")
+def test_s11_releases_scheduled_tc_at_its_obt(run):
+    scheduled = tc_packet(20, 1, struct.pack(">Hf", PARAM_BDOT_GAIN, 20000.0), seq=0x2AAA)
+    s = Stream()
+    s.tc(9, 128, struct.pack(">IH", 1000, 0))  # OBT = 1000 s
+    s.nominal()
+    ins = s.tc(11, 4, struct.pack(">IH", 1008, 0) + scheduled)
+    s.ticks(16, dt=1.0)
+    out = run(s)
+    assert [t.subservice for t in out.s1_for(ins)] == [1, 7]
+    assert [t.subservice for t in out.s1_for(0x2AAA)] == [1, 7]
+    gains = [struct.unpack(">fff", p)[0] for p in out.hk(HK_AOCS)]
+    assert gains[0] == pytest.approx(1.0e4)   # before 1008 s
+    assert gains[-1] == pytest.approx(2.0e4)  # after release
+
+
+@pytest.mark.requirement("OBSW-SRS-282")
+@pytest.mark.requirement("OBSW-SRS-182")
+def test_s11_release_is_mode_gated_at_release_time(run):
+    scheduled = tc_packet(20, 1, struct.pack(">Hf", PARAM_BDOT_GAIN, 20000.0), seq=0x2AAA)
+    s = Stream()
+    s.tc(9, 128, struct.pack(">IH", 1000, 0))
+    s.nominal()
+    s.tc(11, 4, struct.pack(">IH", 1003, 0) + scheduled)  # accepted in NOMINAL
+    s.tc(8, 1, struct.pack(">HB", 2, 0))                   # SAFE before release
+    s.ticks(6, dt=1.0)
+    out = run(s)
+    [rej] = out.s1_for(0x2AAA)
+    assert (rej.subservice, rej.failure_code) == (2, FAIL_MODE_GATED)

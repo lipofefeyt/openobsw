@@ -8,6 +8,11 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Added
 
+- PUS S11 time-based scheduling: TC(11,4) inserts a CUC-4,2-tagged TC,
+  released at OBT through the normal dispatcher (SAFE gate and S1 reports
+  apply at release); TC(11,5)/(11,6) delete, TC(11,17)/(11,18)
+  enable/disable. `obsw_tc_packet_check()` validates stored TCs for S11
+  and S19.
 - PUS S12 on-board monitoring: TC(12,1)–(12,5), limit checks on S20
   parameters each control tick, S5 events on entering an out-of-limit
   state, latched until back in range. Routed on the host sim and STM32H7

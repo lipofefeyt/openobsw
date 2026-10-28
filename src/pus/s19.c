@@ -7,14 +7,10 @@
  */
 #include "obsw/pus/s19.h"
 
-#include "obsw/ccsds/space_packet.h"
 #include "obsw/util/bytes.h"
 
 #include <string.h>
 
-/* PUS-C TC secondary header: version/ack(1) service(1) subservice(1) source(2) */
-#define S19_PUS_SEC_HDR_LEN 5U
-#define S19_ACTION_MIN_LEN (OBSW_SP_PRIMARY_HEADER_LEN + S19_PUS_SEC_HDR_LEN)
 
 static obsw_s19_def_t *find_def(obsw_s19_ctx_t *s, uint16_t event_id)
 {
@@ -29,15 +25,9 @@ static obsw_s19_def_t *find_def(obsw_s19_ctx_t *s, uint16_t event_id)
 /* An action must be a complete PUS TC packet, and not an S19 TC */
 static bool action_valid(const uint8_t *pkt, uint16_t len)
 {
-    if ((len < S19_ACTION_MIN_LEN) || (len > OBSW_S19_ACTION_MAX_LEN)) {
-        return false;
-    }
-    obsw_sp_packet_t sp;
-    if (obsw_sp_parse(pkt, len, &sp) != OBSW_SP_OK) {
-        return false;
-    }
-    return (sp.hdr.type == OBSW_SP_TYPE_TC) && (sp.hdr.sec_hdr_flag != 0U) &&
-           (sp.payload_len >= S19_PUS_SEC_HDR_LEN) && (sp.payload[1] != 19U);
+    uint8_t svc = 0U;
+    return (len <= OBSW_S19_ACTION_MAX_LEN) && (obsw_tc_packet_check(pkt, len, &svc) == OBSW_TC_OK) &&
+           (svc != 19U);
 }
 
 void obsw_s19_init(obsw_s19_ctx_t *ctx, obsw_s1_ctx_t *s1, obsw_s19_def_t *defs,
