@@ -48,6 +48,7 @@ per target:
 | S8 function management | 8,1 | 8,1 | 8,1 | — | 8,1 |
 | S9 time management | 9,128 | 9,128 | — | — | — |
 | S12 on-board monitoring | 12,1–12,5 | 12,1–12,5 | — | — | — |
+| S19 event-action | 19,1–19,5 | 19,1–19,5 | — | — | — |
 | S17 are-you-alive | 17,1 | 17,1 | 17,1 | 17,1 | 17,1 |
 | S20 parameter management | 20,1 20,3 | 20,1 20,3 | — | 20,1 20,3 | — |
 
@@ -60,6 +61,7 @@ per target:
 | S8 | TC(8,1) perform | Function 1 recover NOMINAL, 2 SAFE, 3 STANDBY |
 | S9 | TC(9,128) set OBT | Mission-specific subservice, CUC-4,2 |
 | S12 | TC(12,1/2) enable/disable, TC(12,3) add, TC(12,4/5) delete | Limit checks on S20 parameters each tick; S5 event on entering an out-of-limit state, latched until back in range |
+| S19 | TC(19,1) add, TC(19,2/3) delete, TC(19,4/5) enable/disable | Event ID → stored TC; runs on the next tick through the dispatcher (SAFE gate and S1 reports apply). FreeRTOS reacts to S12 events |
 | S17 | TC(17,1) ping, TM(17,2) pong | Heartbeat for OpenSVF and YAMCS |
 | S20 | TC(20,1) set, TC(20,3) get, TM(20,2) report | Static parameter table |
 

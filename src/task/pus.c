@@ -23,6 +23,7 @@
 #include "obsw/pus/s8.h"
 #include "obsw/pus/s9.h"
 #include "obsw/pus/s12.h"
+#include "obsw/pus/s19.h"
 #include "obsw/pus/s17.h"
 #include "obsw/pus/s20.h"
 #include "obsw/tc/dispatcher.h"
@@ -35,6 +36,7 @@
  * obsw_s6_dump plus the 1 KB packet buffer in obsw_pus_tm_build. */
 #define PUS_STACK_DEPTH 1024U
 #define PUS_PRIORITY    3U   /* Med-high — TC processing */
+#define S19_POLL_MS     100U /* Longest wait before queued S19 actions run */
 
 /* ── PUS service state ────────────────────────────────────────────── */
 
@@ -52,6 +54,11 @@ static obsw_s6_ctx_t  s6_ctx  = {0};
 static obsw_s12_ctx_t s12_ctx = {0};
 static obsw_s12_def_t s12_defs[8];
 static obsw_s5_ctx_t  s12_s5  = {0};
+
+/* S19: reacts to S12 events. The FDIR task queues actions (inside the
+ * S12 check's critical section); the PUS task dispatches them. */
+static obsw_s19_ctx_t s19_ctx = {0};
+static obsw_s19_def_t s19_defs[4];
 
 /* S6 memory map. Patch RAM sits at ground address 0, as in the host sim
  * and opensvf, so S6 campaigns are target-independent. Internal flash is
@@ -146,6 +153,11 @@ static locked_handler_t s12_disable_l    = {obsw_s12_disable, &s12_ctx};
 static locked_handler_t s12_add_l        = {obsw_s12_add, &s12_ctx};
 static locked_handler_t s12_delete_l     = {obsw_s12_delete, &s12_ctx};
 static locked_handler_t s12_delete_all_l = {obsw_s12_delete_all, &s12_ctx};
+static locked_handler_t s19_add_l        = {obsw_s19_add, &s19_ctx};
+static locked_handler_t s19_delete_l     = {obsw_s19_delete, &s19_ctx};
+static locked_handler_t s19_delete_all_l = {obsw_s19_delete_all, &s19_ctx};
+static locked_handler_t s19_enable_l     = {obsw_s19_enable, &s19_ctx};
+static locked_handler_t s19_disable_l    = {obsw_s19_disable, &s19_ctx};
 
 /* S3 route ctx pointers are filled in at init time from obsw_fdir_get_s3_ctx(). */
 static obsw_tc_route_t s_routes[] = {
@@ -176,6 +188,16 @@ static obsw_tc_route_t s_routes[] = {
      .handler = run_locked, .ctx = &s12_delete_l},
     {.apid = 0xFFFF, .service = 12, .subservice = 5,
      .handler = run_locked, .ctx = &s12_delete_all_l},
+    {.apid = 0xFFFF, .service = 19, .subservice = 1,
+     .handler = run_locked, .ctx = &s19_add_l},
+    {.apid = 0xFFFF, .service = 19, .subservice = 2,
+     .handler = run_locked, .ctx = &s19_delete_l},
+    {.apid = 0xFFFF, .service = 19, .subservice = 3,
+     .handler = run_locked, .ctx = &s19_delete_all_l},
+    {.apid = 0xFFFF, .service = 19, .subservice = 4,
+     .handler = run_locked, .ctx = &s19_enable_l},
+    {.apid = 0xFFFF, .service = 19, .subservice = 5,
+     .handler = run_locked, .ctx = &s19_disable_l},
     /* S6 is not in the SAFE/STANDBY whitelist: memory TCs need NOMINAL */
     {.apid = 0xFFFF, .service = 6,  .subservice = 2,
      .handler = obsw_s6_load,    .ctx = &s6_ctx},
@@ -204,13 +226,21 @@ static void pus_task(void *param)
     obsw_tc_frame_item_t item;
 
     for (;;) {
-        if (xQueueReceive(s_tc_queue, &item, portMAX_DELAY) != pdTRUE)
-            continue;
+        /* Wake at least every S19_POLL_MS so queued S19 actions run even
+         * without uplink traffic. */
+        bool have_tc = xQueueReceive(s_tc_queue, &item, pdMS_TO_TICKS(S19_POLL_MS)) == pdTRUE;
+        if (have_tc)
+            obsw_tc_dispatcher_feed(&s_dispatcher, item.data, item.len);
 
-        obsw_tc_dispatcher_feed(&s_dispatcher, item.data, item.len);
+        /* The FDIR task queues S19 actions; the lock keeps the queue and the
+         * definitions consistent while the batch runs (a few short TCs). */
+        taskENTER_CRITICAL();
+        uint8_t ran = obsw_s19_run(&s19_ctx, &s_dispatcher);
+        taskEXIT_CRITICAL();
 
         /* Wake TMTC to drain any TM we just produced. */
-        xTaskNotify(s_tmtc_handle, 0, eNoAction);
+        if (have_tc || ran > 0U)
+            xTaskNotify(s_tmtc_handle, 0, eNoAction);
     }
 }
 
@@ -246,6 +276,9 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
     s12_s5.apid     = SRDB_APID_DEFAULT;
     obsw_s12_init(&s12_ctx, &s1_ctx, &s12_s5, s20_params, s20_ctx.table_len,
                   s12_defs, (uint8_t)(sizeof(s12_defs) / sizeof(s12_defs[0])));
+    obsw_s19_init(&s19_ctx, &s1_ctx, s19_defs, (uint8_t)(sizeof(s19_defs) / sizeof(s19_defs[0])));
+    s12_s5.on_event     = obsw_s19_on_event;
+    s12_s5.on_event_ctx = &s19_ctx;
 
     s6_ctx.tm_store     = tm_store;
     s6_ctx.s1           = &s1_ctx;

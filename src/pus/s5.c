@@ -54,5 +54,11 @@ int obsw_s5_report(obsw_s5_ctx_t *ctx,
         }
     }
 
+    /* The event happened even if its TM did not fit: hooks always see it */
+    if (ctx->on_event != NULL)
+    {
+        ctx->on_event(event_id, ctx->on_event_ctx);
+    }
+
     return rc;
 }

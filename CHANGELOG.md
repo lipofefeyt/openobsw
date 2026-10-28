@@ -12,6 +12,9 @@ README roadmap. Releases before v0.16 are described on the
   parameters each control tick, S5 events on entering an out-of-limit
   state, latched until back in range. Routed on the host sim and STM32H7
   FreeRTOS; wire format matches opensvf's `PusService12`.
+- PUS S19 event-action: TC(19,1)–(19,5) link an S5 event to a stored TC,
+  dispatched on the next tick through the normal dispatcher (SAFE gate and
+  S1 reports apply). S5 gains an optional per-event hook.
 - S20 parameters carry their type (`OBSW_S20_U32`, `_I32`, `_F32`);
   `obsw_s20_find()` and `obsw_s20_as_float()` accessors.
 
