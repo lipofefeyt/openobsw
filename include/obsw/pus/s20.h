@@ -43,10 +43,18 @@
      float    f32;
  } obsw_s20_value_t;
  
+ /** How a parameter's 32-bit raw value is interpreted (default U32). */
+ typedef enum {
+     OBSW_S20_U32 = 0,
+     OBSW_S20_I32 = 1,
+     OBSW_S20_F32 = 2,
+ } obsw_s20_type_t;
+ 
  /** Single entry in the static parameter table. */
  typedef struct {
-     uint16_t       param_id;
+     uint16_t         param_id;
      obsw_s20_value_t value;
+     obsw_s20_type_t  type;   /**< Matches the parameter's SRDB type */
  } obsw_s20_param_t;
  
  /* ------------------------------------------------------------------ */
@@ -82,6 +90,18 @@
   * or TM(1,2) on unknown param_id.
   */
  int obsw_s20_get(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx);
+ 
+ /* ------------------------------------------------------------------ */
+ /* Accessors                                                           */
+ /* ------------------------------------------------------------------ */
+ 
+ /** Look up a parameter by ID; NULL if the table has none. */
+ const obsw_s20_param_t *obsw_s20_find(const obsw_s20_param_t *table,
+                                       uint8_t table_len,
+                                       uint16_t param_id);
+ 
+ /** A parameter's current value as float, converted according to its type. */
+ float obsw_s20_as_float(const obsw_s20_param_t *p);
  
  #ifdef __cplusplus
  }

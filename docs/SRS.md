@@ -51,6 +51,9 @@ can sit next to related ones. IDs are never reused.
 | [SDB] | Spacecraft Resource Database | 220–239 |
 | [SIM] | Host simulation interface | 240–259 |
 | [QA] | Product assurance | 260–279 |
+| [S11] | Time-based scheduling | 280–289 |
+| [S12] | On-board monitoring | 290–299 |
+| [S19] | Event-action | 300–309 |
 
 ### Status
 
@@ -289,6 +292,9 @@ The software shall set the 32-bit raw value of a parameter on TC(20,1) and repor
 **OBSW-SRS-171** `[S20]` `IMPLEMENTED` `T`
 The software shall reject TC(20,1) and TC(20,3) for an unknown parameter ID (code `0x0004`) or truncated user data (code `0x0005`).
 
+**OBSW-SRS-172** `[S20]` `IMPLEMENTED` `T`
+Each S20 parameter shall carry its SRDB type (unsigned, signed or float), and services that use parameter values numerically shall convert them according to that type.
+
 ---
 
 ## 17. Mode management and FDIR [MOD]
@@ -373,11 +379,39 @@ The host sim shall answer every TC frame with all TM it produces before the next
 The host sim shall boot in SAFE.
 
 **OBSW-SRS-243** `[SIM]` `IMPLEMENTED` `T`
-The host sim shall route S3, S6, S8, S9, S17 and S20 and expose 4 KB of readable and writable S6 memory at ground address 0.
+The host sim shall route S3, S6, S8, S9, S12, S17 and S20 and expose 4 KB of readable and writable S6 memory at ground address 0.
 
 ---
 
-## 21. Product assurance [QA]
+## 21. On-board monitoring [S12]
+
+Scope (#79): S11, S12 and S19 are in scope for v0.18; S15 is deferred and S23 out of scope. Subtype numbers and data layouts follow opensvf's `PusService12` codec so the same campaigns run against both; alignment with the ECSS-E-ST-70-41C subtype numbering is to be reviewed.
+
+**OBSW-SRS-290** `[S12]` `IMPLEMENTED` `T`
+The software shall add, or replace for the same parameter, a monitoring definition on TC(12,3): S20 parameter ID, low and high limits (IEEE 754 float, NaN disabling that check), low and high event IDs and severity.
+
+**OBSW-SRS-291** `[S12]` `IMPLEMENTED` `T`
+The software shall reject TC(12,3) without changing state when the data is truncated, the parameter is unknown, the severity is outside 1..4 or the low limit exceeds the high limit (code `0x0005`), and when the definition table is full (code `0x0004`).
+
+**OBSW-SRS-292** `[S12]` `IMPLEMENTED` `T`
+Each control tick, while monitoring is enabled, the software shall compare every monitored parameter's current value with its limits and raise the definition's S5 event, with the value as auxiliary data, once on entry into a low or high out-of-limit state; the event shall not repeat until the value returns inside that limit.
+
+**OBSW-SRS-293** `[S12]` `IMPLEMENTED` `T`
+The software shall disable monitoring on TC(12,2), keeping the definitions, and enable it on TC(12,1), clearing every latched out-of-limit state.
+
+**OBSW-SRS-294** `[S12]` `IMPLEMENTED` `T`
+The software shall delete the definition for a parameter on TC(12,4), rejecting an unknown parameter with code `0x0005`, and delete all definitions on TC(12,5).
+
+**OBSW-SRS-295** `[S12]` `IMPLEMENTED` `T`
+Monitoring events shall be reported through S5, so that a high-severity event on the safe-trigger list commands SAFE where S5 is connected to the mode machine (host sim).
+
+**OBSW-SRS-296** `[S12]` `IMPLEMENTED` `T`
+The host sim and STM32H7 FreeRTOS builds shall route TC(12,1) to TC(12,5) and run the monitoring check every control tick (FreeRTOS: the FDIR full tick).
+*Evidence: `test/system` for the host sim; inspection of `src/task/pus.c` and `src/task/fdir.c` for FreeRTOS.*
+
+---
+
+## 22. Product assurance [QA]
 
 **OBSW-SRS-260** `[QA]` `IMPLEMENTED` `I`
 Each release shall be tagged and described in `CHANGELOG.md`.

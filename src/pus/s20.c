@@ -109,3 +109,29 @@
      (void)obsw_s1_completion_success(s->s1, tc);
      return 0;
  }
+
+ const obsw_s20_param_t *obsw_s20_find(const obsw_s20_param_t *table,
+                                       uint8_t table_len,
+                                       uint16_t param_id)
+ {
+     if (table == NULL) {
+         return NULL;
+     }
+     for (uint8_t i = 0; i < table_len; i++) {
+         if (table[i].param_id == param_id) {
+             return &table[i];
+         }
+     }
+     return NULL;
+ }
+
+ float obsw_s20_as_float(const obsw_s20_param_t *p)
+ {
+     if (p->type == OBSW_S20_F32) {
+         return p->value.f32;
+     }
+     if (p->type == OBSW_S20_I32) {
+         return (float)p->value.i32;
+     }
+     return (float)p->value.u32;
+ }

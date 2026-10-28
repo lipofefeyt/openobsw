@@ -34,4 +34,10 @@ float obsw_pus_s20_get_float(uint16_t param_id, float default_val);
  */
 void obsw_pus_obt_advance(uint32_t dt_ms);
 
+/*
+ * Run the S12 limit checks once. Called from the FDIR full tick; guarded
+ * against concurrent TC(12,x) changes from the PUS task.
+ */
+void obsw_pus_s12_check(void);
+
 #endif /* OBSW_TASK_PUS_H */

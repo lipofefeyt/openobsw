@@ -164,3 +164,48 @@ def test_defined_hk_set_reports_live_parameters_once_enabled(run):
     uptimes = [u for u, _ in reports]
     assert uptimes == sorted(uptimes) and uptimes[-1] > uptimes[0]
     assert all(g == pytest.approx(1.0e4) for _, g in reports)
+
+
+# ---- S12 ---------------------------------------------------------------------
+
+EV_POWER_FAULT_3V3 = 0x0020  # safe_trigger: true in srdb/data/events.yaml
+
+
+def s12_add(param_id, low, high, ev_low, ev_high, severity):
+    nan = float("nan")
+    return struct.pack(">HffHHB", param_id, nan if low is None else low,
+                       nan if high is None else high, ev_low, ev_high, severity)
+
+
+@pytest.mark.requirement("OBSW-SRS-292")
+@pytest.mark.requirement("OBSW-SRS-296")
+def test_s12_limit_crossing_raises_event_once(run):
+    s = Stream()
+    s.nominal()
+    add = s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, 0x0202, 2))
+    s.ticks(6, dt=1.0)  # obc_uptime counts sim seconds: crosses 2.5 once
+    out = run(s)
+    assert [t.subservice for t in out.s1_for(add)] == [1, 7]
+    events = [t for t in out.tms if t.service == 5]
+    assert [(t.subservice, struct.unpack(">H", t.app[:2])[0]) for t in events] == [(2, 0x0202)]
+    assert struct.unpack(">f", events[0].app[2:6])[0] == pytest.approx(3.0)
+
+
+@pytest.mark.requirement("OBSW-SRS-295")
+def test_s12_high_event_on_safe_trigger_list_commands_safe(run):
+    s = Stream()
+    s.nominal()
+    s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, EV_POWER_FAULT_3V3, 4))
+    s.ticks(12, dt=1.0)
+    out = run(s)
+    assert any(t.service == 5 and t.subservice == 4 for t in out.tms)
+    modes = [struct.unpack(DHS_OBC_FMT, p)[0] for p in out.hk(HK_DHS_OBC)]
+    assert modes[-1] == MODE_SAFE
+
+
+@pytest.mark.requirement("OBSW-SRS-182")
+def test_s12_definitions_need_nominal(run):
+    s = Stream()
+    add = s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, 0x0202, 2))
+    out = run(s)
+    assert [(t.subservice, t.failure_code) for t in out.s1_for(add)] == [(2, FAIL_MODE_GATED)]

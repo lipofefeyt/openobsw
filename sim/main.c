@@ -78,6 +78,8 @@ static obsw_s17_ctx_t s17_ctx = {0};
 static obsw_obt_t     obt     = {0};
 static obsw_s9_ctx_t  s9_ctx  = {.obt = &obt};
 static obsw_s20_ctx_t  s20_ctx = {0};
+static obsw_s12_ctx_t  s12_ctx = {0};
+static obsw_s12_def_t  s12_defs[16];
 static obsw_s6_ctx_t  s6_ctx  = {0};
 static obsw_fsm_ctx_t fsm_ctx = {0};
 
@@ -238,20 +240,20 @@ static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT,   .value = {.u32 = 0}},
     {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,     .value = {.u32 = 0}},
     {.param_id = SRDB_PARAM_WATCHDOG_TICKS_REMAINING,.value = {.u32 = 30}},
-    {.param_id = SRDB_PARAM_BDOT_GAIN,               .value = {.f32 = 1.0e4f}},
-    {.param_id = SRDB_PARAM_BDOT_HPF_TAU,            .value = {.f32 = 15.0f}},
-    {.param_id = SRDB_PARAM_ADCS_KP,                 .value = {.f32 = 0.5f}},
-    {.param_id = SRDB_PARAM_ADCS_KD,                 .value = {.f32 = 0.1f}},
+    {.param_id = SRDB_PARAM_BDOT_GAIN,               .value = {.f32 = 1.0e4f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_BDOT_HPF_TAU,            .value = {.f32 = 15.0f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_ADCS_KP,                 .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_ADCS_KD,                 .value = {.f32 = 0.1f}, .type = OBSW_S20_F32},
     /* Orbit and dynamics configuration (#68) — readable via TC(20,3) */
-    {.param_id = SRDB_PARAM_ORBIT_ALTITUDE_KM,        .value = {.f32 = 550.0f}},
-    {.param_id = SRDB_PARAM_ORBIT_INCLINATION_DEG,    .value = {.f32 = 97.4f}},
-    {.param_id = SRDB_PARAM_SC_INERTIA_XX,            .value = {.f32 = 2.0e-3f}},
-    {.param_id = SRDB_PARAM_SC_INERTIA_YY,            .value = {.f32 = 2.5e-3f}},
-    {.param_id = SRDB_PARAM_SC_INERTIA_ZZ,            .value = {.f32 = 1.5e-3f}},
-    {.param_id = SRDB_PARAM_MTQ_MAX_DIPOLE,           .value = {.f32 = 10.0f}},
-    {.param_id = SRDB_PARAM_SC_OMEGA_X0,              .value = {.f32 = 0.5f}},
-    {.param_id = SRDB_PARAM_SC_OMEGA_Y0,              .value = {.f32 = 0.5f}},
-    {.param_id = SRDB_PARAM_SC_OMEGA_Z0,              .value = {.f32 = 0.5f}},
+    {.param_id = SRDB_PARAM_ORBIT_ALTITUDE_KM,        .value = {.f32 = 550.0f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_ORBIT_INCLINATION_DEG,    .value = {.f32 = 97.4f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_SC_INERTIA_XX,            .value = {.f32 = 2.0e-3f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_SC_INERTIA_YY,            .value = {.f32 = 2.5e-3f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_SC_INERTIA_ZZ,            .value = {.f32 = 1.5e-3f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_MTQ_MAX_DIPOLE,           .value = {.f32 = 10.0f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_SC_OMEGA_X0,              .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_SC_OMEGA_Y0,              .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_SC_OMEGA_Z0,              .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
 };
 
 static float s20_get_f32(uint16_t param_id, float default_val)
@@ -380,6 +382,16 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s6_check, .ctx = &s6_ctx},
     {.apid = 0xFFFF, .service = 6,  .subservice = 9,
      .handler = obsw_s6_dump, .ctx = &s6_ctx},
+    {.apid = 0xFFFF, .service = 12, .subservice = 1,
+     .handler = obsw_s12_enable, .ctx = &s12_ctx},
+    {.apid = 0xFFFF, .service = 12, .subservice = 2,
+     .handler = obsw_s12_disable, .ctx = &s12_ctx},
+    {.apid = 0xFFFF, .service = 12, .subservice = 3,
+     .handler = obsw_s12_add, .ctx = &s12_ctx},
+    {.apid = 0xFFFF, .service = 12, .subservice = 4,
+     .handler = obsw_s12_delete, .ctx = &s12_ctx},
+    {.apid = 0xFFFF, .service = 12, .subservice = 5,
+     .handler = obsw_s12_delete_all, .ctx = &s12_ctx},
 };
 
 #ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
@@ -477,6 +489,11 @@ int main(void)
     s20_ctx.apid        = SRDB_APID_DEFAULT;
     s20_ctx.table       = s20_params;
     s20_ctx.table_len   = sizeof(s20_params) / sizeof(s20_params[0]);
+
+    /* S12 limit checks on S20 parameters; events go through s5_ctx, so a
+     * HIGH event on the safe-trigger list commands SAFE */
+    obsw_s12_init(&s12_ctx, &s1_ctx, &s5_ctx, s20_params, (uint8_t)s20_ctx.table_len,
+                  s12_defs, (uint8_t)(sizeof(s12_defs) / sizeof(s12_defs[0])));
 
     /* Watchdog */
     obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
@@ -653,6 +670,7 @@ int main(void)
                 param_obc_wd_status = SRDB_ENUM_OBC_WATCHDOG_STATUS_NOMINAL; /* kicked each tick */
 
                 obsw_wd_kick(&wd_ctx);
+                obsw_s12_check(&s12_ctx);
                 obsw_s3_tick(&s3_ctx);
             }
         }
