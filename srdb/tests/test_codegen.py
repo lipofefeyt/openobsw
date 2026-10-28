@@ -38,6 +38,16 @@ class TestCodegen:
         assert "SRDB_HK_NOMINAL_HK" in header
         assert "SRDB_HK_FDIR_HK" in header
 
+    def test_hk_layout_macros(self, srdb):
+        header = generate_header(srdb)
+        assert "#define SRDB_HK_NOMINAL_HK_PARAM_COUNT" in header
+        line = next(l for l in header.splitlines()
+                    if l.startswith("#define SRDB_HK_NOMINAL_HK_SIZES "))
+        assert line.endswith("{ 2U, 2U, 2U, 4U }")  # int16, uint16, uint16, uint32
+        line = next(l for l in header.splitlines()
+                    if l.startswith("#define SRDB_HK_DHS_OBC_HK_DATA_LEN "))
+        assert line.split()[-1] == "11U"
+
     def test_tc_routing_macros(self, srdb):
         header = generate_header(srdb)
         assert "SRDB_TC_ARE_YOU_ALIVE_SVC" in header

@@ -216,6 +216,10 @@ The software shall reject TC(3,1) without changing state when the set ID exists,
 **OBSW-SRS-095** `[S3]` `IMPLEMENTED` `T`
 The software shall emit TM(3,25) for a set on demand, independent of its schedule.
 
+**OBSW-SRS-097** `[S3]` `IMPLEMENTED` `T`
+Every boot-time housekeeping set a build reports shall have the parameter count, order and widths of its SRDB definition, so the generated XTCE decodes it. Widths shall come from the generated `SRDB_HK_<SET>_SIZES`, and a build shall not report a set whose parameters it cannot measure.
+*Evidence: `test/system` decodes every sim set against the SRDB; `_Static_assert` on parameter counts in every target.*
+
 **OBSW-SRS-096** `[S3]` `IMPLEMENTED` `T`
 The software shall delete housekeeping sets created by TC(3,1) on TC(3,3) (`N | set_id × N`), all or nothing: TM(1,2) code `0x0005` with no set deleted if the data is malformed or any set is unknown, repeated, a boot-time set or enabled. Freed set slots and parameter storage shall be reusable by later TC(3,1). *(#91)*
 

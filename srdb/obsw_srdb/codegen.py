@@ -208,6 +208,25 @@ def generate_header(srdb: SRDB) -> str:
         )
     lines.append("")
 
+    # TM(3,25) layout per set, in parameter order: targets bind their HK
+    # variables to these so the on-board layout cannot drift from the XTCE
+    lines += [
+        "/* ---------------------------------------------------------------- */",
+        "/* HK set layouts (parameter byte sizes, TM(3,25) order)            */",
+        "/* ---------------------------------------------------------------- */",
+        "",
+    ]
+    params = {p.name: p for p in srdb.parameters}
+    for h in srdb.hk_sets:
+        prefix = f"SRDB_HK_{h.name.upper()}"
+        sizes = [_param_bits(params[n]) // 8 for n in h.parameters]
+        lines += [
+            f"#define {prefix + '_PARAM_COUNT':<48s} {len(sizes)}U",
+            f"#define {prefix + '_DATA_LEN':<48s} {sum(sizes)}U",
+            f"#define {prefix + '_SIZES':<48s} {{ {', '.join(f'{n}U' for n in sizes)} }}",
+        ]
+    lines.append("")
+
     safe_ids = srdb.safe_trigger_event_ids()
     lines += [
         "/* ---------------------------------------------------------------- */",

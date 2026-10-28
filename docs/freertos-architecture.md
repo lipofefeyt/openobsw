@@ -269,6 +269,11 @@ seconds on this path.
 | SID | Name | Parameters | Default interval |
 |---|---|---|---|
 | 2 | `fdir_hk` | `safe_mode_entry_count`, `watchdog_kick_count`, `watchdog_ticks_remaining` | 60 s |
+
+Parameter widths come from the SRDB (`SRDB_HK_<SET>_SIZES`, bound at init with
+`obsw_s3_bind_sizes`), so the TM(3,25) layout matches the generated XTCE.
+`nominal_hk` (SID 1) is not reported on this target: it carries OBC temperature
+and supply voltages, which are not measured yet (INA219, #39).
 | 7 | `aocs_bdot_hk` | `bdot_mag_x/y/z` [T], `bdot_m_cmd_x/y/z` [Am²], `bdot_mag_valid` | 10 s |
 
 All sets are **disabled at boot**. Enable via TC(3,5) over CP2102:

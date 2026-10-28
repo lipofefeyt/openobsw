@@ -7,7 +7,7 @@ import struct
 
 import pytest
 
-from conftest import (FAIL_ILLEGAL_SUBSVC, FAIL_ILLEGAL_SVC, FAIL_MEM_ACCESS,
+from conftest import (REPO, FAIL_ILLEGAL_SUBSVC, FAIL_ILLEGAL_SVC, FAIL_MEM_ACCESS,
                       FAIL_MODE_GATED, HK_AOCS, HK_DHS_OBC, MODE_NOMINAL, MODE_SAFE,
                       PARAM_BDOT_GAIN, PARAM_OBC_UPTIME, Stream)
 
@@ -315,3 +315,24 @@ def test_tc33_deletes_defined_set_and_refuses_boot_set(run):
     assert [t.subservice for t in out.s1_for(delete)] == [1, 7]
     assert [t.subservice for t in out.s1_for(redefine)] == [1, 7]
     assert [(t.subservice, t.failure_code) for t in out.s1_for(boot)] == [(2, 0x0005)]
+
+
+# ---- HK layout against the SRDB -----------------------------------------------
+
+@pytest.mark.requirement("OBSW-SRS-097")
+def test_every_boot_hk_set_matches_its_srdb_layout(run):
+    from obsw_srdb import SRDBLoader
+    srdb = SRDBLoader.load(REPO / "srdb" / "data")
+    params = {p.name: p for p in srdb.parameters}
+    width = {"uint8": 1, "int8": 1, "uint16": 2, "int16": 2,
+             "uint32": 4, "int32": 4, "float32": 4}
+    expected = {h.id: sum(width[params[n].type.value] for n in h.parameters)
+                for h in srdb.hk_sets}
+
+    s = Stream()
+    s.ticks(60)  # every boot-time set has reported at least once by tick 60
+    out = run(s)
+    seen = {t.app[0]: len(t.app) - 1 for t in out.tms if (t.service, t.subservice) == (3, 25)}
+    assert {1, 2, 3, 4, 6} <= set(seen), f"sets reported: {sorted(seen)}"
+    for sid, length in seen.items():
+        assert length == expected[sid], f"set {sid}: {length} B on board, {expected[sid]} B in SRDB"

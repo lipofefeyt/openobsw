@@ -96,9 +96,29 @@ static const obsw_s6_region_t s6_regions[] = {
 };
 static obsw_wd_ctx_t  wd_ctx  = {0};
 
-static uint16_t param_uptime_s         = 0;
 static uint16_t param_safe_entry_count = 0;
 static uint32_t param_wd_kick_count    = 0;
+
+/* Boot-time HK sets. Pointers only, in SRDB parameter order: widths come
+ * from SRDB_HK_<SET>_SIZES at init (obsw_s3_bind_sizes), so TM(3,25)
+ * always matches the generated XTCE. Each variable has its SRDB width. */
+#define HK_PARAMS(name, ...)                                                   \
+    static obsw_s3_param_t name[] = {__VA_ARGS__}
+
+/* nominal_hk (SID 1): thermal and power are S20 stubs in the sim */
+static int16_t  hk_obc_temperature = 0;  /* obc_temperature [0.1 degC]  */
+static uint16_t hk_obc_v3v3        = 0;  /* obc_voltage_3v3 [mV]        */
+static uint16_t hk_obc_v5v         = 0;  /* obc_voltage_5v [mV]         */
+static uint32_t hk_obc_uptime      = 0;  /* obc_uptime [s]              */
+HK_PARAMS(nominal_hk_params,
+          {.ptr = &hk_obc_temperature}, {.ptr = &hk_obc_v3v3},
+          {.ptr = &hk_obc_v5v}, {.ptr = &hk_obc_uptime});
+
+/* fdir_hk (SID 2) */
+static uint32_t hk_wd_ticks_remaining = 0;
+HK_PARAMS(fdir_hk_params,
+          {.ptr = &param_safe_entry_count}, {.ptr = &param_wd_kick_count},
+          {.ptr = &hk_wd_ticks_remaining});
 
 /* DHS OBC HK — reported in TM(3,25) set_id=3, consumed by opensvf */
 static uint8_t  param_obc_mode        = 0;   /* SRDB_ENUM_OBC_MODE_*         */
@@ -108,42 +128,31 @@ static uint8_t  param_obc_mem_pct     = 0;   /* mass-memory fill % (stub)    */
 static uint8_t  param_obc_health      = 0;   /* SRDB_ENUM_OBC_HEALTH_* (stub) */
 static uint16_t param_obc_reset_count = 0;   /* reset counter (stub = 0)     */
 static uint8_t  param_obc_cpu_load    = 0;   /* CPU utilisation % (stub)     */
+HK_PARAMS(dhs_obc_hk_params,
+          {.ptr = &param_obc_mode}, {.ptr = &param_obc_obt}, {.ptr = &param_obc_wd_status},
+          {.ptr = &param_obc_mem_pct}, {.ptr = &param_obc_health},
+          {.ptr = &param_obc_reset_count}, {.ptr = &param_obc_cpu_load});
 
-static obsw_s3_param_t nominal_hk_params[] = {
-    {.ptr = &param_uptime_s, .size = OBSW_S3_PARAM_U16},
-};
-static obsw_s3_param_t fdir_hk_params[] = {
-    {.ptr = &param_safe_entry_count, .size = OBSW_S3_PARAM_U16},
-    {.ptr = &param_wd_kick_count,    .size = OBSW_S3_PARAM_U32},
-};
-static obsw_s3_param_t dhs_obc_hk_params[] = {
-    {.ptr = &param_obc_mode,        .size = OBSW_S3_PARAM_U8},
-    {.ptr = &param_obc_obt,         .size = OBSW_S3_PARAM_U32},
-    {.ptr = &param_obc_wd_status,   .size = OBSW_S3_PARAM_U8},
-    {.ptr = &param_obc_mem_pct,     .size = OBSW_S3_PARAM_U8},
-    {.ptr = &param_obc_health,      .size = OBSW_S3_PARAM_U8},
-    {.ptr = &param_obc_reset_count, .size = OBSW_S3_PARAM_U16},
-    {.ptr = &param_obc_cpu_load,    .size = OBSW_S3_PARAM_U8},
-};
 /* AOCS HK (set_id=4): gains as IEEE 754 floats */
 static float hk_bdot_gain = 0.0f;
 static float hk_adcs_kp   = 0.0f;
 static float hk_adcs_kd   = 0.0f;
-static obsw_s3_param_t aocs_hk_params[] = {
-    {.ptr = &hk_bdot_gain, .size = OBSW_S3_PARAM_U32},
-    {.ptr = &hk_adcs_kp,   .size = OBSW_S3_PARAM_U32},
-    {.ptr = &hk_adcs_kd,   .size = OBSW_S3_PARAM_U32},
-};
+HK_PARAMS(aocs_hk_params, {.ptr = &hk_bdot_gain}, {.ptr = &hk_adcs_kp}, {.ptr = &hk_adcs_kd});
 
 /* AOCS state HK (set_id=6): live attitude state as IEEE 754 floats */
 static float    hk_aocs_err   = 0.0f;  /* aocs_angle_err_rad */
 static float    hk_aocs_omega = 0.0f;  /* aocs_omega_mag     */
 static uint8_t  hk_aocs_ctrl  = 0;     /* SRDB_ENUM_AOCS_CONTROLLER_*        */
-static obsw_s3_param_t aocs_state_hk_params[] = {
-    {.ptr = &hk_aocs_err,   .size = OBSW_S3_PARAM_U32},
-    {.ptr = &hk_aocs_omega, .size = OBSW_S3_PARAM_U32},
-    {.ptr = &hk_aocs_ctrl,    .size = OBSW_S3_PARAM_U8},
-};
+HK_PARAMS(aocs_state_hk_params,
+          {.ptr = &hk_aocs_err}, {.ptr = &hk_aocs_omega}, {.ptr = &hk_aocs_ctrl});
+
+#define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
+_Static_assert(ARRAY_LEN(nominal_hk_params) == SRDB_HK_NOMINAL_HK_PARAM_COUNT, "nominal_hk layout");
+_Static_assert(ARRAY_LEN(fdir_hk_params) == SRDB_HK_FDIR_HK_PARAM_COUNT, "fdir_hk layout");
+_Static_assert(ARRAY_LEN(dhs_obc_hk_params) == SRDB_HK_DHS_OBC_HK_PARAM_COUNT, "dhs_obc_hk layout");
+_Static_assert(ARRAY_LEN(aocs_hk_params) == SRDB_HK_AOCS_HK_PARAM_COUNT, "aocs_hk layout");
+_Static_assert(ARRAY_LEN(aocs_state_hk_params) == SRDB_HK_AOCS_STATE_HK_PARAM_COUNT,
+               "aocs_state_hk layout");
 
 /* 5 static sets plus free slots and a parameter pool for TC(3,1) */
 #define HK_STATIC_SETS 5U
@@ -152,15 +161,25 @@ static obsw_s3_param_t hk_define_pool[32];
 
 static obsw_s3_set_t hk_sets[HK_SET_SLOTS] = {
     {.set_id = SRDB_HK_NOMINAL_HK, .params = nominal_hk_params,
-     .param_count = 1, .interval_ticks = 10, .countdown = 10, .enabled = true},
+     .param_count = SRDB_HK_NOMINAL_HK_PARAM_COUNT, .interval_ticks = 10, .countdown = 10, .enabled = true},
     {.set_id = SRDB_HK_FDIR_HK, .params = fdir_hk_params,
-     .param_count = 2, .interval_ticks = 60, .countdown = 60, .enabled = true},
+     .param_count = SRDB_HK_FDIR_HK_PARAM_COUNT, .interval_ticks = 60, .countdown = 60, .enabled = true},
     {.set_id = SRDB_HK_DHS_OBC_HK, .params = dhs_obc_hk_params,
-     .param_count = 7, .interval_ticks = 10, .countdown = 10, .enabled = true},
+     .param_count = SRDB_HK_DHS_OBC_HK_PARAM_COUNT, .interval_ticks = 10, .countdown = 10, .enabled = true},
     {.set_id = SRDB_HK_AOCS_HK, .params = aocs_hk_params,
-     .param_count = 3, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
+     .param_count = SRDB_HK_AOCS_HK_PARAM_COUNT, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
     {.set_id = SRDB_HK_AOCS_STATE_HK, .params = aocs_state_hk_params,
-     .param_count = 3, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
+     .param_count = SRDB_HK_AOCS_STATE_HK_PARAM_COUNT, .interval_ticks = 5,  .countdown = 5,  .enabled = true},
+};
+
+/* SRDB widths for the boot-time sets above, in the same order */
+static const uint8_t hk_sizes_nominal[]    = SRDB_HK_NOMINAL_HK_SIZES;
+static const uint8_t hk_sizes_fdir[]       = SRDB_HK_FDIR_HK_SIZES;
+static const uint8_t hk_sizes_dhs_obc[]    = SRDB_HK_DHS_OBC_HK_SIZES;
+static const uint8_t hk_sizes_aocs[]       = SRDB_HK_AOCS_HK_SIZES;
+static const uint8_t hk_sizes_aocs_state[] = SRDB_HK_AOCS_STATE_HK_SIZES;
+static const uint8_t *const hk_sizes[HK_STATIC_SETS] = {
+    hk_sizes_nominal, hk_sizes_fdir, hk_sizes_dhs_obc, hk_sizes_aocs, hk_sizes_aocs_state,
 };
 
 /* ------------------------------------------------------------------ */
@@ -476,6 +495,13 @@ int main(void)
     s3_ctx.apid      = SRDB_APID_DEFAULT;
     s3_ctx.sets      = hk_sets;
     s3_ctx.set_count = HK_STATIC_SETS;
+    for (uint8_t i = 0; i < HK_STATIC_SETS; i++) {
+        if (!obsw_s3_bind_sizes(&hk_sets[i], hk_sizes[i], hk_sets[i].param_count)) {
+            fprintf(stderr, "[OBSW] HK set %u does not match the SRDB layout\n",
+                    (unsigned)hk_sets[i].set_id);
+            return 1;
+        }
+    }
     s3_ctx.set_capacity    = HK_SET_SLOTS;
     s3_ctx.param_pool      = hk_define_pool;
     s3_ctx.param_pool_len  = sizeof(hk_define_pool) / sizeof(hk_define_pool[0]);
@@ -678,7 +704,11 @@ int main(void)
                     hk_aocs_ctrl = SRDB_ENUM_AOCS_CONTROLLER_OFF; /* STANDBY or sensors invalid */
                 }
 
-                param_uptime_s = (uint16_t)sensor.sim_time;
+                hk_obc_temperature    = (int16_t)s20_params[0].value.i32;
+                hk_obc_v3v3           = (uint16_t)s20_params[1].value.u32;
+                hk_obc_v5v            = (uint16_t)s20_params[2].value.u32;
+                hk_obc_uptime         = (uint32_t)sensor.sim_time;
+                hk_wd_ticks_remaining = wd_ctx.countdown;
 
                 s20_params[3].value.u32 = (uint32_t)sensor.sim_time;         /* obc_uptime */
                 s20_params[4].value.u32 = (uint32_t)param_safe_entry_count;  /* safe_mode_entry_count */

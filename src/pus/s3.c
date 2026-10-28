@@ -332,6 +332,31 @@ int obsw_s3_disable(const obsw_tc_t *tc,
 }
 
 /* ------------------------------------------------------------------ */
+/* Layout binding                                                      */
+/* ------------------------------------------------------------------ */
+
+bool obsw_s3_bind_sizes(obsw_s3_set_t *set, const uint8_t *sizes, uint8_t count)
+{
+    if ((set == NULL) || (sizes == NULL) || (set->params == NULL) ||
+        (set->param_count != count))
+    {
+        return false;
+    }
+    for (uint8_t i = 0; i < count; i++)
+    {
+        if ((sizes[i] != 1U) && (sizes[i] != 2U) && (sizes[i] != 4U))
+        {
+            return false;
+        }
+    }
+    for (uint8_t i = 0; i < count; i++)
+    {
+        set->params[i].size = (obsw_s3_param_size_t)sizes[i];
+    }
+    return true;
+}
+
+/* ------------------------------------------------------------------ */
 /* Tick                                                                */
 /* ------------------------------------------------------------------ */
 
