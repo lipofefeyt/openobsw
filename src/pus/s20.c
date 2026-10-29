@@ -40,7 +40,9 @@
      body[4] = (uint8_t)(val.u32 >>  8);
      body[5] = (uint8_t)(val.u32 & 0xFFU);
  
-     uint16_t seq = s->msg_counter++;
+     uint16_t seq = s->msg_counter;
+ 
+     s->msg_counter++;
      (void)obsw_pus_tm_build(s->tm_store, s->apid, seq,
                        20U, 2U, seq, 0U, s->timestamp,
                        body, 6U);
@@ -58,7 +60,7 @@
          return -1;
      }
  
-     if (!tc->user_data || tc->user_data_len < S20_SET_LEN) {
+     if (!tc->user_data || (tc->user_data_len < S20_SET_LEN)) {
          (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
          return -1;
      }
@@ -91,7 +93,7 @@
          return -1;
      }
  
-     if (!tc->user_data || tc->user_data_len < S20_GET_LEN) {
+     if (!tc->user_data || (tc->user_data_len < S20_GET_LEN)) {
          (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
          return -1;
      }

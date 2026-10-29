@@ -25,6 +25,12 @@ README roadmap. Releases before v0.16 are described on the
 - S20 parameters carry their type (`OBSW_S20_U32`, `_I32`, `_F32`);
   `obsw_s20_find()` and `obsw_s20_as_float()` accessors.
 
+### Changed
+
+- MISRA C:2012 Advisory rules 12.1 (explicit precedence) and 13.3
+  (increment side effects) are now enforced at zero in the core; 69 sites
+  rewritten with no behaviour change.
+
 ### Fixed
 
 - Boot-time HK sets did not match their SRDB layout, so the generated XTCE

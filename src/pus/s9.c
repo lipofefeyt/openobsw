@@ -17,7 +17,7 @@ int obsw_s9_set_obt(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    if (!tc->user_data || tc->user_data_len < S9_SET_OBT_LEN) {
+    if (!tc->user_data || (tc->user_data_len < S9_SET_OBT_LEN)) {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }

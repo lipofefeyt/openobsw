@@ -19,7 +19,7 @@ int obsw_s8_perform(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    if (!tc->user_data || tc->user_data_len < S8_MIN_LEN) {
+    if (!tc->user_data || (tc->user_data_len < S8_MIN_LEN)) {
         (void)obsw_s1_accept_failure(s->s1, tc, OBSW_S1_FAIL_ILLEGAL_APP_DATA);
         return -1;
     }
@@ -33,7 +33,7 @@ int obsw_s8_perform(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
         return -1;
     }
 
-    const uint8_t *args = (args_len > 0U) ? tc->user_data + 3U : NULL;
+    const uint8_t *args = (args_len > 0U) ? (tc->user_data + 3U) : NULL;
 
     /* Lookup */
     obsw_s8_entry_t *entry = NULL;

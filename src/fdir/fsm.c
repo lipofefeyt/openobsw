@@ -15,7 +15,7 @@ int obsw_fsm_init(obsw_fsm_ctx_t *fsm, const obsw_fsm_config_t *config)
 
 void obsw_fsm_to_standby(obsw_fsm_ctx_t *fsm)
 {
-    if (!fsm || fsm->mode == OBSW_FSM_STANDBY) {
+    if (!fsm || (fsm->mode == OBSW_FSM_STANDBY)) {
         return;
     }
     fsm->mode = OBSW_FSM_STANDBY;
@@ -23,7 +23,7 @@ void obsw_fsm_to_standby(obsw_fsm_ctx_t *fsm)
 
 void obsw_fsm_to_safe(obsw_fsm_ctx_t *fsm)
 {
-    if (!fsm || fsm->mode == OBSW_FSM_SAFE) {
+    if (!fsm || (fsm->mode == OBSW_FSM_SAFE)) {
         return;
     }
     fsm->mode = OBSW_FSM_SAFE;
@@ -35,11 +35,11 @@ void obsw_fsm_to_safe(obsw_fsm_ctx_t *fsm)
 
 void obsw_fsm_to_nominal(obsw_fsm_ctx_t *fsm)
 {
-    if (!fsm || fsm->mode == OBSW_FSM_NOMINAL) {
+    if (!fsm || (fsm->mode == OBSW_FSM_NOMINAL)) {
         return;
     }
     /* on_exit_safe fires only when recovering from SAFE, not STANDBY */
-    if (fsm->mode == OBSW_FSM_SAFE && fsm->config.on_exit_safe) {
+    if ((fsm->mode == OBSW_FSM_SAFE) && fsm->config.on_exit_safe) {
         fsm->config.on_exit_safe(fsm->config.hook_ctx);
     }
     fsm->mode = OBSW_FSM_NOMINAL;
@@ -47,7 +47,7 @@ void obsw_fsm_to_nominal(obsw_fsm_ctx_t *fsm)
 
 bool obsw_fsm_tc_allowed(const obsw_fsm_ctx_t *fsm, uint8_t svc, uint8_t subsvc)
 {
-    if (!fsm || fsm->mode == OBSW_FSM_NOMINAL) {
+    if (!fsm || (fsm->mode == OBSW_FSM_NOMINAL)) {
         return true;
     }
 
@@ -55,12 +55,12 @@ bool obsw_fsm_tc_allowed(const obsw_fsm_ctx_t *fsm, uint8_t svc, uint8_t subsvc)
     const obsw_fsm_tc_entry_t *wl = fsm->config.safe_tc_whitelist;
     uint8_t len                   = fsm->config.whitelist_len;
 
-    if (!wl || len == 0U) {
+    if (!wl || (len == 0U)) {
         return false;
     }
 
     for (uint8_t i = 0; i < len; i++) {
-        if (wl[i].service == svc && wl[i].subservice == subsvc) {
+        if ((wl[i].service == svc) && (wl[i].subservice == subsvc)) {
             return true;
         }
     }

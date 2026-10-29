@@ -17,7 +17,7 @@
 
 bool obsw_quat_normalise(obsw_quat_t *q)
 {
-    float norm = sqrtf(q->w * q->w + q->x * q->x + q->y * q->y + q->z * q->z);
+    float norm = sqrtf((q->w * q->w) + (q->x * q->x) + (q->y * q->y) + (q->z * q->z));
     if (norm < 1e-10f) {
         return false;
     }
@@ -38,10 +38,10 @@ obsw_quat_t obsw_quat_conjugate(const obsw_quat_t *q)
 obsw_quat_t obsw_quat_multiply(const obsw_quat_t *a, const obsw_quat_t *b)
 {
     obsw_quat_t r;
-    r.w = a->w * b->w - a->x * b->x - a->y * b->y - a->z * b->z;
-    r.x = a->w * b->x + a->x * b->w + a->y * b->z - a->z * b->y;
-    r.y = a->w * b->y - a->x * b->z + a->y * b->w + a->z * b->x;
-    r.z = a->w * b->z + a->x * b->y - a->y * b->x + a->z * b->w;
+    r.w = (a->w * b->w) - (a->x * b->x) - (a->y * b->y) - (a->z * b->z);
+    r.x = (a->w * b->x) + (a->x * b->w) + (a->y * b->z) - (a->z * b->y);
+    r.y = (a->w * b->y) - (a->x * b->z) + (a->y * b->w) + (a->z * b->x);
+    r.z = (a->w * b->z) + (a->x * b->y) - (a->y * b->x) + (a->z * b->w);
     return r;
 }
 
@@ -110,9 +110,9 @@ bool obsw_adcs_step(obsw_adcs_ctx_t *ctx,
     float kp = ctx->config.kp;
     float kd = ctx->config.kd;
     float tau[3];
-    tau[0] = -kp * q_err.x - kd * omega[0];
-    tau[1] = -kp * q_err.y - kd * omega[1];
-    tau[2] = -kp * q_err.z - kd * omega[2];
+    tau[0] = (-kp * q_err.x) - (kd * omega[0]);
+    tau[1] = (-kp * q_err.y) - (kd * omega[1]);
+    tau[2] = (-kp * q_err.z) - (kd * omega[2]);
 
     /* Saturate */
     float max = ctx->config.max_torque;
