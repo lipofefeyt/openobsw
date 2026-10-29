@@ -150,6 +150,21 @@ extern "C"
                         void *ctx);
 
     /* ------------------------------------------------------------------ */
+    /* Layout binding                                                      */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * Take a boot-time set's parameter widths from the SRDB, so its TM(3,25)
+     * layout matches the generated XTCE. Pass SRDB_HK_<SET>_SIZES and
+     * SRDB_HK_<SET>_PARAM_COUNT; the caller supplies only the pointers, in
+     * SRDB parameter order, to variables of those widths.
+     *
+     * @return false, leaving the set unchanged, if the counts differ or a
+     *         size is not 1, 2 or 4.
+     */
+    bool obsw_s3_bind_sizes(obsw_s3_set_t *set, const uint8_t *sizes, uint8_t count);
+
+    /* ------------------------------------------------------------------ */
     /* Periodic tick                                                       */
     /* ------------------------------------------------------------------ */
 

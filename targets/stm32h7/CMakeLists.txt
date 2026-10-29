@@ -50,6 +50,9 @@ endif()
 
 # ── SRDB code generation ──────────────────────────────────────────────
 set(SRDB_GENERATED_H "${CMAKE_BINARY_DIR}/include/obsw/srdb_generated.h")
+# Regenerate when the data or the generator changes
+file(GLOB SRDB_YAML_FILES CONFIGURE_DEPENDS "${OBSW_ROOT}/srdb/data/*.yaml")
+file(GLOB SRDB_PY_FILES CONFIGURE_DEPENDS "${OBSW_ROOT}/srdb/obsw_srdb/*.py")
 add_custom_command(
     OUTPUT  ${SRDB_GENERATED_H}
     COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -57,11 +60,7 @@ add_custom_command(
     COMMAND ${Python3_EXECUTABLE} -m obsw_srdb.codegen
             --data-dir "${OBSW_ROOT}/srdb/data"
             --output   "${SRDB_GENERATED_H}"
-    DEPENDS "${OBSW_ROOT}/srdb/data/parameters.yaml"
-            "${OBSW_ROOT}/srdb/data/spacecraft.yaml"
-            "${OBSW_ROOT}/srdb/data/events.yaml"
-            "${OBSW_ROOT}/srdb/data/telecommands.yaml"
-            "${OBSW_ROOT}/srdb/data/hk_sets.yaml"
+    DEPENDS ${SRDB_YAML_FILES} ${SRDB_PY_FILES}
     COMMENT "Generating SRDB header"
 )
 add_custom_target(srdb_codegen_stm32h7 DEPENDS ${SRDB_GENERATED_H})

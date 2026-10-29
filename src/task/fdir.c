@@ -124,19 +124,25 @@ static obsw_tm_log_t  *s_tm_log;
 
 /* ── S3 Housekeeping ──────────────────────────────────────────────── */
 
-/* SID 2 — FDIR health parameters */
-static uint32_t s_safe_mode_count = 0;
+/* SID 2 — FDIR health parameters. Widths come from the SRDB at init
+ * (obsw_s3_bind_sizes); each variable has its SRDB width. */
+static uint16_t s_safe_mode_count = 0; /* safe_mode_entry_count: uint16 */
 static uint32_t s_kick_count_hk   = 0; /* copy updated before each S3 tick */
 static uint32_t s_wdg_ticks_rem   = 4; /* constant: timeout / kick_interval */
 
 static obsw_s3_param_t s_fdir_hk_params[] = {
-    {.ptr = &s_safe_mode_count, .size = OBSW_S3_PARAM_U32},
-    {.ptr = &s_kick_count_hk,   .size = OBSW_S3_PARAM_U32},
-    {.ptr = &s_wdg_ticks_rem,   .size = OBSW_S3_PARAM_U32},
+    {.ptr = &s_safe_mode_count},
+    {.ptr = &s_kick_count_hk},
+    {.ptr = &s_wdg_ticks_rem},
 };
+_Static_assert(sizeof(s_fdir_hk_params) / sizeof(s_fdir_hk_params[0]) ==
+                   SRDB_HK_FDIR_HK_PARAM_COUNT, "fdir_hk layout");
 
 /* SID 7 — AOCS B-dot HK (floats reported as big-endian IEEE 754) */
-static obsw_s3_param_t s_aocs_bdot_hk_params[7]; /* filled in init from AOCS HK ptr */
+static obsw_s3_param_t s_aocs_bdot_hk_params[SRDB_HK_AOCS_BDOT_HK_PARAM_COUNT]; /* filled in init */
+
+static const uint8_t s_fdir_hk_sizes[]      = SRDB_HK_FDIR_HK_SIZES;
+static const uint8_t s_aocs_bdot_hk_sizes[] = SRDB_HK_AOCS_BDOT_HK_SIZES;
 
 /* 2 static sets plus free slots and a parameter pool for TC(3,1) */
 #define HK_STATIC_SETS  2U
@@ -147,7 +153,7 @@ static obsw_s3_set_t s_hk_sets[HK_SET_SLOTS] = {
     {
         .set_id = SRDB_HK_FDIR_HK,
         .params = s_fdir_hk_params,
-        .param_count = 3,
+        .param_count = SRDB_HK_FDIR_HK_PARAM_COUNT,
         .interval_ticks = 60,
         .countdown = 60,
         .enabled = false,
@@ -155,7 +161,7 @@ static obsw_s3_set_t s_hk_sets[HK_SET_SLOTS] = {
     {
         .set_id = SRDB_HK_AOCS_BDOT_HK,
         .params = s_aocs_bdot_hk_params,
-        .param_count = 7,
+        .param_count = SRDB_HK_AOCS_BDOT_HK_PARAM_COUNT,
         .interval_ticks = 10,
         .countdown = 10,
         .enabled = false,
@@ -349,6 +355,12 @@ void obsw_fdir_task_init(obsw_tm_store_t *tm_store)
     s_s3.timestamp   = 0;
     s_s3.sets      = s_hk_sets;
     s_s3.set_count = HK_STATIC_SETS;
+    /* Layouts are fixed at build time by the asserts above; binding cannot
+     * fail, and a set that did would report nothing rather than mis-decode */
+    if (!obsw_s3_bind_sizes(&s_hk_sets[0], s_fdir_hk_sizes, SRDB_HK_FDIR_HK_PARAM_COUNT))
+        s_hk_sets[0].param_count = 0;
+    if (!obsw_s3_bind_sizes(&s_hk_sets[1], s_aocs_bdot_hk_sizes, SRDB_HK_AOCS_BDOT_HK_PARAM_COUNT))
+        s_hk_sets[1].param_count = 0;
     s_s3.set_capacity   = HK_SET_SLOTS;
     s_s3.param_pool     = s_hk_define_pool;
     s_s3.param_pool_len = sizeof(s_hk_define_pool) / sizeof(s_hk_define_pool[0]);

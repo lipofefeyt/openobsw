@@ -27,6 +27,14 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Fixed
 
+- Boot-time HK sets did not match their SRDB layout, so the generated XTCE
+  mis-decoded them: `nominal_hk` (SID 1) and `fdir_hk` (SID 2) on the host
+  sim and MSP430, and the first `fdir_hk` field on STM32H7 FreeRTOS (sent as
+  4 bytes, defined as 2). Widths now come from the SRDB
+  (`SRDB_HK_<SET>_SIZES`, `obsw_s3_bind_sizes()`), counts are checked at
+  compile time, and a system test decodes every sim set against the SRDB.
+  The MSP430 no longer sends SID 1, whose temperature and voltages it does
+  not measure.
 - Host sim: TM produced in a sensor tick (housekeeping, S12 events) was
   only written after the next frame. It now leaves before that tick's
   end-of-tick marker.

@@ -90,7 +90,9 @@ set(SRDB_GENERATED_H "${CMAKE_BINARY_DIR}/include/obsw/srdb_generated.h")
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-file(GLOB SRDB_YAML_FILES "${OBSW_ROOT}/srdb/data/*.yaml")
+# Regenerate when the data or the generator changes
+file(GLOB SRDB_YAML_FILES CONFIGURE_DEPENDS "${OBSW_ROOT}/srdb/data/*.yaml")
+file(GLOB SRDB_PY_FILES CONFIGURE_DEPENDS "${OBSW_ROOT}/srdb/obsw_srdb/*.py")
 
 add_custom_command(
     OUTPUT "${SRDB_GENERATED_H}"
@@ -99,7 +101,7 @@ add_custom_command(
             "${Python3_EXECUTABLE}" -m obsw_srdb.codegen
             --data-dir "${OBSW_ROOT}/srdb/data"
             --output   "${SRDB_GENERATED_H}"
-    DEPENDS ${SRDB_YAML_FILES}
+    DEPENDS ${SRDB_YAML_FILES} ${SRDB_PY_FILES}
     COMMENT "[srdb] Generating srdb_generated.h for MSP430 target"
     VERBATIM
 )

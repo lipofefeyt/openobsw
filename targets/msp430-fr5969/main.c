@@ -6,7 +6,7 @@
  * suitable for a 2KB SRAM target:
  *
  *   S1  — TC verification
- *   S3  — Housekeeping (nominal + FDIR parameter sets)
+ *   S3  — Housekeeping (FDIR parameter set; SID 1 needs sensors this board lacks)
  *   S5  — Event reporting (with FDIR safe-trigger coupling)
  *   S6  — Memory management (load / check / dump)
  *   S8  — Function management (recover to NOMINAL)
@@ -50,32 +50,27 @@ static obsw_s8_ctx_t s8   = {0};
 /* Housekeeping parameters — live application variables               */
 /* ------------------------------------------------------------------ */
 
-static uint16_t param_uptime_s         = 0;
 static uint16_t param_safe_entry_count = 0;
 static uint32_t param_wd_kick_count    = 0;
+static uint32_t param_wd_ticks_rem     = 0;
 
-static obsw_s3_param_t nominal_hk_params[] = {
-    {.ptr = &param_uptime_s, .size = OBSW_S3_PARAM_U16},
-};
-
+/* fdir_hk (SID 2). Widths come from the SRDB at init (obsw_s3_bind_sizes).
+ * nominal_hk (SID 1) is not reported: this board does not measure the
+ * temperature and supply voltages that set carries. */
 static obsw_s3_param_t fdir_hk_params[] = {
-    {.ptr = &param_safe_entry_count, .size = OBSW_S3_PARAM_U16},
-    {.ptr = &param_wd_kick_count, .size = OBSW_S3_PARAM_U32},
+    {.ptr = &param_safe_entry_count},
+    {.ptr = &param_wd_kick_count},
+    {.ptr = &param_wd_ticks_rem},
 };
+_Static_assert(sizeof(fdir_hk_params) / sizeof(fdir_hk_params[0]) == SRDB_HK_FDIR_HK_PARAM_COUNT,
+               "fdir_hk layout");
+static const uint8_t fdir_hk_sizes[] = SRDB_HK_FDIR_HK_SIZES;
 
 static obsw_s3_set_t hk_sets[] = {
     {
-        .set_id         = SRDB_HK_NOMINAL_HK,
-        .params         = nominal_hk_params,
-        .param_count    = 1,
-        .interval_ticks = 10,
-        .countdown      = 10,
-        .enabled        = true,
-    },
-    {
         .set_id         = SRDB_HK_FDIR_HK,
         .params         = fdir_hk_params,
-        .param_count    = 2,
+        .param_count    = SRDB_HK_FDIR_HK_PARAM_COUNT,
         .interval_ticks = 60,
         .countdown      = 60,
         .enabled        = true,
@@ -212,6 +207,8 @@ int main(void)
     s3.apid      = SRDB_APID_DEFAULT;
     s3.sets      = hk_sets;
     s3.set_count = sizeof(hk_sets) / sizeof(hk_sets[0]);
+    if (!obsw_s3_bind_sizes(&hk_sets[0], fdir_hk_sizes, SRDB_HK_FDIR_HK_PARAM_COUNT))
+        hk_sets[0].param_count = 0; /* report nothing rather than mis-decode */
 
     /* S5 — wire safe-trigger event IDs from SRDB */
     s5.tm_store           = &tm_store;
@@ -284,7 +281,7 @@ int main(void)
         tick++;
         if (tick >= 1000U) { /* ~1 Hz at typical loop rate */
             tick = 0;
-            param_uptime_s++;
+            param_wd_ticks_rem = watchdog.countdown;
             obsw_s3_tick(&s3);
             obsw_wd_tick(&watchdog);
 
