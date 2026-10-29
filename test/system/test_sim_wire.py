@@ -296,3 +296,22 @@ def test_s11_release_is_mode_gated_at_release_time(run):
     out = run(s)
     [rej] = out.s1_for(0x2AAA)
     assert (rej.subservice, rej.failure_code) == (2, FAIL_MODE_GATED)
+
+
+@pytest.mark.requirement("OBSW-SRS-096")
+def test_tc33_deletes_defined_set_and_refuses_boot_set(run):
+    s = Stream()
+    s.nominal()
+    define = struct.pack(">BIBHH", 20, 1, 2, PARAM_OBC_UPTIME, PARAM_BDOT_GAIN)
+    s.tc(3, 1, define)
+    s.tc(3, 5, struct.pack(">BI", 20, 1))
+    s.ticks(2, dt=1.0)
+    s.tc(3, 6, struct.pack(">B", 20))
+    delete = s.tc(3, 3, bytes([1, 20]))
+    redefine = s.tc(3, 1, define)                  # same SID free again
+    boot = s.tc(3, 3, bytes([1, HK_DHS_OBC]))      # dhs_obc_hk is a boot-time set
+    out = run(s)
+    assert out.hk(20), "set 20 never reported before deletion"
+    assert [t.subservice for t in out.s1_for(delete)] == [1, 7]
+    assert [t.subservice for t in out.s1_for(redefine)] == [1, 7]
+    assert [(t.subservice, t.failure_code) for t in out.s1_for(boot)] == [(2, 0x0005)]

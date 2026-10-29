@@ -129,11 +129,19 @@ static int s9_set_obt_locked(const obsw_tc_t *tc, obsw_tc_responder_t respond, v
     return rc;
 }
 
-/* TC(3,1) appends to the set table the FDIR task ticks: build it atomically. */
+/* TC(3,1) and TC(3,3) change the set table the FDIR task ticks: do it atomically. */
 static int s3_define_locked(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
 {
     taskENTER_CRITICAL();
     int rc = obsw_s3_define(tc, respond, ctx);
+    taskEXIT_CRITICAL();
+    return rc;
+}
+
+static int s3_delete_locked(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
+{
+    taskENTER_CRITICAL();
+    int rc = obsw_s3_delete(tc, respond, ctx);
     taskEXIT_CRITICAL();
     return rc;
 }
@@ -172,6 +180,8 @@ static obsw_tc_route_t s_routes[] = {
      .handler = obsw_s3_disable, .ctx = NULL},  /* patched in pus_task_init */
     {.apid = 0xFFFF, .service = 3,  .subservice = 1,
      .handler = s3_define_locked, .ctx = NULL}, /* patched in pus_task_init */
+    {.apid = 0xFFFF, .service = 3,  .subservice = 3,
+     .handler = s3_delete_locked, .ctx = NULL}, /* patched in pus_task_init */
     {.apid = 0xFFFF, .service = 8,  .subservice = 1,
      .handler = obsw_s8_perform, .ctx = &s8_ctx},
     {.apid = 0xFFFF, .service = 17, .subservice = 1,
@@ -324,6 +334,7 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
     s_routes[0].ctx = s3;   /* TC(3,5) enable  */
     s_routes[1].ctx = s3;   /* TC(3,6) disable */
     s_routes[2].ctx = s3;   /* TC(3,1) define  */
+    s_routes[3].ctx = s3;   /* TC(3,3) delete  */
 
     obsw_tc_dispatcher_init(&s_dispatcher,
                              s_routes,
