@@ -246,6 +246,20 @@ class TestCommandMetaData:
             expected = f"TC_{tc.service}_{tc.subservice}_{tc.name.upper()}"
             assert expected in mc_names
 
+    @pytest.mark.requirement("OBSW-SRS-225")
+    def test_repeated_argument_is_array_sized_by_count(self, srdb):
+        root = ET.fromstring(generate_xtce(srdb))
+        arr = next(el for el in root.iter(_tag("ArrayArgumentType"))
+                   if el.get("name") == "DEFINE_HK_REPORT_PARAM_IDS_array_t")
+        assert arr.get("arrayTypeRef") == "uint16_arg_t"
+        dyn = next(arr.iter(_tag("DynamicValue")))
+        assert next(dyn.iter(_tag("ArgumentInstanceRef"))).get("argumentRef") == "N"
+        assert next(dyn.iter(_tag("LinearAdjustment"))).get("intercept") == "-1"
+        mc = next(el for el in root.iter(_tag("MetaCommand"))
+                  if el.get("name") == "TC_3_1_DEFINE_HK_REPORT")
+        args = [a.get("argumentTypeRef") for a in mc.iter(_tag("Argument"))]
+        assert args[-1] == "DEFINE_HK_REPORT_PARAM_IDS_array_t"
+
     def test_tc_arguments_present(self, srdb):
         root = ET.fromstring(generate_xtce(srdb))
         for tc in srdb.telecommands:

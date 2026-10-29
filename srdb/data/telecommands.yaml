@@ -6,7 +6,9 @@
 #   apid        Application Process ID (hex, 11-bit)
 #   service     PUS service type
 #   subservice  PUS subservice type
-#   parameters  User data field parameters (ordered list)
+#   parameters  User data field parameters (ordered list). The last one may
+#               set count_from: <earlier unsigned argument>, making it repeat
+#               that many times (exported to XTCE as an ArrayArgumentType)
 #   safe_allowed  Optional, default false. true puts (service, subservice)
 #                 on the SAFE/STANDBY TC whitelist (SRDB_SAFE_TC_WHITELIST),
 #                 used by every target. All other TCs need NOMINAL and are
@@ -39,6 +41,40 @@ telecommands:
       - name: interval_ticks
         type: uint32
         description: "Collection interval in control cycle ticks"
+
+  - name: define_hk_report
+    description: "TC(3,1) create an HK set from S20 parameter IDs (created disabled)"
+    apid: 0x010
+    service: 3
+    subservice: 1
+    parameters:
+      - name: set_id
+        type: uint8
+        description: "HK structure ID (must be unused)"
+      - name: interval_ticks
+        type: uint32
+        description: "Collection interval in control cycle ticks"
+      - name: n
+        type: uint8
+        description: "Number of parameter IDs that follow"
+      - name: param_ids
+        type: uint16
+        count_from: n
+        description: "S20 parameter IDs, in report order"
+
+  - name: delete_hk_report
+    description: "TC(3,3) delete HK sets created by TC(3,1); all or nothing"
+    apid: 0x010
+    service: 3
+    subservice: 3
+    parameters:
+      - name: n
+        type: uint8
+        description: "Number of set IDs that follow"
+      - name: set_ids
+        type: uint8
+        count_from: n
+        description: "HK structure IDs to delete"
 
   - name: disable_hk_report
     description: "TC(3,6) disable periodic HK report generation for a set"

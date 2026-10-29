@@ -10,6 +10,9 @@ README roadmap. Releases before v0.16 are described on the
 
 - TC(3,3) delete housekeeping sets created by TC(3,1), all or nothing;
   freed slots and parameter storage are reused (#91).
+- SRDB repeated TC arguments: a last argument with `count_from` repeats N
+  times and is exported to XTCE as an `ArrayArgumentType` sized by the
+  count argument. TC(3,1) and TC(3,3) are now in `telecommands.yaml` (#92).
 - PUS S11 time-based scheduling: TC(11,4) inserts a CUC-4,2-tagged TC,
   released at OBT through the normal dispatcher (SAFE gate and S1 reports
   apply at release); TC(11,5)/(11,6) delete, TC(11,17)/(11,18)

@@ -69,3 +69,34 @@ def test_type_and_ptc_pfc_must_agree(data_copy):
     edit(data_copy / "parameters.yaml", lambda d: d["parameters"][0].update(type="uint8", ptc=1, pfc=16))
     with pytest.raises(pydantic.ValidationError, match="expects"):
         SRDBLoader.load(data_copy)
+
+
+# ---- Repeated TC arguments (count_from) ------------------------------------
+
+@pytest.mark.requirement("OBSW-SRS-225")
+def test_reference_tc31_has_counted_param_ids(srdb):
+    tc = next(t for t in srdb.telecommands if (t.service, t.subservice) == (3, 1))
+    assert [p.name for p in tc.parameters] == ["set_id", "interval_ticks", "n", "param_ids"]
+    assert tc.parameters[-1].count_from == "n"
+
+
+def _tc_with(params):
+    from obsw_srdb.model import Telecommand
+    return Telecommand(name="t", description="d", apid=0x010, service=200, subservice=1,
+                       parameters=params)
+
+
+@pytest.mark.requirement("OBSW-SRS-225")
+@pytest.mark.parametrize("params, match", [
+    ([{"name": "ids", "type": "uint16", "count_from": "n"}], "not an earlier argument"),
+    ([{"name": "ids", "type": "uint16", "count_from": "n"},
+      {"name": "n", "type": "uint8"}], "must be the last argument"),
+    ([{"name": "n", "type": "int8"},
+      {"name": "ids", "type": "uint16", "count_from": "n"}], "plain unsigned integer"),
+    ([{"name": "a", "type": "uint8"},
+      {"name": "b", "type": "uint8", "count_from": "a"},
+      {"name": "c", "type": "uint8", "count_from": "b"}], "must be the last argument"),
+])
+def test_bad_count_from_is_rejected(params, match):
+    with pytest.raises(pydantic.ValidationError, match=match):
+        _tc_with(params)
