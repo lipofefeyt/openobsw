@@ -47,6 +47,7 @@ per target:
 | S6 memory management | 6,2 6,5 6,9 | 6,2 6,5 6,9 | — | — | — |
 | S8 function management | 8,1 | 8,1 | 8,1 | — | 8,1 |
 | S9 time management | 9,128 | 9,128 | — | — | — |
+| S11 time-based scheduling | 11,4–11,6 11,17 11,18 | 11,4–11,6 11,17 11,18 | — | — | — |
 | S12 on-board monitoring | 12,1–12,5 | 12,1–12,5 | — | — | — |
 | S19 event-action | 19,1–19,5 | 19,1–19,5 | — | — | — |
 | S17 are-you-alive | 17,1 | 17,1 | 17,1 | 17,1 | 17,1 |
@@ -60,6 +61,7 @@ per target:
 | S6 | TC(6,2) load, TC(6,5) check, TC(6,9) dump | Region table with READ/WRITE access; fails closed |
 | S8 | TC(8,1) perform | Function 1 recover NOMINAL, 2 SAFE, 3 STANDBY |
 | S9 | TC(9,128) set OBT | Mission-specific subservice, CUC-4,2 |
+| S11 | TC(11,4) insert, TC(11,5/6) delete, TC(11,17/18) enable/disable | Time-tagged TCs released at OBT through the dispatcher (SAFE gate applies at release) |
 | S12 | TC(12,1/2) enable/disable, TC(12,3) add, TC(12,4/5) delete | Limit checks on S20 parameters each tick; S5 event on entering an out-of-limit state, latched until back in range |
 | S19 | TC(19,1) add, TC(19,2/3) delete, TC(19,4/5) enable/disable | Event ID → stored TC; runs on the next tick through the dispatcher (SAFE gate and S1 reports apply). FreeRTOS reacts to S12 events |
 | S17 | TC(17,1) ping, TM(17,2) pong | Heartbeat for OpenSVF and YAMCS |
@@ -68,7 +70,7 @@ per target:
 **SAFE and STANDBY** accept only TC(17,1), (8,1), (9,128) and (20,3), on every
 target. The list comes from `safe_allowed` in `srdb/data/telecommands.yaml`.
 
-S11, S12 and S19 are not implemented; their scope is #79.
+S15 (storage and retrieval) is deferred and S23 (file management) out of scope (#79).
 
 ---
 

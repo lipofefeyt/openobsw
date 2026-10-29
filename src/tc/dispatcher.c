@@ -34,6 +34,22 @@ int obsw_tc_dispatcher_init(obsw_tc_dispatcher_t *d,
     return OBSW_TC_OK;
 }
 
+int obsw_tc_packet_check(const uint8_t *pkt, size_t len, uint8_t *service)
+{
+    if (pkt == NULL) {
+        return OBSW_TC_ERR_NULL;
+    }
+    obsw_sp_packet_t sp;
+    if ((obsw_sp_parse(pkt, len, &sp) != OBSW_SP_OK) || (sp.hdr.type != OBSW_SP_TYPE_TC) ||
+        (sp.hdr.sec_hdr_flag == 0U) || (sp.payload_len < PUS_TC_SEC_HDR_LEN)) {
+        return OBSW_TC_ERR_PARSE;
+    }
+    if (service != NULL) {
+        *service = sp.payload[1];
+    }
+    return OBSW_TC_OK;
+}
+
 int obsw_tc_dispatcher_set_gate(obsw_tc_dispatcher_t *d,
                                 obsw_tc_gate_t gate,
                                 void *gate_ctx)

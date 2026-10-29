@@ -60,6 +60,11 @@ target_link_libraries(test_s9 PRIVATE obsw unity)
 target_compile_options(test_s9 PRIVATE ${TEST_SUPPRESS})
 add_test(NAME s9 COMMAND test_s9)
 
+add_executable(test_s11 unit/test_s11.c)
+target_link_libraries(test_s11 PRIVATE obsw unity)
+target_compile_options(test_s11 PRIVATE ${TEST_SUPPRESS})
+add_test(NAME s11 COMMAND test_s11)
+
 add_executable(test_s12 unit/test_s12.c)
 target_link_libraries(test_s12 PRIVATE obsw unity)
 target_compile_options(test_s12 PRIVATE ${TEST_SUPPRESS})
