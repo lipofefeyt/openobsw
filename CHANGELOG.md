@@ -23,6 +23,12 @@ README roadmap. Releases before v0.16 are described on the
 - S20 parameters carry their type (`OBSW_S20_U32`, `_I32`, `_F32`);
   `obsw_s20_find()` and `obsw_s20_as_float()` accessors.
 
+### Fixed
+
+- Host sim: TM produced in a sensor tick (housekeeping, S12 events) was
+  only written after the next frame. It now leaves before that tick's
+  end-of-tick marker.
+
 ## [v0.17] — Qualification baseline
 
 ### Added

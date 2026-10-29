@@ -676,15 +676,6 @@ int main(void)
                     hk_aocs_ctrl = SRDB_ENUM_AOCS_CONTROLLER_OFF; /* STANDBY or sensors invalid */
                 }
 
-                /* Drain any TM generated during sensor tick */
-                {
-                    uint8_t pkt[OBSW_TM_MAX_PACKET_LEN];
-                    uint16_t plen = 0;
-                    while (obsw_tm_store_dequeue(&tm_store, pkt, sizeof(pkt), &plen) == OBSW_TM_OK)
-                        write_tm_packet(pkt, plen);
-                }
-                write_actuator_frame(&act);
-
                 param_uptime_s = (uint16_t)sensor.sim_time;
 
                 s20_params[3].value.u32 = (uint32_t)sensor.sim_time;         /* obc_uptime */
@@ -708,6 +699,16 @@ int main(void)
                 obsw_wd_kick(&wd_ctx);
                 obsw_s12_check(&s12_ctx);
                 obsw_s3_tick(&s3_ctx);
+
+                /* Drain all TM of this tick, HK and S12 events included, so it
+                 * leaves before this tick's end-of-tick marker */
+                {
+                    uint8_t pkt[OBSW_TM_MAX_PACKET_LEN];
+                    uint16_t plen = 0;
+                    while (obsw_tm_store_dequeue(&tm_store, pkt, sizeof(pkt), &plen) == OBSW_TM_OK)
+                        write_tm_packet(pkt, plen);
+                }
+                write_actuator_frame(&act);
             }
         }
         write_sync_byte();
