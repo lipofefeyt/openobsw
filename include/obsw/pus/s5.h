@@ -50,6 +50,9 @@ extern "C"
 #define OBSW_S5_MAX_SAFE_TRIGGERS 8U
 #endif
 
+    /** Called for every reported event, e.g. obsw_s19_on_event for S19. */
+    typedef void (*obsw_s5_event_hook_t)(uint16_t event_id, void *ctx);
+
     typedef struct
     {
         obsw_tm_store_t *tm_store;
@@ -65,6 +68,13 @@ extern "C"
         struct obsw_fsm_ctx *fsm;
         uint16_t safe_trigger_ids[OBSW_S5_MAX_SAFE_TRIGGERS];
         uint8_t safe_trigger_count;
+
+        /**
+         * Optional event hook, called for every event after its TM(5,x) is
+         * built, whether or not the TM store had room for it.
+         */
+        obsw_s5_event_hook_t on_event;
+        void *on_event_ctx;
     } obsw_s5_ctx_t;
 
     /* ------------------------------------------------------------------ */

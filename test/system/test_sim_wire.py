@@ -209,3 +209,45 @@ def test_s12_definitions_need_nominal(run):
     add = s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, 0x0202, 2))
     out = run(s)
     assert [(t.subservice, t.failure_code) for t in out.s1_for(add)] == [(2, FAIL_MODE_GATED)]
+
+
+# ---- S19 ---------------------------------------------------------------------
+
+def tc_packet(svc, sub, app=b"", seq=0x3FFF, apid=0x010):
+    """A bare PUS-C TC space packet, as stored in a TC(19,1) action."""
+    body = bytes([0x11, svc, sub, 0x00, 0x00]) + app
+    return struct.pack(">HHH", 0x1800 | apid, 0xC000 | seq, len(body) - 1) + body
+
+
+@pytest.mark.requirement("OBSW-SRS-302")
+@pytest.mark.requirement("OBSW-SRS-306")
+def test_s12_event_triggers_s19_action_that_retunes_gain(run):
+    action = tc_packet(20, 1, struct.pack(">Hf", PARAM_BDOT_GAIN, 20000.0))
+    s = Stream()
+    s.nominal()
+    link = s.tc(19, 1, struct.pack(">H", 0x0202) + action)
+    # Crossing at t=8 s: the AOCS HK report at tick 5 still shows the old gain
+    s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 7.5, 0x0201, 0x0202, 2))
+    s.ticks(16, dt=1.0)
+    out = run(s)
+    assert [t.subservice for t in out.s1_for(link)] == [1, 7]
+    # The stored action is verified like an uplinked TC (seq 0x3FFF)
+    assert [t.subservice for t in out.s1_for(0x3FFF)] == [1, 7]
+    gains = [struct.unpack(">fff", p)[0] for p in out.hk(HK_AOCS)]
+    assert gains[0] == pytest.approx(1.0e4)
+    assert gains[-1] == pytest.approx(2.0e4)
+
+
+@pytest.mark.requirement("OBSW-SRS-302")
+@pytest.mark.requirement("OBSW-SRS-182")
+def test_s19_action_is_still_mode_gated_in_safe(run):
+    action = tc_packet(20, 1, struct.pack(">Hf", PARAM_BDOT_GAIN, 20000.0))
+    s = Stream()
+    s.nominal()
+    s.tc(19, 1, struct.pack(">H", 0x0202) + action)
+    s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, 0x0202, 2))
+    s.tc(8, 1, struct.pack(">HB", 2, 0))  # back to SAFE before the event
+    s.ticks(6, dt=1.0)
+    out = run(s)
+    [rej] = out.s1_for(0x3FFF)
+    assert (rej.subservice, rej.failure_code) == (2, FAIL_MODE_GATED)

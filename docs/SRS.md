@@ -379,7 +379,7 @@ The host sim shall answer every TC frame with all TM it produces before the next
 The host sim shall boot in SAFE.
 
 **OBSW-SRS-243** `[SIM]` `IMPLEMENTED` `T`
-The host sim shall route S3, S6, S8, S9, S12, S17 and S20 and expose 4 KB of readable and writable S6 memory at ground address 0.
+The host sim shall route S3, S6, S8, S9, S12, S17, S19 and S20 and expose 4 KB of readable and writable S6 memory at ground address 0.
 
 ---
 
@@ -411,7 +411,35 @@ The host sim and STM32H7 FreeRTOS builds shall route TC(12,1) to TC(12,5) and ru
 
 ---
 
-## 22. Product assurance [QA]
+## 22. Event-action [S19]
+
+Subtype numbers and data layouts follow opensvf's `PusService19` codec; alignment with the ECSS-E-ST-70-41C subtype numbering is to be reviewed.
+
+**OBSW-SRS-300** `[S19]` `IMPLEMENTED` `T`
+The software shall add, or replace for the same event, an event-action definition on TC(19,1): an S5 event ID and the action TC as a complete space packet.
+
+**OBSW-SRS-301** `[S19]` `IMPLEMENTED` `T`
+The software shall reject TC(19,1) without changing state when the action is not a TC space packet with a PUS secondary header, is longer than `OBSW_S19_ACTION_MAX_LEN` (64 bytes), or is itself an S19 TC (code `0x0005`), and when the definition table is full (code `0x0004`).
+
+**OBSW-SRS-302** `[S19]` `IMPLEMENTED` `T`
+When an event with a definition is raised, the software shall queue its action and dispatch it on the next control tick through the TC dispatcher, so the action gets the same acceptance checks, SAFE/STANDBY gate and S1 reports as an uplinked TC; an action whose definition was deleted before dispatch shall be skipped. Events trigger reactions even when their TM(5,x) does not fit the TM store.
+
+**OBSW-SRS-303** `[S19]` `IMPLEMENTED` `T`
+The software shall delete the definition for an event on TC(19,2), rejecting an unknown event with code `0x0005`, and delete all definitions on TC(19,3).
+
+**OBSW-SRS-304** `[S19]` `IMPLEMENTED` `T`
+The software shall enable event-action on TC(19,4) and disable it on TC(19,5), keeping the definitions and dropping queued actions.
+
+**OBSW-SRS-305** `[S19]` `IMPLEMENTED` `T`
+The action queue shall hold `OBSW_S19_QUEUE_LEN` actions per tick; further actions shall be dropped and counted.
+
+**OBSW-SRS-306** `[S19]` `IMPLEMENTED` `T`
+The host sim shall route TC(19,1) to TC(19,5) and react to every S5 event it raises. The STM32H7 FreeRTOS build shall route them and react to S12 monitoring events.
+*Evidence: `test/system` for the host sim; inspection of `src/task/pus.c` for FreeRTOS.*
+
+---
+
+## 23. Product assurance [QA]
 
 **OBSW-SRS-260** `[QA]` `IMPLEMENTED` `I`
 Each release shall be tagged and described in `CHANGELOG.md`.

@@ -20,6 +20,7 @@
 #include "obsw/pus/s8.h"
 #include "obsw/pus/s9.h"
 #include "obsw/pus/s12.h"
+#include "obsw/pus/s19.h"
 #include "obsw/tc/dispatcher.h"
 #include "obsw/tm/store.h"
 

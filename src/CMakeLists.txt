@@ -12,6 +12,7 @@ add_library(obsw STATIC
     pus/s8.c
     pus/s9.c
     pus/s12.c
+    pus/s19.c
     pus/s17.c
     pus/s20.c
     fdir/fsm.c

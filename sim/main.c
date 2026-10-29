@@ -80,6 +80,8 @@ static obsw_s9_ctx_t  s9_ctx  = {.obt = &obt};
 static obsw_s20_ctx_t  s20_ctx = {0};
 static obsw_s12_ctx_t  s12_ctx = {0};
 static obsw_s12_def_t  s12_defs[16];
+static obsw_s19_ctx_t  s19_ctx = {0};
+static obsw_s19_def_t  s19_defs[8];
 static obsw_s6_ctx_t  s6_ctx  = {0};
 static obsw_fsm_ctx_t fsm_ctx = {0};
 
@@ -392,6 +394,16 @@ static obsw_tc_route_t routes[] = {
      .handler = obsw_s12_delete, .ctx = &s12_ctx},
     {.apid = 0xFFFF, .service = 12, .subservice = 5,
      .handler = obsw_s12_delete_all, .ctx = &s12_ctx},
+    {.apid = 0xFFFF, .service = 19, .subservice = 1,
+     .handler = obsw_s19_add, .ctx = &s19_ctx},
+    {.apid = 0xFFFF, .service = 19, .subservice = 2,
+     .handler = obsw_s19_delete, .ctx = &s19_ctx},
+    {.apid = 0xFFFF, .service = 19, .subservice = 3,
+     .handler = obsw_s19_delete_all, .ctx = &s19_ctx},
+    {.apid = 0xFFFF, .service = 19, .subservice = 4,
+     .handler = obsw_s19_enable, .ctx = &s19_ctx},
+    {.apid = 0xFFFF, .service = 19, .subservice = 5,
+     .handler = obsw_s19_disable, .ctx = &s19_ctx},
 };
 
 #ifdef OBSW_ENABLE_ORBITFABRIC_CONTRACT
@@ -495,6 +507,11 @@ int main(void)
     obsw_s12_init(&s12_ctx, &s1_ctx, &s5_ctx, s20_params, (uint8_t)s20_ctx.table_len,
                   s12_defs, (uint8_t)(sizeof(s12_defs) / sizeof(s12_defs[0])));
 
+    /* S19: every S5 event (watchdog, S12, ...) can trigger a stored TC */
+    obsw_s19_init(&s19_ctx, &s1_ctx, s19_defs, (uint8_t)(sizeof(s19_defs) / sizeof(s19_defs[0])));
+    s5_ctx.on_event     = obsw_s19_on_event;
+    s5_ctx.on_event_ctx = &s19_ctx;
+
     /* Watchdog */
     obsw_wd_init(&wd_ctx, 30, on_watchdog_expiry, &s5_ctx);
 
@@ -557,6 +574,9 @@ int main(void)
         } else if (type == OBSW_FRAME_SENSOR) {
             obsw_sensor_frame_t sensor;
             if (obsw_sim_parse_sensor(frame, frame_len, &sensor)) {
+                /* S19 actions queued by last tick's events run first */
+                (void)obsw_s19_run(&s19_ctx, &dispatcher);
+
                 float dt = sensor.sim_time - last_sim_time;
                 if (dt <= 0.0f) dt = 0.1f;
                 last_sim_time = sensor.sim_time;
