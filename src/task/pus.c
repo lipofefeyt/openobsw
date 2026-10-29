@@ -22,6 +22,7 @@
 #include "obsw/pus/s6.h"
 #include "obsw/pus/s8.h"
 #include "obsw/pus/s9.h"
+#include "obsw/pus/s12.h"
 #include "obsw/pus/s17.h"
 #include "obsw/pus/s20.h"
 #include "obsw/tc/dispatcher.h"
@@ -45,6 +46,13 @@ static obsw_obt_t     s_obt   = {0};
 static obsw_s9_ctx_t  s9_ctx  = {.obt = &s_obt};
 static obsw_s6_ctx_t  s6_ctx  = {0};
 
+/* S12 monitoring: definitions live here, checked from the FDIR full tick.
+ * Its events use their own S5 context with no FSM hook: mode changes on
+ * this target go through the Mode Manager, not directly from S5. */
+static obsw_s12_ctx_t s12_ctx = {0};
+static obsw_s12_def_t s12_defs[8];
+static obsw_s5_ctx_t  s12_s5  = {0};
+
 /* S6 memory map. Patch RAM sits at ground address 0, as in the host sim
  * and opensvf, so S6 campaigns are target-independent. Internal flash is
  * exposed read-only at its real address (stm32h750.ld) so TC(6,5) can
@@ -65,10 +73,10 @@ static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT, .value = {.u32 = 0}},
     {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,   .value = {.u32 = 0}},
     /* AOCS control gains — tunable via TC(20,1), read by AOCS task each tick */
-    {.param_id = SRDB_PARAM_BDOT_GAIN,    .value = {.f32 = 1.0e4f}},
-    {.param_id = SRDB_PARAM_BDOT_HPF_TAU, .value = {.f32 = 15.0f}},
-    {.param_id = SRDB_PARAM_ADCS_KP,      .value = {.f32 = 0.5f}},
-    {.param_id = SRDB_PARAM_ADCS_KD,      .value = {.f32 = 0.1f}},
+    {.param_id = SRDB_PARAM_BDOT_GAIN,    .value = {.f32 = 1.0e4f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_BDOT_HPF_TAU, .value = {.f32 = 15.0f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_ADCS_KP,      .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_ADCS_KD,      .value = {.f32 = 0.1f}, .type = OBSW_S20_F32},
 };
 
 /* S8 function table — mode transition requests via Mode Manager. */
@@ -118,6 +126,27 @@ static int s3_define_locked(const obsw_tc_t *tc, obsw_tc_responder_t respond, vo
     return rc;
 }
 
+/* Runs a handler inside a critical section, for tables another task reads. */
+typedef struct {
+    obsw_tc_handler_fn fn;
+    void              *ctx;
+} locked_handler_t;
+
+static int run_locked(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
+{
+    const locked_handler_t *h = (const locked_handler_t *)ctx;
+    taskENTER_CRITICAL();
+    int rc = h->fn(tc, respond, h->ctx);
+    taskEXIT_CRITICAL();
+    return rc;
+}
+
+static locked_handler_t s12_enable_l     = {obsw_s12_enable, &s12_ctx};
+static locked_handler_t s12_disable_l    = {obsw_s12_disable, &s12_ctx};
+static locked_handler_t s12_add_l        = {obsw_s12_add, &s12_ctx};
+static locked_handler_t s12_delete_l     = {obsw_s12_delete, &s12_ctx};
+static locked_handler_t s12_delete_all_l = {obsw_s12_delete_all, &s12_ctx};
+
 /* S3 route ctx pointers are filled in at init time from obsw_fdir_get_s3_ctx(). */
 static obsw_tc_route_t s_routes[] = {
     {.apid = 0xFFFF, .service = 3,  .subservice = 5,
@@ -136,6 +165,17 @@ static obsw_tc_route_t s_routes[] = {
      .handler = obsw_s20_get,    .ctx = &s20_ctx},
     {.apid = 0xFFFF, .service = SRDB_TC_SET_OBT_SVC, .subservice = SRDB_TC_SET_OBT_SUBSVC,
      .handler = s9_set_obt_locked, .ctx = &s9_ctx},
+    /* S12 is checked by the FDIR task: definitions change under a lock */
+    {.apid = 0xFFFF, .service = 12, .subservice = 1,
+     .handler = run_locked, .ctx = &s12_enable_l},
+    {.apid = 0xFFFF, .service = 12, .subservice = 2,
+     .handler = run_locked, .ctx = &s12_disable_l},
+    {.apid = 0xFFFF, .service = 12, .subservice = 3,
+     .handler = run_locked, .ctx = &s12_add_l},
+    {.apid = 0xFFFF, .service = 12, .subservice = 4,
+     .handler = run_locked, .ctx = &s12_delete_l},
+    {.apid = 0xFFFF, .service = 12, .subservice = 5,
+     .handler = run_locked, .ctx = &s12_delete_all_l},
     /* S6 is not in the SAFE/STANDBY whitelist: memory TCs need NOMINAL */
     {.apid = 0xFFFF, .service = 6,  .subservice = 2,
      .handler = obsw_s6_load,    .ctx = &s6_ctx},
@@ -202,6 +242,11 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
 
     s9_ctx.s1         = &s1_ctx;
 
+    s12_s5.tm_store = tm_store;
+    s12_s5.apid     = SRDB_APID_DEFAULT;
+    obsw_s12_init(&s12_ctx, &s1_ctx, &s12_s5, s20_params, s20_ctx.table_len,
+                  s12_defs, (uint8_t)(sizeof(s12_defs) / sizeof(s12_defs[0])));
+
     s6_ctx.tm_store     = tm_store;
     s6_ctx.s1           = &s1_ctx;
     s6_ctx.apid         = SRDB_APID_DEFAULT;
@@ -238,6 +283,13 @@ void obsw_pus_obt_advance(uint32_t dt_ms)
 {
     taskENTER_CRITICAL();
     obsw_obt_advance(&s_obt, dt_ms);
+    taskEXIT_CRITICAL();
+}
+
+void obsw_pus_s12_check(void)
+{
+    taskENTER_CRITICAL();
+    obsw_s12_check(&s12_ctx);
     taskEXIT_CRITICAL();
 }
 

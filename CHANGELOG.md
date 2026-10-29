@@ -4,6 +4,17 @@ All notable changes to openobsw. Versions follow the release trains in the
 README roadmap. Releases before v0.16 are described on the
 [GitHub releases page](https://github.com/lipofefeyt/openobsw/releases).
 
+## [Unreleased] — v0.18 Service parity with OpenSVF
+
+### Added
+
+- PUS S12 on-board monitoring: TC(12,1)–(12,5), limit checks on S20
+  parameters each control tick, S5 events on entering an out-of-limit
+  state, latched until back in range. Routed on the host sim and STM32H7
+  FreeRTOS; wire format matches opensvf's `PusService12`.
+- S20 parameters carry their type (`OBSW_S20_U32`, `_I32`, `_F32`);
+  `obsw_s20_find()` and `obsw_s20_as_float()` accessors.
+
 ## [v0.17] — Qualification baseline
 
 ### Added
