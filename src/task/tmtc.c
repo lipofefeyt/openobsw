@@ -59,7 +59,7 @@ static uint8_t s_tm_pkt[OBSW_TM_MAX_PACKET_LEN]; /* static — keeps 1 KB off ta
 
 static obsw_io_ops_t   *s_io;
 static obsw_tm_store_t *s_tm_store;
-static obsw_tm_log_t    s_tm_log;
+static obsw_dash_link_t s_link; /* written only by this task */
 
 /* ── UART primitives ──────────────────────────────────────────────── */
 
@@ -77,9 +77,11 @@ static void uart_write(const uint8_t *buf, uint16_t len)
 
 /* ── TM downlink ──────────────────────────────────────────────────── */
 
+#ifdef OBSW_UART_ASCII_DEBUG
 /* Emit "# TM(svc,subsvc)\r\n" after each binary frame so picocom users
- * see a human-readable label.  '#' (0x23) is not 0x04 or 0xFF, so wire-
- * protocol parsers skip it safely (decode_tm_packets skips non-0x04 bytes). */
+ * see a human-readable label.  Only in OBSW_UART_ASCII_DEBUG builds: the
+ * text shares USART3 with wire protocol v3 and a strict parser would see it
+ * as framing garbage, so the default build keeps the stream binary-only. */
 static void tm_uart_label(uint8_t svc, uint8_t subsvc)
 {
     uint8_t buf[16];
@@ -94,6 +96,7 @@ static void tm_uart_label(uint8_t svc, uint8_t subsvc)
     buf[i++] = ')'; buf[i++] = '\r'; buf[i++] = '\n';
     uart_write(buf, i);
 }
+#endif /* OBSW_UART_ASCII_DEBUG */
 
 static void flush_tm(void)
 {
@@ -103,16 +106,11 @@ static void flush_tm(void)
         uint8_t hdr[3] = {WIRE_TM, (uint8_t)(plen >> 8), (uint8_t)(plen & 0xFFU)};
         uart_write(hdr, 3);
         uart_write(s_tm_pkt, plen);
-        if (plen >= 9U) {
-            uint8_t svc    = s_tm_pkt[7];
-            uint8_t subsvc = s_tm_pkt[8];
-            /* Log for LCD display (FDIR task reads) */
-            s_tm_log.buf[s_tm_log.write_idx % OBSW_TM_LOG_DEPTH].svc    = svc;
-            s_tm_log.buf[s_tm_log.write_idx % OBSW_TM_LOG_DEPTH].subsvc = subsvc;
-            s_tm_log.write_idx++;
-            /* ASCII label on UART for terminal monitors */
-            tm_uart_label(svc, subsvc);
-        }
+        obsw_dash_link_note_tm(&s_link, s_tm_pkt, plen);
+#ifdef OBSW_UART_ASCII_DEBUG
+        if (plen >= 9U)
+            tm_uart_label(s_tm_pkt[7], s_tm_pkt[8]);
+#endif
     }
 }
 
@@ -153,8 +151,10 @@ static void tmtc_task(void *param)
         for (uint16_t i = 0; i < flen; i++)
             item.data[i] = uart_getc();
 
-        if (type == WIRE_TC)
+        if (type == WIRE_TC) {
+            obsw_dash_link_note_tc(&s_link);
             xQueueSend(s_tc_queue, &item, 0); /* non-blocking; drop if PUS is backed up */
+        }
 
         flush_tm();
         uart_write(&EOT, 1);
@@ -181,12 +181,19 @@ void USART3_IRQHandler(void)
 
 QueueHandle_t  obsw_tmtc_get_tc_queue(void) { return s_tc_queue; }
 TaskHandle_t   obsw_tmtc_get_handle(void)   { return s_handle;   }
-obsw_tm_log_t *obsw_tmtc_get_tm_log(void)  { return &s_tm_log;  }
+
+void obsw_tmtc_get_link_stats(obsw_dash_link_t *out)
+{
+    taskENTER_CRITICAL();
+    *out = s_link;
+    taskEXIT_CRITICAL();
+}
 
 void obsw_tmtc_task_init(obsw_io_ops_t *io, obsw_tm_store_t *tm_store)
 {
     s_io       = io;
     s_tm_store = tm_store;
+    obsw_dash_link_init(&s_link);
 
     s_tc_queue = xQueueCreateStatic(TC_QUEUE_DEPTH,
                                     sizeof(obsw_tc_frame_item_t),

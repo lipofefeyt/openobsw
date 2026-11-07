@@ -33,6 +33,8 @@
  #include "obsw/task/fdir.h"
  #endif
 
+ #include "obsw/ui/dashboard.h"
+
  #ifndef OBSW_RENODE
  #include "obsw/hal/stm32h7/spi.h"
  #include "obsw/hal/stm32h7/lcd.h"
@@ -74,6 +76,12 @@ static void system_clock_init(void)
  /* ------------------------------------------------------------------ */
 
  static obsw_tm_store_t tm_store;
+
+ #ifndef OBSW_RENODE
+ /* RCC_RSR as read at boot, before RMVF clears it. Read over SWD
+  * (e.g. OpenOCD "mdw &s_boot_rcc_rsr") to see every reset flag that was set. */
+ static volatile uint32_t s_boot_rcc_rsr;
+ #endif
 
  /* Superloop path owns the dispatcher and PUS contexts directly.
   * In the FreeRTOS path these live in src/task/pus.c instead. */
@@ -197,42 +205,51 @@ static void system_clock_init(void)
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
 
  #ifndef OBSW_RENODE
-     /* Print reset source from RCC_RSR so we can tell if the board is BOR- or
-      * IWDG-cycling.  STM32H750 RCC base 0x58024400, RSR offset 0x0D0.
-      * Key bits: 20=POR, 21=PIN(NRST), 22=BOR, 23=SFT, 24=IWDG, 26=WWDG, 29=LP */
- #define RCC_RSR (*(volatile uint32_t *)(0x58024400UL + 0x0D0U))
+     /* Report the reset source from RCC_RSR (RCC base 0x58024400, RSR 0x0D0).
+      * Bit positions from RM0433 / CMSIS RCC_RSR_*_Pos, confirmed on the bench
+      * (NRST button → 0x00460000 = PINRSTF | CPURSTF):
+      *   21 BORRSTF, 22 PINRSTF, 23 PORRSTF, 24 SFTRSTF, 26 IWDG1RSTF, 28 WWDG1RSTF
+      * Flags accumulate — every system reset also sets PINRSTF and a power-on
+      * also sets BORRSTF — so decode the most specific source first. */
+ #define RCC_RSR     (*(volatile uint32_t *)(0x58024400UL + 0x0D0U))
+ #define RSR_RMVF    (1U << 16)
+ #define RSR_BOR     (1U << 21)
+ #define RSR_PIN     (1U << 22)
+ #define RSR_POR     (1U << 23)
+ #define RSR_SFT     (1U << 24)
+ #define RSR_IWDG1   (1U << 26)
+ #define RSR_WWDG1   (1U << 28)
      {
          uint32_t rsr = RCC_RSR;
-         /* Clear flags for next boot */
-         RCC_RSR = rsr | (1U << 16);   /* RMVF bit clears all reset flags */
-         const char *rsrc =
-             (rsr & (1U << 24)) ? "[OBSW] Reset: IWDG\r\n" :
-             (rsr & (1U << 22)) ? "[OBSW] Reset: BOR (supply)\r\n" :
-             (rsr & (1U << 23)) ? "[OBSW] Reset: Software\r\n" :
-             (rsr & (1U << 21)) ? "[OBSW] Reset: NRST pin\r\n" :
-             (rsr & (1U << 20)) ? "[OBSW] Reset: POR (power-on)\r\n" :
-                                  "[OBSW] Reset: unknown\r\n";
+         s_boot_rcc_rsr = rsr;   /* raw flags, kept for SWD inspection */
+         RCC_RSR = rsr | RSR_RMVF;     /* clear all reset flags for next boot */
+         obsw_dash_reset_t cause;
+         const char *rsrc;
+         if (rsr & RSR_IWDG1)    { cause = OBSW_DASH_RESET_IWDG; rsrc = "[OBSW] Reset: IWDG\r\n"; }
+         else if (rsr & RSR_WWDG1) { cause = OBSW_DASH_RESET_WWDG; rsrc = "[OBSW] Reset: WWDG\r\n"; }
+         else if (rsr & RSR_SFT) { cause = OBSW_DASH_RESET_SW;   rsrc = "[OBSW] Reset: Software\r\n"; }
+         else if (rsr & RSR_POR) { cause = OBSW_DASH_RESET_POR;  rsrc = "[OBSW] Reset: POR (power-on)\r\n"; }
+         else if (rsr & RSR_BOR) { cause = OBSW_DASH_RESET_BOR;  rsrc = "[OBSW] Reset: BOR (supply)\r\n"; }
+         else if (rsr & RSR_PIN) { cause = OBSW_DASH_RESET_PIN;  rsrc = "[OBSW] Reset: NRST pin\r\n"; }
+         else                    { cause = OBSW_DASH_RESET_UNKNOWN; rsrc = "[OBSW] Reset: unknown\r\n"; }
+ #ifdef OBSW_FREERTOS
+         obsw_fdir_set_reset_cause(cause);
+ #else
+         (void)cause;
+ #endif
          uart_write_buf((const uint8_t *)rsrc, (uint16_t)__builtin_strlen(rsrc));
      }
  #endif
 
- /* SPI4 init is fast (register config only); LCD init is deferred to the
-  * FDIR task's first tick so FreeRTOS — and the TMTC task — start without
-  * a 400 ms blocking delay.  Without this deferral the UART FIFO fills
-  * during LCD init and the first TC ping is lost.
-  *
-  * BL is turned on here (before FreeRTOS) so it stays on throughout the
-  * FreeRTOS startup current spike and the subsequent FDIR lcd_init() re-run.
-  * Toggling BL from the FDIR task would fire the ST7735R power supervisor. */
+ /* LCD cold init before the scheduler: SWRESET + config (~0.6 s blocking),
+  * clear the previous run's picture out of GRAM, then backlight on. FDIR
+  * draws the dashboard from its first full tick. */
  #ifndef OBSW_RENODE
      obsw_i2c1_init();
      obsw_spi4_init();
-     lcd_init();           /* cold init with SWRESET — safe here before FreeRTOS starts;
-                            * the PS fires during scheduler startup and resets ALL panel
-                            * registers, so FDIR re-applies the full config at T=1s via
-                            * lcd_slpout_dispon() which skips SWRESET */
-     lcd_backlight_on();   /* BL on before FreeRTOS; lcd_gpio_init never drives BL_OFF
-                            * so FDIR's re-init at T=1s keeps the backlight on */
+     lcd_init();
+     lcd_clear(LCD_BLACK);
+     lcd_backlight_on();
  #endif
 
  #ifdef OBSW_FREERTOS

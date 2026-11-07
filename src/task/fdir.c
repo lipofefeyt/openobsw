@@ -11,8 +11,9 @@
  *      with matching trigger IDs call obsw_fsm_to_safe() on the Mode Manager's
  *      FSM directly via the s5_ctx.fsm pointer.
  *
- *   3. LCD status — updates the status bar each tick with current mode and
- *      watchdog kick count.
+ *   3. LCD dashboard — once per second, lays out mode, OBT, link counters,
+ *      last TM/event and AOCS state (obsw/ui/dashboard.h) and redraws only
+ *      the changed cells (hal/stm32h7/lcd_dash.h). FDIR is the only LCD user.
  *
  * The mode FSM is owned by the Mode Manager task; FDIR is a pure fault
  * responder and never initiates nominal-mode transitions.
@@ -20,13 +21,10 @@
  * Sub-tick period: 200 ms (vTaskDelayUntil — deterministic).
  * Full-tick period: 1000 ms (every 5th sub-tick).
  *
- * The ST7735R power supervisor fires ~250 ms after DISPON if the supply
- * ripples from sustained CPU + AOCS I2C + panel scan current.  lcd_slpout_dispon_fast()
- * is called every 200 ms sub-tick (< 250 ms PS window) to restore panel
- * registers before the PS can reset them; GRAM is preserved so the display
- * appears continuously on.  Content updates (console rewrite, status bar,
- * TM log drain) happen only on the 1000 ms full-tick to avoid triggering the
- * PS with sustained SPI bursts.
+ * The LCD is initialised once in main() and needs no maintenance. The old
+ * "ST7735R power supervisor" keepalive (re-wake every 200 ms) is kept only
+ * behind OBSW_LCD_KEEPALIVE (default OFF): the blank screen it worked around
+ * was an inverted backlight polarity (PE10 is active-low), not a panel reset.
  *
  * IWDG configuration (STM32H750, LSI ≈ 32 kHz):
  *   Prescaler /128 → counter clock = 250 Hz
@@ -42,13 +40,18 @@
 #include "obsw/pus/s3.h"
 #include "obsw/pus/s5.h"
 #include "obsw/srdb_generated.h"
+#include "obsw/ui/dashboard.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
 #ifndef OBSW_RENODE
-#include "obsw/hal/stm32h7/lcd_console.h"
 #include "obsw/hal/stm32h7/lcd.h"
+#include "obsw/hal/stm32h7/lcd_dash.h"
 #endif
+
+/* LCD dashboard title (row 0) and full-redraw self-heal period */
+#define DASH_TITLE          "openobsw v" SRDB_VERSION " STM32H750"
+#define DASH_REDRAW_PERIOD  30U   /* full ticks (s) between full redraws */
 
 /* ── IWDG registers (STM32H750, D3 domain) ───────────────────────── */
 
@@ -98,6 +101,7 @@ static void led_toggle(void)
 #define DBG_USART3_ISR (*(volatile uint32_t *)(0x40004800UL + 0x1CU))
 #define DBG_USART_TXE  (1U << 7)
 
+#ifdef OBSW_UART_ASCII_DEBUG
 static void dbg_putc(char c)
 {
     while (!(DBG_USART3_ISR & DBG_USART_TXE));
@@ -108,6 +112,11 @@ static void dbg_puts(const char *s)
 {
     while (*s) dbg_putc(*s++);
 }
+#else
+/* Default build: USART3 carries only wire protocol v3 — no ASCII trace. */
+#define dbg_putc(c) ((void)0)
+#define dbg_puts(s) ((void)0)
+#endif
 
 /* ── Task parameters ──────────────────────────────────────────────── */
 
@@ -120,7 +129,7 @@ static StaticTask_t  s_tcb;
 static StackType_t   s_stack[FDIR_STACK_DEPTH];
 
 static obsw_s5_ctx_t   s_s5;   /* FDIR-local S5 context for BOOT_COMPLETE */
-static obsw_tm_log_t  *s_tm_log;
+static obsw_dash_reset_t s_reset_cause = OBSW_DASH_RESET_UNKNOWN;
 
 /* ── S3 Housekeeping ──────────────────────────────────────────────── */
 
@@ -192,6 +201,38 @@ static void iwdg_kick(void)
     IWDG_KR = IWDG_KEY_REFRESH;
 }
 
+/* ── LCD dashboard ────────────────────────────────────────────────── */
+
+#ifndef OBSW_RENODE
+static obsw_dash_frame_t s_dash_frame;   /* static — keeps ~270 B off the stack */
+
+/* Collect one snapshot from the task-owned state and lay it out. */
+static const obsw_dash_frame_t *build_dashboard(obsw_fsm_mode_t mode, uint32_t seconds)
+{
+    obsw_dash_snapshot_t snap;
+    const obsw_aocs_hk_t *hk = obsw_aocs_get_hk();
+
+    snap.mode       = mode;
+    snap.obt_s      = obsw_pus_obt_seconds();
+    snap.uptime_s   = seconds;       /* one full tick per second since boot */
+    snap.wdg_kicks  = seconds;       /* kick_count increments each full tick */
+    snap.reset      = s_reset_cause;
+    obsw_tmtc_get_link_stats(&snap.link);
+    snap.aocs       = (obsw_dash_aocs_t)hk->law;
+    snap.mag_valid  = (hk->mag_valid != 0U);
+    snap.mag_t[0]   = hk->mag_x;
+    snap.mag_t[1]   = hk->mag_y;
+    snap.mag_t[2]   = hk->mag_z;
+    snap.dipole_valid = (hk->dipole_valid != 0U);
+    snap.dipole[0]  = hk->m_cmd_x;
+    snap.dipole[1]  = hk->m_cmd_y;
+    snap.dipole[2]  = hk->m_cmd_z;
+
+    obsw_dash_format(&snap, DASH_TITLE, &s_dash_frame);
+    return &s_dash_frame;
+}
+#endif
+
 /* ── Task body ────────────────────────────────────────────────────── */
 
 static void fdir_task(void *param)
@@ -199,7 +240,9 @@ static void fdir_task(void *param)
     (void)param;
 
     bool boot_sent = false;
-    bool lcd_first = true;   /* separate from boot_sent — set after first SLPOUT */
+#if defined(OBSW_LCD_KEEPALIVE) && !defined(OBSW_RENODE)
+    bool lcd_first = true;   /* first keepalive uses the full blocking wake */
+#endif
     TickType_t last_wake = xTaskGetTickCount();
     uint32_t kick_count = 0;
     obsw_fsm_mode_t last_mode = obsw_fsm_mode(obsw_mode_get_fsm());
@@ -211,26 +254,17 @@ static void fdir_task(void *param)
         /* 1. Kick IWDG every 200 ms sub-tick (4 s timeout → 20× safety margin). */
         iwdg_kick();
 
-        /* 2. LCD keepalive — re-issue SLPOUT+DISPON every 200 ms.
-         *    The ST7735R power supervisor resets panel registers to SLPIN when
-         *    the supply ripples under load (CPU + AOCS I2C + panel scan).  The
-         *    PS fires ~250 ms after DISPON, so calling lcd_slpout_dispon_fast()
-         *    every 200 ms (< 250 ms) beats it.  GRAM is preserved, so the
-         *    display content is visible immediately after each DISPON.
-         *
-         *    lcd_first uses the BLOCKING (DWT spin) variant so that the AOCS
-         *    task cannot preempt FDIR during the 120 ms SLPOUT wait — AOCS I2C
-         *    reads are the primary supply transient suspected of re-triggering
-         *    the PS.  After the first init lcd_first = false, so subsequent
-         *    keepalives use the yielding fast path (10 ms). */
-#ifndef OBSW_RENODE
+        /* 2. Optional LCD keepalive (OBSW_LCD_KEEPALIVE, default OFF): kept for
+         *    bench A/B only. The panel stays on without it once the backlight
+         *    polarity is right. */
+#if defined(OBSW_LCD_KEEPALIVE) && !defined(OBSW_RENODE)
         if (lcd_first) {
-            lcd_slpout_dispon();   /* blocking DWT spin — AOCS cannot preempt */
+            lcd_slpout_dispon();   /* blocking DWT spin */
             lcd_first = false;
-            dbg_putc('B');         /* Blocking first-init fired */
+            dbg_putc('B');
         } else {
             lcd_slpout_dispon_fast();
-            dbg_putc('k');         /* keepalive fired */
+            dbg_putc('k');
         }
 #endif
 
@@ -250,40 +284,12 @@ static void fdir_task(void *param)
         s_kick_count_hk = kick_count;
         led_toggle();
 
-        /* 4. LCD content update — rewrite header + drain TM log. */
-#ifndef OBSW_RENODE
-        lcd_console_init();
-        lcd_console_set_colours(LCD_BLACK, LCD_GREEN);
-        lcd_console_puts("openobsw v" SRDB_VERSION "\n");
-        lcd_console_puts("STM32H750 HSI 64MHz\n");
-        lcd_console_puts("FDIR alive\n");
-#endif
-
         /* 5. Boot event — emit TM(5,1) BOOT_COMPLETE once. */
         if (!boot_sent) {
             obsw_s5_report(&s_s5, OBSW_S5_INFO,
                            SRDB_EVENT_BOOT_COMPLETE, NULL, 0);
             boot_sent = true;
         }
-
-#ifndef OBSW_RENODE
-        /* 6. Drain TM log and print each new packet to LCD console. */
-        while (s_tm_log->read_idx != s_tm_log->write_idx) {
-            obsw_tm_log_entry_t e =
-                s_tm_log->buf[s_tm_log->read_idx % OBSW_TM_LOG_DEPTH];
-            s_tm_log->read_idx++;
-            char ln[12];
-            uint8_t k = 0;
-            ln[k++] = 'T'; ln[k++] = 'M'; ln[k++] = '(';
-            if (e.svc    >= 10U) ln[k++] = (char)('0' + e.svc    / 10U);
-            ln[k++] = (char)('0' + e.svc    % 10U);
-            ln[k++] = ',';
-            if (e.subsvc >= 10U) ln[k++] = (char)('0' + e.subsvc / 10U);
-            ln[k++] = (char)('0' + e.subsvc % 10U);
-            ln[k++] = ')'; ln[k++] = '\n'; ln[k] = '\0';
-            lcd_console_puts(ln);
-        }
-#endif
 
         /* 7. Read current mode; track SAFE entries for HK. */
         obsw_fsm_mode_t cur_mode = obsw_fsm_mode(obsw_mode_get_fsm());
@@ -295,28 +301,10 @@ static void fdir_task(void *param)
         obsw_s3_tick(&s_s3);
 
 #ifndef OBSW_RENODE
-        /* 9. Update LCD status bar: "FDIR:NOMINAL  WDG:00000042" (26 chars) */
-        {
-            static const char h[] = "0123456789";
-            char s[27];
-            if (cur_mode == OBSW_FSM_NOMINAL) {
-                __builtin_memcpy(s, "FDIR:NOMINAL  WDG:", 18);
-            } else if (cur_mode == OBSW_FSM_SAFE) {
-                __builtin_memcpy(s, "FDIR:SAFE     WDG:", 18);
-            } else {
-                __builtin_memcpy(s, "FDIR:STANDBY  WDG:", 18);
-            }
-            uint32_t k = kick_count;
-            for (int8_t i = 7; i >= 0; i--) {
-                s[18 + i] = h[k % 10U]; k /= 10U;
-            }
-            s[26] = '\0';
-            uint16_t fg = (cur_mode == OBSW_FSM_NOMINAL) ? LCD_BLACK :
-                          (cur_mode == OBSW_FSM_SAFE)    ? LCD_WHITE : LCD_BLACK;
-            uint16_t bg = (cur_mode == OBSW_FSM_NOMINAL) ? LCD_GREEN :
-                          (cur_mode == OBSW_FSM_SAFE)    ? LCD_RED   : LCD_YELLOW;
-            lcd_console_set_status(s, fg, bg);
-        }
+        /* 9. LCD dashboard — snapshot, lay out, redraw changed cells only. */
+        if ((kick_count % DASH_REDRAW_PERIOD) == 0U)
+            lcd_dash_invalidate();   /* self-heal in case GRAM was lost */
+        lcd_dash_render(build_dashboard(cur_mode, kick_count));
 #endif
     }
 }
@@ -370,10 +358,13 @@ void obsw_fdir_task_init(obsw_tm_store_t *tm_store)
     iwdg_init();
     led_init();
 
-    s_tm_log = obsw_tmtc_get_tm_log();
-
     xTaskCreateStatic(fdir_task, "FDIR", FDIR_STACK_DEPTH,
                       NULL, FDIR_PRIORITY, s_stack, &s_tcb);
+}
+
+void obsw_fdir_set_reset_cause(obsw_dash_reset_t cause)
+{
+    s_reset_cause = cause;
 }
 
 obsw_s3_ctx_t *obsw_fdir_get_s3_ctx(void)

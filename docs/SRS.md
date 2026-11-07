@@ -54,6 +54,7 @@ can sit next to related ones. IDs are never reused.
 | [S11] | Time-based scheduling | 280–289 |
 | [S12] | On-board monitoring | 290–299 |
 | [S19] | Event-action | 300–309 |
+| [UI] | Status display | 310–319 |
 
 ### Status
 
@@ -467,7 +468,24 @@ The host sim shall route TC(19,1) to TC(19,5) and react to every S5 event it rai
 
 ---
 
-## 24. Product assurance [QA]
+## 24. Status display [UI]
+
+**OBSW-SRS-310** `[UI]` `IMPLEMENTED` `T`
+The software shall lay out a status snapshot (mode, OBT, reset cause, TC/TM link counters, last TM, last event, AOCS control law, magnetic field, commanded dipole, uptime, watchdog count) as a fixed grid of 26 x 10 characters with every field at a fixed column, space-padded, with one semantic style per row, without dynamic allocation or formatted-output library calls.
+
+**OBSW-SRS-311** `[UI]` `IMPLEMENTED` `T`
+Displayed numbers shall saturate at the largest value their field can show instead of wrapping or overflowing it; NaN shall show as `nan`, and invalid sensor or actuator data shall show as absent.
+
+**OBSW-SRS-312** `[UI]` `IMPLEMENTED` `T`
+The software shall count TC frames received, TM packets sent and TM(1,2)/TM(1,8) failure reports sent with counters that saturate at 999999, and record the service and subservice of the last TM and the event ID and severity of the last TM(5,1..4). A packet too short for the PUS-C TM secondary header shall be counted but not classified.
+
+**OBSW-SRS-313** `[UI]` `IMPLEMENTED` `I`
+The STM32H7 FreeRTOS build shall show the dashboard on the ST7735R LCD once per second from the FDIR task only, redrawing only the character cells that changed since the previous frame.
+*Evidence: inspection of `src/task/fdir.c` and `src/hal/stm32h7/lcd_dash.c`.*
+
+---
+
+## 25. Product assurance [QA]
 
 **OBSW-SRS-260** `[QA]` `IMPLEMENTED` `I`
 Each release shall be tagged and described in `CHANGELOG.md`.
@@ -478,7 +496,7 @@ CI shall fail when an IMPLEMENTED requirement with method T has no tagged test, 
 
 **OBSW-SRS-262** `[QA]` `IMPLEMENTED` `I`
 CI shall measure line coverage of the core library and fail below 90%.
-*Evidence: CI `coverage` job (`gcovr --fail-under-line 90` over `src/{ccsds,tc,tm,pus,fdir,aocs,time}`, after unit, integration and system tests).*
+*Evidence: CI `coverage` job (`gcovr --fail-under-line 90` over `src/{ccsds,tc,tm,pus,fdir,aocs,time,ui}`, after unit, integration and system tests).*
 
 **OBSW-SRS-263** `[QA]` `IMPLEMENTED` `I`
 CI shall run static analysis on the core library with MISRA C:2012 checks, with no findings against Mandatory or Required rules, and fail on any finding not covered by a documented deviation. *(#74)*

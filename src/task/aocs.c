@@ -4,6 +4,7 @@
 #include "obsw/aocs/bdot.h"
 #include "obsw/aocs/adcs.h"
 #include "obsw/srdb_generated.h"
+#include "obsw/ui/dashboard.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -43,8 +44,10 @@ static void aocs_task(void *param)
         last_mode = mode;
 
         /* STANDBY: AOCS off — actuators hold zero command */
-        if (mode == OBSW_FSM_STANDBY)
+        if (mode == OBSW_FSM_STANDBY) {
+            s_hk.law = (uint8_t)OBSW_DASH_AOCS_OFF;
             continue;
+        }
 
         /* Sync S20-tunable gains — reads are atomic (32-bit, single-core ARM) */
         s_bdot.config.gain    = obsw_pus_s20_get_float(SRDB_PARAM_BDOT_GAIN,    1.0e4f);
@@ -76,6 +79,7 @@ static void aocs_task(void *param)
         if (mode == OBSW_FSM_NOMINAL && st_valid && gyro_valid) {
             obsw_adcs_output_t out;
             obsw_adcs_step(&s_adcs, &q_meas, omega, &out);
+            s_hk.law = (uint8_t)OBSW_DASH_AOCS_PD;
             /* TODO: write out.torque_cmd to RW driver */
         } else if (mode == OBSW_FSM_SAFE && mag_valid) {
             obsw_bdot_output_t out;
@@ -83,7 +87,11 @@ static void aocs_task(void *param)
             s_hk.m_cmd_x = out.m_cmd[0];
             s_hk.m_cmd_y = out.m_cmd[1];
             s_hk.m_cmd_z = out.m_cmd[2];
+            s_hk.dipole_valid = 1U;
+            s_hk.law = (uint8_t)OBSW_DASH_AOCS_BDOT;
             /* TODO: write out.m_cmd to MTQ driver */
+        } else {
+            s_hk.law = (uint8_t)OBSW_DASH_AOCS_IDLE;
         }
         /* No valid sensors → m_cmd holds last command (safe by zero-init) */
     }

@@ -79,6 +79,33 @@ If you get `LIBUSB_ERROR_NO_DEVICE`, either run with `sudo` or add a udev rule.
 
 ---
 
+#### If OpenOCD cannot connect
+
+`Error: init mode failed (unable to connect to the target)` once firmware is
+running: connect under reset. Hold the board's **RST** button, start OpenOCD,
+release it once `Cortex-M7 r1p1 processor detected` is printed:
+
+```bash
+openocd -f interface/stlink.cfg -c "adapter speed 480" -f target/stm32h7x.cfg \
+    -c "reset_config none separate" \
+    -c "program $HOME/workspace/openobsw/build_stm32h7/obsw_stm32h7.bin 0x08000000 verify reset exit"
+```
+
+Use `$HOME`, not `~`: the shell does not expand `~` inside the quoted `-c`.
+
+#### Live inspection from the devcontainer
+
+Start OpenOCD as a server in WSL2 (same reset trick) with `-c "bindto 0.0.0.0"`.
+The devcontainer reaches its TCL port at `172.17.0.1:6666`; `read_memory`
+works on the running core without halting. Before halting, freeze the IWDG
+(`DBGMCU_APB4FZ1` 0x5C001054 bit 18) or the 4 s watchdog resets the board.
+`s_boot_rcc_rsr` holds the raw reset flags from the last boot.
+
+#### On-board LCD
+
+ST7735R 160×80 on SPI4 (PE12 SCK, PE14 MOSI, PE11 CS, PE13 DC). The
+backlight on **PE10 is active-low** (LOW = on). LCD reset is tied to NRST.
+
 ### DFU bootloader (alternative — no ST-Link needed)
 
 Enter DFU mode: hold BOOT0 → press+release RESET → wait 0.5s → release BOOT0.

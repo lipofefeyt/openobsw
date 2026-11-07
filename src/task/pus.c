@@ -353,6 +353,11 @@ void obsw_pus_obt_advance(uint32_t dt_ms)
     taskEXIT_CRITICAL();
 }
 
+uint32_t obsw_pus_obt_seconds(void)
+{
+    return obsw_obt_seconds(&s_obt);
+}
+
 void obsw_pus_s12_check(void)
 {
     taskENTER_CRITICAL();

@@ -21,6 +21,7 @@ add_library(obsw STATIC
     aocs/bdot.c
     aocs/adcs.c
     time/obt.c
+    ui/dashboard.c
 )
 
 target_include_directories(obsw PUBLIC

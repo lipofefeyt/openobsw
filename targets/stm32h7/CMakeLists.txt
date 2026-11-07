@@ -23,6 +23,16 @@ set(CMAKE_C_EXTENSIONS OFF)
 # the HSERDY/PLLRDY spin-waits).
 option(OBSW_RENODE "Build for Renode emulation (skip PLL clock init)" OFF)
 
+# ASCII trace on USART3 (FDIR 'B'/'k'/'F' markers, "# TM(s,ss)" labels).
+# It shares the UART with binary wire protocol v3, so keep it OFF for any
+# run with a ground tool attached.
+option(OBSW_UART_ASCII_DEBUG "Interleave ASCII debug trace on USART3" OFF)
+
+# Legacy 200 ms ST7735R re-wake from FDIR. Not needed: the blank screen it
+# worked around was the active-low backlight driven the wrong way. Kept OFF
+# for bench A/B only.
+option(OBSW_LCD_KEEPALIVE "Periodic 200 ms LCD wake keepalive (legacy)" OFF)
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # Pass -DOBSW_FREERTOS=ON to build with the FreeRTOS task architecture
@@ -92,10 +102,12 @@ add_library(obsw_stm32h7 STATIC
     ${OBSW_ROOT}/src/pus/s20.c
     ${OBSW_ROOT}/src/time/obt.c
     ${OBSW_ROOT}/src/fdir/fsm.c
+    ${OBSW_ROOT}/src/ui/dashboard.c
     ${OBSW_ROOT}/src/hal/stm32h7/uart.c
     ${OBSW_ROOT}/src/hal/stm32h7/spi.c
     ${OBSW_ROOT}/src/hal/stm32h7/lcd.c
     ${OBSW_ROOT}/src/hal/stm32h7/lcd_console.c
+    ${OBSW_ROOT}/src/hal/stm32h7/lcd_dash.c
     ${OBSW_ROOT}/src/hal/stm32h7/i2c.c
     ${OBSW_ROOT}/src/hal/stm32h7/qmc5883l.c
     ${OBSW_ROOT}/sim/sensor_inject.c
@@ -110,6 +122,14 @@ target_link_libraries(obsw_stm32h7 PUBLIC obsw_srdb_generated_stm32h7)
 
 if(OBSW_RENODE)
     target_compile_definitions(obsw_stm32h7 PUBLIC OBSW_RENODE)
+endif()
+
+if(OBSW_UART_ASCII_DEBUG)
+    target_compile_definitions(obsw_stm32h7 PUBLIC OBSW_UART_ASCII_DEBUG)
+endif()
+
+if(OBSW_LCD_KEEPALIVE)
+    target_compile_definitions(obsw_stm32h7 PUBLIC OBSW_LCD_KEEPALIVE)
 endif()
 
 if(OBSW_FREERTOS)
