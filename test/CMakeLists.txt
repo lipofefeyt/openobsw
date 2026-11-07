@@ -80,6 +80,11 @@ target_link_libraries(test_obt PRIVATE obsw unity)
 target_compile_options(test_obt PRIVATE ${TEST_SUPPRESS})
 add_test(NAME obt COMMAND test_obt)
 
+add_executable(test_dashboard unit/test_dashboard.c)
+target_link_libraries(test_dashboard PRIVATE obsw unity)
+target_compile_options(test_dashboard PRIVATE ${TEST_SUPPRESS})
+add_test(NAME dashboard COMMAND test_dashboard)
+
 # v0.4 — FDIR
 add_executable(test_fsm unit/test_fsm.c)
 target_link_libraries(test_fsm PRIVATE obsw unity)

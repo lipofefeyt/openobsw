@@ -145,7 +145,7 @@ jobs:
         run: |
           mkdir -p build/coverage
           gcovr -r . --object-directory build \
-            --filter 'src/(ccsds|tc|tm|pus|fdir|aocs|time)/' \
+            --filter 'src/(ccsds|tc|tm|pus|fdir|aocs|time|ui)/' \
             --print-summary --txt build/coverage.txt \
             --html-details build/coverage/index.html \
             --fail-under-line 90
@@ -206,7 +206,7 @@ jobs:
             --inline-suppr --suppressions-list=tools/cppcheck-suppressions.txt \
             --error-exitcode=1 --quiet \
             -I include -I build/include \
-            src/ccsds src/tc src/tm src/pus src/fdir src/aocs src/time
+            src/ccsds src/tc src/tm src/pus src/fdir src/aocs src/time src/ui
 
   # ------------------------------------------------------------------ #
   # MSP430FR5969 build (OBSW-SRS-264): the 16-bit, 2 KB SRAM target.  #
