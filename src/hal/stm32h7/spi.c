@@ -5,8 +5,9 @@
  * SPI4 on APB2 bus. Pins (GPIOE, AF5):
  *   SCK PE12   MOSI PE14
  *
- * Clock: HSI 32 MHz → APB2 = 32 MHz, MBR=2 → fPCLK/8 = 4 MHz (ST7735R max 20 MHz).
- * Mode: simplex transmitter (COMM=11 in CFG2) — PE13 is GPIO DC output, not MISO.
+ * Clock: HSI 64 MHz → APB2 = 64 MHz, MBR=2 → fPCLK/8 = 8 MHz (ST7735R max 15 MHz write).
+ * Mode: full-duplex with RX discarded (simplex-TX never raises EOT on this part,
+ *       see obsw_spi4_init) — PE13 is the GPIO DC output, not MISO.
  * SSM=1, SSI=1 prevents spurious MODF in master mode with software CS.
  *
  * CS (PE11), DC (PE13), BL (PE10) are GPIO outputs managed by lcd.c.
@@ -85,7 +86,7 @@ void obsw_spi4_init(void)
     /* 3. Configure SPI4
      *
      * CFG1: DSIZE=7 (8-bit frames, value N = N+1 bits).
-     *        MBR at CFG1[30:28]: value 2 → fPCLK/8 = 4 MHz.
+     *        MBR at CFG1[30:28]: value 2 → fPCLK/8 = 8 MHz.
      *
      * CFG2 (bit positions from CMSIS stm32h750xx.h):
      *   COMM[18:17] = 11 → simplex transmitter (PE13 is GPIO DC, not MISO)

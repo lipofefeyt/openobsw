@@ -5,7 +5,7 @@
  * GPIO (GPIOE — clock already enabled by spi.c):
  *   CS  PE11  active-low chip select
  *   DC  PE13  HIGH=data / LOW=command
- *   BL  PE10  HIGH=backlight on
+ *   BL  PE10  ACTIVE-LOW: LOW = backlight on (confirmed on the bench)
  *
  * LCD RST is wired to board NRST (hardware reset) — not a software GPIO.
  * PE3 is the USER LED and is NOT driven by this driver.
@@ -39,8 +39,11 @@
 #define CS_HIGH     PE_SET(11)
 #define DC_CMD      PE_CLR(13)
 #define DC_DATA     PE_SET(13)
-#define BL_ON       PE_SET(10)
-#define BL_OFF      PE_CLR(10)
+/* Backlight is active-low on the WeAct H750 board. Driving PE10 HIGH turns
+ * it OFF; that inverted polarity was the long-standing "blank LCD" bug,
+ * previously mistaken for an ST7735R power-supervisor reset. */
+#define BL_ON       PE_CLR(10)
+#define BL_OFF      PE_SET(10)
 /* PE3 is the USER LED, not LCD RST. LCD RST is tied to board NRST. */
 
 /* ------------------------------------------------------------------ */
@@ -211,11 +214,6 @@ static void lcd_data(const uint8_t *buf, uint16_t len)
     CS_HIGH;
 }
 
-static void lcd_data1(uint8_t b)
-{
-    lcd_data(&b, 1);
-}
-
 static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
     uint8_t d[4];
@@ -241,13 +239,69 @@ static void lcd_gpio_init(void)
      * PE3 is the USER LED — not driven here.
      * LCD RST = board NRST (hardware), not software-controllable.
      * GPIOE clock already enabled by obsw_spi4_init(). */
+    BL_OFF;   /* latch ODR before the pin becomes an output: no stale flash */
     GPIOE_MODER &= ~((3U << 20) | (3U << 22) | (3U << 26));
     GPIOE_MODER |=  ((1U << 20) | (1U << 22) | (1U << 26));
     GPIOE_OSPEEDR |= (3U << 20) | (3U << 22) | (3U << 26);
 
     CS_HIGH; DC_DATA;
-    /* BL (PE10) driven from main() via lcd_backlight_on() before FreeRTOS —
-     * do NOT assert BL_OFF here. */
+    /* Backlight stays off until the caller has drawn something
+     * (lcd_backlight_on()); GRAM holds the previous run's picture. */
+}
+
+/* ------------------------------------------------------------------ */
+/* Panel configuration                                                  */
+/* ------------------------------------------------------------------ */
+
+/* One register write: command byte plus up to 16 parameter bytes. */
+typedef struct {
+    uint8_t cmd;
+    uint8_t len;
+    uint8_t data[16];
+} lcd_reg_t;
+
+/* Full register configuration written after every SLPOUT. Values from the
+ * WeAct ST7735 BSP. A panel reset (power-on/NRST or SWRESET) returns all
+ * of these to defaults, so every wake path re-sends the whole table. */
+static const lcd_reg_t s_panel_cfg[] = {
+    {ST_FRMCTR1, 3U,  {0x01, 0x2C, 0x2D}},                     /* frame rate, normal  */
+    {ST_FRMCTR2, 3U,  {0x01, 0x2C, 0x2D}},                     /* frame rate, idle    */
+    {ST_FRMCTR3, 6U,  {0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D}},   /* frame rate, partial */
+    {ST_INVCTR,  1U,  {0x07}},                                 /* inversion control   */
+    {ST_PWCTR1,  3U,  {0xA2, 0x02, 0x84}},
+    {ST_PWCTR2,  1U,  {0xC5}},
+    {ST_PWCTR3,  2U,  {0x0A, 0x00}},
+    {ST_PWCTR4,  2U,  {0x8A, 0x2A}},
+    {ST_PWCTR5,  2U,  {0x8A, 0xEE}},
+    {ST_VMCTR1,  1U,  {0x0E}},
+    {ST_INVON,   0U,  {0}},       /* this 160x80 panel needs inversion ON for true RGB565 */
+    {ST_COLMOD,  1U,  {0x05}},    /* 16-bit RGB565 */
+    {ST_MADCTL,  1U,  {0x78}},    /* landscape: MX+MV+ML+BGR */
+    {ST_GMCTRP1, 16U, {0x02, 0x1C, 0x07, 0x12, 0x37, 0x32, 0x29, 0x2D,
+                       0x29, 0x25, 0x2B, 0x39, 0x00, 0x01, 0x03, 0x10}},
+    {ST_GMCTRN1, 16U, {0x03, 0x1D, 0x07, 0x06, 0x2E, 0x2C, 0x29, 0x2D,
+                       0x2E, 0x2E, 0x37, 0x3F, 0x00, 0x00, 0x02, 0x10}},
+};
+
+typedef void (*lcd_delay_fn_t)(uint32_t ms);
+
+/* SLPOUT → full register table → NORON → DISPON. A zero delay skips the
+ * wait. Same byte sequence on every path; only the waits differ. */
+static void lcd_wake(lcd_delay_fn_t delay, uint32_t slpout_ms,
+                     uint32_t noron_ms, uint32_t dispon_ms)
+{
+    lcd_cmd(ST_SLPOUT);
+    if (slpout_ms) delay(slpout_ms);
+
+    for (size_t i = 0; i < sizeof(s_panel_cfg) / sizeof(s_panel_cfg[0]); i++) {
+        lcd_cmd(s_panel_cfg[i].cmd);
+        if (s_panel_cfg[i].len) lcd_data(s_panel_cfg[i].data, s_panel_cfg[i].len);
+    }
+
+    lcd_cmd(ST_NORON);
+    if (noron_ms) delay(noron_ms);
+    lcd_cmd(ST_DISPON);
+    if (dispon_ms) delay(dispon_ms);
 }
 
 void lcd_init(void)
@@ -262,58 +316,9 @@ void lcd_init(void)
     lcd_cmd(ST_SWRESET); lcd_delay_ms(120);
     lcd_cmd(ST_SWRESET); lcd_delay_ms(120);
 
-    /* Sleep out */
-    lcd_cmd(ST_SLPOUT);  lcd_delay_ms(120);
-
-    /* Frame rate — normal / idle / partial */
-    lcd_cmd(ST_FRMCTR1);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-
-    lcd_cmd(ST_FRMCTR2);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-
-    lcd_cmd(ST_FRMCTR3);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-
-    /* Display inversion control */
-    lcd_cmd(ST_INVCTR); lcd_data1(0x07);
-
-    /* Power control */
-    lcd_cmd(ST_PWCTR1); lcd_data1(0xA2); lcd_data1(0x02); lcd_data1(0x84);
-    lcd_cmd(ST_PWCTR2); lcd_data1(0xC5);
-    lcd_cmd(ST_PWCTR3); lcd_data1(0x0A); lcd_data1(0x00);
-    lcd_cmd(ST_PWCTR4); lcd_data1(0x8A); lcd_data1(0x2A);
-    lcd_cmd(ST_PWCTR5); lcd_data1(0x8A); lcd_data1(0xEE);
-    lcd_cmd(ST_VMCTR1); lcd_data1(0x0E);
-
-    /* Display inversion ON (required for this 160×80 panel) */
-    lcd_cmd(ST_INVON);
-
-    /* Colour mode: 16-bit RGB565 */
-    lcd_cmd(ST_COLMOD); lcd_data1(0x05);
-
-    /* Memory access control: landscape, BGR order */
-    lcd_cmd(ST_MADCTL); lcd_data1(0x78);
-
-    /* Gamma (positive + negative) */
-    lcd_cmd(ST_GMCTRP1);
-    { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
-                            0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10};
-      lcd_data(g, 16); }
-    lcd_cmd(ST_GMCTRN1);
-    { const uint8_t g[] = {0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,
-                            0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10};
-      lcd_data(g, 16); }
-
-    /* Normal display mode on */
-    lcd_cmd(ST_NORON); lcd_delay_ms(10);
-
-    /* Display on */
-    lcd_cmd(ST_DISPON); lcd_delay_ms(100);
-    /* Backlight NOT driven here — caller decides when to enable BL_ON
-     * so that re-init from a FreeRTOS task doesn't toggle the backlight
-     * and cause a current spike that re-triggers the power supervisor. */
+    lcd_wake(lcd_delay_ms, 120U, 10U, 100U);
+    /* Backlight is left off and GRAM is not cleared: the caller clears
+     * the screen, then calls lcd_backlight_on(). */
 }
 
 void lcd_backlight_on(void)
@@ -379,134 +384,31 @@ void lcd_fill_gram_raw(uint16_t colour)
 
 void lcd_slpout_dispon(void)
 {
-    /* Full re-init after a power-supervisor HWRESET — ALL ST7735R registers (including
-     * PWCTR, VMCTR, FRMCTR, GMCTR) reset to defaults on a PS event, not just COLMOD
-     * and MADCTL.  Skips SWRESET: that command causes an internal panel power-cycle
-     * whose current spike can re-trigger the PS when FreeRTOS tasks are already running.
-     * No INVON: panel is normally-black; INVOFF (PS-reset default) gives correct RGB565
-     * colours (0x07E0 → green, 0x0000 → black).  lcd_init()'s INVON is NOT re-applied. */
-    lcd_cmd(ST_SLPOUT);  lcd_delay_ms(120);
-
-    lcd_cmd(ST_FRMCTR1); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_cmd(ST_FRMCTR2); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_cmd(ST_FRMCTR3);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-
-    lcd_cmd(ST_INVCTR);  lcd_data1(0x07);
-
-    lcd_cmd(ST_PWCTR1);  lcd_data1(0xA2); lcd_data1(0x02); lcd_data1(0x84);
-    lcd_cmd(ST_PWCTR2);  lcd_data1(0xC5);
-    lcd_cmd(ST_PWCTR3);  lcd_data1(0x0A); lcd_data1(0x00);
-    lcd_cmd(ST_PWCTR4);  lcd_data1(0x8A); lcd_data1(0x2A);
-    lcd_cmd(ST_PWCTR5);  lcd_data1(0x8A); lcd_data1(0xEE);
-    lcd_cmd(ST_VMCTR1);  lcd_data1(0x0E);
-
-    lcd_cmd(ST_COLMOD);  lcd_data1(0x05);   /* 16-bit RGB565 */
-    lcd_cmd(ST_MADCTL);  lcd_data1(0x78);   /* landscape MV+MX+BGR */
-    lcd_cmd(ST_INVON);   /* match lcd_init() */
-
-    lcd_cmd(ST_GMCTRP1);
-    { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
-                            0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10};
-      lcd_data(g, 16); }
-    lcd_cmd(ST_GMCTRN1);
-    { const uint8_t g[] = {0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,
-                            0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10};
-      lcd_data(g, 16); }
-
-    lcd_cmd(ST_NORON);   lcd_delay_ms(10);
-    lcd_cmd(ST_DISPON);  lcd_delay_ms(100);
+    /* Full register restore without SWRESET (GRAM kept). Blocking DWT waits. */
+    lcd_wake(lcd_delay_ms, 120U, 10U, 100U);
 }
 
 #ifdef OBSW_FREERTOS
 #include "FreeRTOS.h"
 #include "task.h"
 
-/* Like lcd_slpout_dispon() but replaces every DWT spin with vTaskDelay so the
- * CPU enters WFI during the mandatory panel delays.  This reduces system
- * current by ~50 mA during the 120+10+100 ms waits, keeping the supply above
- * the ST7735R internal power-supervisor threshold that would otherwise reset
- * all panel registers back to sleep.  Must be called from a FreeRTOS task. */
-void lcd_slpout_dispon_yield(void)
+static void lcd_task_delay_ms(uint32_t ms)
 {
-    lcd_cmd(ST_SLPOUT);
-    vTaskDelay(pdMS_TO_TICKS(120));
-
-    lcd_cmd(ST_FRMCTR1); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_cmd(ST_FRMCTR2); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_cmd(ST_FRMCTR3);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-
-    lcd_cmd(ST_INVCTR);  lcd_data1(0x07);
-
-    lcd_cmd(ST_PWCTR1);  lcd_data1(0xA2); lcd_data1(0x02); lcd_data1(0x84);
-    lcd_cmd(ST_PWCTR2);  lcd_data1(0xC5);
-    lcd_cmd(ST_PWCTR3);  lcd_data1(0x0A); lcd_data1(0x00);
-    lcd_cmd(ST_PWCTR4);  lcd_data1(0x8A); lcd_data1(0x2A);
-    lcd_cmd(ST_PWCTR5);  lcd_data1(0x8A); lcd_data1(0xEE);
-    lcd_cmd(ST_VMCTR1);  lcd_data1(0x0E);
-
-    lcd_cmd(ST_COLMOD);  lcd_data1(0x05);
-    lcd_cmd(ST_MADCTL);  lcd_data1(0x78);
-    lcd_cmd(ST_INVON);   /* match lcd_init() — keeps colours consistent after PS re-init */
-
-    lcd_cmd(ST_GMCTRP1);
-    { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
-                            0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10};
-      lcd_data(g, 16); }
-    lcd_cmd(ST_GMCTRN1);
-    { const uint8_t g[] = {0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,
-                            0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10};
-      lcd_data(g, 16); }
-
-    lcd_cmd(ST_NORON);
-    vTaskDelay(pdMS_TO_TICKS(10));
-    lcd_cmd(ST_DISPON);
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(ms));
 }
 
-/* Faster variant for periodic keepalive after a PS-reset SLPIN.
- * Uses 10 ms after SLPOUT (vs 120 ms) because the oscillator was only
- * briefly interrupted by the supply transient — it does not need the full
- * cold-start settling time.  No trailing delay after DISPON; GRAM content
- * is visible immediately.  Period must be < PS-fire delay (~250 ms). */
+/* As lcd_slpout_dispon() but the CPU yields during the panel waits.
+ * Task context only. */
+void lcd_slpout_dispon_yield(void)
+{
+    lcd_wake(lcd_task_delay_ms, 120U, 10U, 100U);
+}
+
+/* Short re-wake: 10 ms after SLPOUT, no wait after NORON/DISPON. Used by the
+ * optional OBSW_LCD_KEEPALIVE FDIR path. */
 void lcd_slpout_dispon_fast(void)
 {
-    lcd_cmd(ST_SLPOUT);
-    vTaskDelay(pdMS_TO_TICKS(10));
-
-    lcd_cmd(ST_FRMCTR1); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_cmd(ST_FRMCTR2); lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_cmd(ST_FRMCTR3);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-    lcd_data1(0x01); lcd_data1(0x2C); lcd_data1(0x2D);
-
-    lcd_cmd(ST_INVCTR);  lcd_data1(0x07);
-
-    lcd_cmd(ST_PWCTR1);  lcd_data1(0xA2); lcd_data1(0x02); lcd_data1(0x84);
-    lcd_cmd(ST_PWCTR2);  lcd_data1(0xC5);
-    lcd_cmd(ST_PWCTR3);  lcd_data1(0x0A); lcd_data1(0x00);
-    lcd_cmd(ST_PWCTR4);  lcd_data1(0x8A); lcd_data1(0x2A);
-    lcd_cmd(ST_PWCTR5);  lcd_data1(0x8A); lcd_data1(0xEE);
-    lcd_cmd(ST_VMCTR1);  lcd_data1(0x0E);
-
-    lcd_cmd(ST_COLMOD);  lcd_data1(0x05);
-    lcd_cmd(ST_MADCTL);  lcd_data1(0x78);
-    lcd_cmd(ST_INVON);
-
-    lcd_cmd(ST_GMCTRP1);
-    { const uint8_t g[] = {0x02,0x1C,0x07,0x12,0x37,0x32,0x29,0x2D,
-                            0x29,0x25,0x2B,0x39,0x00,0x01,0x03,0x10};
-      lcd_data(g, 16); }
-    lcd_cmd(ST_GMCTRN1);
-    { const uint8_t g[] = {0x03,0x1D,0x07,0x06,0x2E,0x2C,0x29,0x2D,
-                            0x2E,0x2E,0x37,0x3F,0x00,0x00,0x02,0x10};
-      lcd_data(g, 16); }
-
-    lcd_cmd(ST_NORON);
-    lcd_cmd(ST_DISPON);
+    lcd_wake(lcd_task_delay_ms, 10U, 0U, 0U);
 }
 #endif /* OBSW_FREERTOS */
 

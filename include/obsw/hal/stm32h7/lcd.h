@@ -10,7 +10,7 @@
  * Pins (GPIOE, GPIO outputs):
  *   CS  PE11  (active low)
  *   DC  PE13  (HIGH=data, LOW=command)
- *   BL  PE10  (HIGH=backlight on)
+ *   BL  PE10  (active-LOW: LOW = backlight on)
  *
  * LCD RST = board NRST (hardware reset only — not a software GPIO).
  * PE3 is the USER LED; this driver does not drive it.
@@ -43,10 +43,8 @@
 #define LCD_COLS   (LCD_W / LCD_CHAR_W)   /* 26 chars/line */
 #define LCD_ROWS   (LCD_H / LCD_CHAR_H)   /* 10 lines       */
 
-/* lcd_init() configures the ST7735R but does NOT enable the backlight.
- * Call lcd_backlight_on() once after the first lcd_init() from main().
- * FDIR re-init calls lcd_init() without touching BL to avoid the current
- * spike that would re-trigger the ST7735R internal power supervisor. */
+/* lcd_init() configures the ST7735R and leaves the backlight OFF (GRAM still
+ * holds the previous run's picture). Clear or draw, then lcd_backlight_on(). */
 void lcd_init(void);
 void lcd_backlight_on(void);
 void lcd_backlight_off(void);
@@ -61,12 +59,10 @@ void lcd_slpout_dispon(void);
 
 #ifdef OBSW_FREERTOS
 /* Like lcd_slpout_dispon() but uses vTaskDelay so the CPU yields during
- * mandatory panel delays (120+10+100 ms).  Use for the first wake after a
- * cold PS reset where the oscillator may need full settling time. */
+ * the panel delays (120+10+100 ms). Task context only. */
 void lcd_slpout_dispon_yield(void);
-/* Fast keepalive variant: 10 ms after SLPOUT (oscillator was only briefly
- * interrupted), no trailing delay after DISPON.  Call every ~200 ms (before
- * the ~250 ms PS-fire window) to keep the panel continuously visible. */
+/* Short re-wake: 10 ms after SLPOUT, no trailing delay after DISPON.
+ * Used by the optional OBSW_LCD_KEEPALIVE path in FDIR. */
 void lcd_slpout_dispon_fast(void);
 #endif
 

@@ -19,6 +19,8 @@ typedef struct
     volatile float   m_cmd_y;    /**< MTQ dipole command Y [Am²] */
     volatile float   m_cmd_z;    /**< MTQ dipole command Z [Am²] */
     volatile uint8_t mag_valid;  /**< 1 if QMC5883L read succeeded */
+    volatile uint8_t law;        /**< obsw_dash_aocs_t run on the last tick */
+    volatile uint8_t dipole_valid; /**< 1 once B-dot has produced a command */
 } obsw_aocs_hk_t;
 
 void                       obsw_aocs_task_init(void);
