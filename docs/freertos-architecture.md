@@ -152,22 +152,18 @@ Each 1 s tick:
 
 1. **Kick IWDG** (`IWDG_KR = 0xAAAA`) — 4 s timeout (prescaler /128 from
    LSI ≈ 32 kHz, reload 1000).
-2. **LCD re-init (first tick only):** The ST7735R internal power supervisor
-   fires during the FreeRTOS startup current spike (~1 s after boot), clearing
-   GRAM and resetting the controller state. FDIR re-runs `lcd_init()` +
-   `lcd_console_init()` at tick 1 to restore the display. `lcd_init()` no
-   longer drives the backlight (`BL_ON` is called once from `main()` via
-   `lcd_backlight_on()`); FDIR re-init never touches the backlight line,
-   avoiding a second current spike that would re-trigger the power supervisor.
-3. **Boot event** — on first tick only (after LCD re-init), emits
+2. **Boot event** — on first tick only, emits
    `SRDB_EVENT_BOOT_COMPLETE` (INFO).
-4. **Mode change detection** — if FSM mode changed since last tick, increments
+3. **Mode change detection** — if FSM mode changed since last tick, increments
    `s_safe_mode_count` and emits `SRDB_EVENT_SAFE_MODE_ENTRY` (HIGH) or
    `SRDB_EVENT_SAFE_MODE_EXIT` (INFO).
-5. **S3 HK tick** — calls `obsw_s3_tick()` advancing all enabled HK set
+4. **S3 HK tick** — calls `obsw_s3_tick()` advancing all enabled HK set
    countdowns. Enabled sets emit TM(3,25) when their countdown reaches zero.
-6. **LCD status bar update** — draws `FDIR:NOMINAL  WDG:XXXXXXXX` (or
-   `FDIR:SAFE`) on the bottom row using `lcd_console_set_status()`.
+5. **LCD dashboard** — builds an `obsw_dash_snapshot_t` (mode, OBT, reset
+   cause, TMTC link statistics, AOCS HK), lays it out with
+   `obsw_dash_format()` and draws it with `lcd_dash_render()`, which redraws
+   only the cells that changed. Every 30 s the whole grid is redrawn as a
+   self-heal. See [LCD dashboard](#lcd-dashboard).
 
 A stuck FDIR task causes IWDG expiry and hardware reset within 4 s.
 
@@ -202,35 +198,59 @@ from `safe_allowed: true` in `srdb/data/telecommands.yaml` as
 
 ---
 
-## LCD console
+## LCD dashboard
 
-The ST7735R LCD driver (`hal/stm32h7/lcd.c`, `hal/stm32h7/lcd_console.c`)
-provides a scrolling text console (160×80, 26×10 chars, 5×7 font).
+The ST7735R driver (`hal/stm32h7/lcd.c`) drives the 160×80 panel (26×10
+cells of 6×8 px, 5×7 font). FDIR shows a fixed-layout dashboard, refreshed
+once per second:
 
-### Backlight and power supervisor
+```
+openobsw v0.1.0 STM32H750      title bar (cyan)
+OBT 00001234  RST POR          on-board time, last reset cause
+TC rx 000012  rej 000001       TC frames received, TM(1,2)+TM(1,8) sent
+TM tx 000042  last 17,2        TM packets sent, last TM (svc,subsvc)
+EVT 0x0001 INFO                last TM(5,x) event ID and severity
+AOCS BDOT     MAG ok           control law run on the last AOCS tick
+B uT   +21.3   -4.0  +38.9     magnetometer field
+M Am2  +0.12  -0.03  +0.40     commanded MTQ dipole
+UP 000:20:34  WDG 00004834     uptime, watchdog kick count
+MODE NOMINAL                   status bar: green NOMINAL / red SAFE / yellow STANDBY
+```
 
-`lcd_init()` configures the controller but **does not** enable the backlight.
-Call `lcd_backlight_on()` once from `main()` after the first `lcd_init()`.
-Never call it from a task — toggling the backlight after FreeRTOS is running
-causes a current spike that triggers the ST7735R internal power supervisor,
-clearing GRAM and resetting config registers.
+- **Formatter** — `obsw/ui/dashboard.h` (core library, host unit test
+  `ctest -R dashboard`, OBSW-SRS-310..312). No printf, no floats in the
+  output, counters saturate.
+- **Link statistics** — TMTC calls `obsw_dash_link_note_tc()` per received
+  TC frame and `obsw_dash_link_note_tm()` per sent TM; FDIR copies them with
+  `obsw_tmtc_get_link_stats()` (critical section, no torn reads).
+- **Renderer** — `hal/stm32h7/lcd_dash.c` keeps a shadow of the panel and
+  redraws only changed cells (a whole row when its style changes). The first
+  render clears GRAM, which holds power-on noise until written.
+- **Single owner** — only the FDIR task calls LCD functions once the
+  scheduler runs, so no locking is needed. `lcd_console.c` (scrolling text
+  console) is still built but no longer used by FDIR.
 
-### Startup sequence
+### Backlight
 
-| Time | Event |
-|---|---|
-| T = 0 ms | MCU boot; `lcd_init()` + `lcd_backlight_on()` in `main()` |
-| T ≈ 350 ms | Boot messages displayed (`openobsw vX.Y.Z`, clock, `FreeRTOS starting...`) |
-| T ≈ 350–1000 ms | ST7735R power supervisor may fire → screen goes black. Backlight stays on. |
-| T = 1000 ms | FDIR tick 1: `lcd_init()` (no BL) + `lcd_console_init()` + messages → display stable |
-| T > 1000 ms | FDIR updates status bar every second |
+The backlight on PE10 is **active-low** (LOW = on). `lcd_init()` leaves it
+off; `main()` runs `lcd_init()`, clears the screen (GRAM still holds the
+previous run's picture), then calls `lcd_backlight_on()`.
 
-### Thread safety
+Earlier versions drove PE10 HIGH as "on", which turned the backlight off
+~0.6 s after reset. That blank screen was blamed on an ST7735R
+"power supervisor" resetting the panel, and worked around with a 200 ms
+re-wake from FDIR. The panel never actually lost its state; the keepalive
+is now `OBSW_LCD_KEEPALIVE` (default OFF), kept only for bench A/B.
 
-`lcd_console_puts()` and `lcd_console_set_status()` wrap each character draw
-in `taskENTER_CRITICAL()` / `taskEXIT_CRITICAL()`. This prevents SysTick
-from preempting mid-SPI-transfer while still allowing inter-character
-scheduling. Only the FDIR task calls LCD functions after the scheduler starts.
+All wake paths (`lcd_init`, `lcd_slpout_dispon`, `_yield`, `_fast`) send
+the same register table (`s_panel_cfg` in `lcd.c`) and differ only in their
+waits.
+
+### UART debug trace
+
+`-DOBSW_UART_ASCII_DEBUG=ON` re-enables the FDIR `B`/`k`/`F` markers and
+the `# TM(s,ss)` labels on USART3. They share the UART with binary wire
+protocol v3, so the default build leaves them out.
 
 ---
 

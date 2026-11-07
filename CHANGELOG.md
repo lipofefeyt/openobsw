@@ -4,6 +4,39 @@ All notable changes to openobsw. Versions follow the release trains in the
 README roadmap. Releases before v0.16 are described on the
 [GitHub releases page](https://github.com/lipofefeyt/openobsw/releases).
 
+## [Unreleased]
+
+### Added
+
+- STM32H750 LCD dashboard: fixed 26×10 layout with mode, OBT, reset cause,
+  TC/TM link counters, last TM and event, AOCS law, magnetometer field and
+  commanded dipole, uptime and watchdog count. The core formatter
+  (`obsw/ui/dashboard.h`, OBSW-SRS-310..313) is host unit-tested; the LCD
+  renderer redraws only changed cells.
+- STM32H7 build options `OBSW_UART_ASCII_DEBUG` and `OBSW_LCD_KEEPALIVE`
+  (both default OFF).
+
+### Changed
+
+- STM32H7 default build keeps USART3 binary-only: FDIR debug markers and
+  `# TM(s,ss)` labels are behind `OBSW_UART_ASCII_DEBUG`.
+- ST7735R wake sequence is one register table shared by all wake paths.
+- TMTC's 8-entry TM log replaced by saturating link statistics.
+
+### Fixed
+
+- STM32H750 LCD went black ~0.5 s after every boot: the backlight on PE10
+  is active-low and the driver drove it HIGH as "on". This was previously
+  attributed to an ST7735R power-supervisor reset; the 200 ms FDIR re-wake
+  that worked around it is now `OBSW_LCD_KEEPALIVE`, default OFF. `main()`
+  clears the stale picture before turning the backlight on.
+- STM32H7 reset cause used the wrong RCC_RSR bit positions (off by one or
+  two), so a power-on read as "Software", the NRST button as "BOR" and a
+  software reset as "IWDG". Now uses the RM0433 positions, verified on the
+  bench (NRST button reads 0x00460000 = PINRSTF | CPURSTF).
+- LCD showed stale lines: the console was re-initialised every second
+  without clearing the screen.
+
 ## [v0.18] — Service parity with OpenSVF
 
 ### Added
