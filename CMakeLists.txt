@@ -1,5 +1,17 @@
 cmake_minimum_required(VERSION 3.16)
-project(openobsw VERSION 0.7.0 LANGUAGES C ASM)
+
+# Software version: single source of truth is include/obsw/version.h
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/obsw/version.h" _obsw_ver
+     REGEX "^#define OBSW_VERSION_(MAJOR|MINOR|PATCH) [0-9]+$")
+foreach(_part MAJOR MINOR PATCH)
+    string(REGEX MATCH "OBSW_VERSION_${_part} ([0-9]+)" _m "${_obsw_ver}")
+    if(NOT _m)
+        message(FATAL_ERROR "OBSW_VERSION_${_part} not found in include/obsw/version.h")
+    endif()
+    set(_obsw_${_part} "${CMAKE_MATCH_1}")
+endforeach()
+
+project(openobsw VERSION ${_obsw_MAJOR}.${_obsw_MINOR}.${_obsw_PATCH} LANGUAGES C ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)

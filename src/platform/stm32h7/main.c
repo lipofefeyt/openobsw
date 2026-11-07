@@ -34,6 +34,7 @@
  #endif
 
  #include "obsw/ui/dashboard.h"
+ #include "obsw/version.h"
 
  #ifndef OBSW_RENODE
  #include "obsw/hal/stm32h7/spi.h"
@@ -201,6 +202,7 @@ static void system_clock_init(void)
      /* Boot banner — UART first, always, before any LCD init that might hang */
      const char *banner =
          "\r\n[OBSW] STM32H750 started (wire protocol v3).\r\n"
+         "[OBSW] openobsw v" OBSW_VERSION_STRING "\r\n"
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
 

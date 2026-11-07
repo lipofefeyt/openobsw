@@ -41,6 +41,7 @@
 #include "obsw/pus/s5.h"
 #include "obsw/srdb_generated.h"
 #include "obsw/ui/dashboard.h"
+#include "obsw/version.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
@@ -50,7 +51,7 @@
 #endif
 
 /* LCD dashboard title (row 0) and full-redraw self-heal period */
-#define DASH_TITLE          "openobsw v" SRDB_VERSION " STM32H750"
+#define DASH_TITLE          "openobsw v" OBSW_VERSION_STRING " STM32H750"
 #define DASH_REDRAW_PERIOD  30U   /* full ticks (s) between full redraws */
 
 /* ── IWDG registers (STM32H750, D3 domain) ───────────────────────── */

@@ -34,6 +34,10 @@ README roadmap. Releases before v0.16 are described on the
   two), so a power-on read as "Software", the NRST button as "BOR" and a
   software reset as "IWDG". Now uses the RM0433 positions, verified on the
   bench (NRST button reads 0x00460000 = PINRSTF | CPURSTF).
+- LCD title and boot banners showed the SRDB data version (0.1.0) as the
+  openobsw version; the software version (0.7.0 in `obsw.h` and CMake) was
+  stale too. `include/obsw/version.h` is now the single source (0.18.0),
+  CMake reads `project(VERSION)` from it, and the banners print both (#117).
 - LCD showed stale lines: the console was re-initialised every second
   without clearing the screen.
 
