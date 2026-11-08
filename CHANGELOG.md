@@ -13,6 +13,8 @@ README roadmap. Releases before v0.16 are described on the
   commanded dipole, uptime and watchdog count. The core formatter
   (`obsw/ui/dashboard.h`, OBSW-SRS-310..313) is host unit-tested; the LCD
   renderer redraws only changed cells.
+- STM32H750 HMC5883L magnetometer driver (GY-273 modules); AOCS uses
+  whichever of QMC5883L / HMC5883L answers at boot (#52).
 - STM32H7 build options `OBSW_UART_ASCII_DEBUG` and `OBSW_LCD_KEEPALIVE`
   (both default OFF).
 
@@ -38,6 +40,9 @@ README roadmap. Releases before v0.16 are described on the
   openobsw version; the software version (0.7.0 in `obsw.h` and CMake) was
   stale too. `include/obsw/version.h` is now the single source (0.18.0),
   CMake reads `project(VERSION)` from it, and the banners print both (#117).
+- QMC5883L driver returned Gauss while the AOCS HK, the B-dot gain and the
+  host-sim sensor frame use Tesla, so a real sensor would have saturated the
+  dipole command. Both magnetometer drivers now return Tesla.
 - LCD showed stale lines: the console was re-initialised every second
   without clearing the screen.
 

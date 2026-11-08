@@ -31,8 +31,8 @@
 #define QMC_ID_EXPECTED 0xFFU
 #define QMC_STAT_DRDY (1U << 0)
 
-/* Scale: 12000 LSB/Gauss at 2 Gauss range */
-#define QMC_SCALE_GAUSS (1.0f / 12000.0f)
+/* Scale: 12000 LSB/Gauss at 2 Gauss range, 1 Ga = 1e-4 T */
+#define QMC_SCALE_T (1.0e-4f / 12000.0f)
 
 bool obsw_qmc5883l_init(void)
 {
@@ -80,8 +80,8 @@ bool obsw_qmc5883l_read(float b[3])
     int16_t y = (int16_t)((uint16_t)raw[3] << 8 | raw[2]);
     int16_t z = (int16_t)((uint16_t)raw[5] << 8 | raw[4]);
 
-    b[0] = (float)x * QMC_SCALE_GAUSS;
-    b[1] = (float)y * QMC_SCALE_GAUSS;
-    b[2] = (float)z * QMC_SCALE_GAUSS;
+    b[0] = (float)x * QMC_SCALE_T;
+    b[1] = (float)y * QMC_SCALE_T;
+    b[2] = (float)z * QMC_SCALE_T;
     return true;
 }

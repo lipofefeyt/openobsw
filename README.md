@@ -124,7 +124,7 @@ openobsw/
 │   ├── aocs/        B-dot with dB/dt high-pass filter; PD quaternion control
 │   ├── time/        CUC-4,2 on-board time
 │   ├── task/        FreeRTOS tasks: tmtc, pus, aocs, fdir, mode
-│   ├── hal/         UART, I2C, QMC5883L, LCD per target
+│   ├── hal/         UART, I2C, QMC5883L/HMC5883L, LCD per target
 │   └── platform/    STM32H7 and ZynqMP entry points, startup, linker scripts
 ├── targets/msp430-fr5969/   MSP430 build
 ├── sim/             host sim: wire protocol v3 over stdin/stdout

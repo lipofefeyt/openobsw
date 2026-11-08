@@ -14,7 +14,7 @@ priority: **owned**, **ordered**, and **wanted**.
 | Raspberry Pi (model TBC) | Future opensvf ground segment host |
 | CP2102 USB-UART adapter (3.3V/5V) | USART3 console on STM32H750 (PD8=TX, PD9=RX) — arrived 2026-05-29 |
 | USB logic analyzer | Debug UART/I2C/SPI traffic — arrived 2026-05-29 |
-| QMC5883L magnetometer (GY-273) × 3 | B-dot controller HIL — feeds `aocs/bdot.c` via I2C1 (PB8/PB9) | arrived 2026-06-16 |
+| HMC5883L magnetometer (GY-273) × 3 | B-dot controller HIL — feeds `aocs/bdot.c` via I2C1 (PB8/PB9) | arrived 2026-06-16 |
 
 ---
 
@@ -172,11 +172,31 @@ The CP2102 appears as `/dev/ttyUSB0`.
 
 ---
 
-### QMC5883L → STM32H750 (I2C — driver not yet implemented)
+### Magnetometer → STM32H750 (I2C1)
 
-```
-STM32H750 PB8 (SCL)  →  QMC5883L SCL
-STM32H750 PB9 (SDA)  →  QMC5883L SDA
-STM32H750 3.3V       →  QMC5883L VCC
-STM32H750 GND        →  QMC5883L GND
-```
+Wire to the **side pin headers** (labelled with port names, e.g. `B8` /
+`PB8`), **not** the 4-pin SWD header: its CLK/DIO are PA14/PA13 (SWCLK/SWDIO)
+and must stay free for the ST-Link.
+
+| GY-273 pin | WeAct H750 pin | Notes |
+|---|---|---|
+| VCC  | 3V3 (side header) | Module has its own regulator; feed 3.3 V |
+| GND  | GND (side header) | Common ground with the board |
+| SCL  | **PB8** | I2C1_SCL (AF4), open-drain, 100 kHz |
+| SDA  | **PB9** | I2C1_SDA (AF4), open-drain |
+| DRDY | not connected | Driver polls the status register over I2C |
+
+The GY-273 carries 4.7 kΩ pull-ups on SCL/SDA; no external resistors needed.
+
+**Solder the header.** The module ships with loose header pins; pushed
+through the holes they do not make contact, the power LED stays off and the
+chip NACKs every address. The LED must light as soon as VCC is applied.
+
+The AOCS task probes once at boot and uses whichever chip answers:
+QMC5883L (0x0D, chip ID 0xFF) or HMC5883L (0x1E, ID "H43"). GY-273
+modules carry an HMC5883L; "GY-271" boards ship with either chip, or a
+QMC5883P (0x2C) that neither driver accepts. Both drivers return Tesla.
+
+- Connect the sensor **before** power-on; it is not re-probed.
+- AOCS does not read sensors in STANDBY, so the dashboard shows `MAG --`
+  until the LEOP timeout moves the spacecraft to SAFE (300 s, #111).
