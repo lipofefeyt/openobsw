@@ -9,8 +9,13 @@
 #include "task.h"
 
 #ifndef OBSW_RENODE
+#include "obsw/hal/stm32h7/hmc5883l.h"
 #include "obsw/hal/stm32h7/qmc5883l.h"
-static bool s_qmc_ok = false;
+
+/* Magnetometer read function for whichever chip answered at boot
+ * (QMC5883L at 0x0D or HMC5883L at 0x1E); NULL if none. Both return Tesla. */
+typedef bool (*mag_read_fn_t)(float b[3]);
+static mag_read_fn_t s_mag_read = NULL;
 #endif
 
 #define AOCS_STACK_DEPTH 512U
@@ -62,7 +67,7 @@ static void aocs_task(void *param)
         bool  st_valid         = false;
         bool  gyro_valid       = false;
 #ifndef OBSW_RENODE
-        bool  mag_valid        = s_qmc_ok && obsw_qmc5883l_read(b);
+        bool  mag_valid        = (s_mag_read != NULL) && s_mag_read(b);
 #else
         bool  mag_valid        = false;
 #endif
@@ -106,7 +111,11 @@ void obsw_aocs_task_init(void)
     obsw_adcs_init(&s_adcs, &adcs_cfg);
 
 #ifndef OBSW_RENODE
-    s_qmc_ok = obsw_qmc5883l_init();
+    /* Probed once at boot: a sensor plugged in later needs a reset. */
+    if (obsw_qmc5883l_init())
+        s_mag_read = obsw_qmc5883l_read;
+    else if (obsw_hmc5883l_init())
+        s_mag_read = obsw_hmc5883l_read;
 #endif
 
     xTaskCreateStatic(aocs_task, "AOCS", AOCS_STACK_DEPTH,
