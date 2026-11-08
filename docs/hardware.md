@@ -64,6 +64,9 @@ ST-Link pin 7  (3.3V)   →  WeAct 3.3V  (optional — skip if powering from USB
 ST-Link pin 1  (RST)    →  WeAct NRST  (optional — improves flash reliability)
 ```
 
+Shortcut: `stm32h7-flash` (WSL2) and `stm32h7-ocd` / `stm32h7-probe` wrap
+everything below. See [cheatsheet.md](cheatsheet.md).
+
 Flash command — run from **native WSL2**, not the devcontainer terminal.
 The devcontainer is a Docker container and does not inherit USB devices forwarded
 via usbipd; WSL2 does.
