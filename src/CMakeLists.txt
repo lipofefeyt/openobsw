@@ -18,6 +18,7 @@ add_library(obsw STATIC
     pus/s20.c
     fdir/fsm.c
     fdir/watchdog.c
+    fdir/standby_timer.c
     aocs/bdot.c
     aocs/adcs.c
     time/obt.c

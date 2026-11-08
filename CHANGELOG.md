@@ -13,6 +13,12 @@ README roadmap. Releases before v0.16 are described on the
   commanded dipole, uptime and watchdog count. The core formatter
   (`obsw/ui/dashboard.h`, OBSW-SRS-310..313) is host unit-tested; the LCD
   renderer redraws only changed cells.
+- LEOP autonomy timer as a core module (`fdir/standby_timer.h`,
+  OBSW-SRS-187..189): STANDBY → SAFE after `standby_safe_timeout` seconds
+  without ground contact (new SRDB parameter `0x0008`, S20-tunable on
+  STM32H7, default 300 s, `0` = immediately). Any well-formed TC restarts
+  the countdown, which the old hard-coded 300 s timer never did. STM32H7
+  build option `OBSW_STANDBY_SAFE_TIMEOUT_S` sets the initial value (#111).
 - STM32H7 build options `OBSW_UART_ASCII_DEBUG` and `OBSW_LCD_KEEPALIVE`
   (both default OFF).
 

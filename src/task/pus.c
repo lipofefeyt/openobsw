@@ -13,6 +13,7 @@
  */
 
 #include "obsw/task/pus.h"
+#include "obsw/fdir/standby_timer.h"
 #include "obsw/task/mode.h"
 #include "obsw/task/tmtc.h"
 #include "obsw/task/fdir.h"
@@ -89,6 +90,9 @@ static obsw_s20_param_t s20_params[] = {
     {.param_id = SRDB_PARAM_BDOT_HPF_TAU, .value = {.f32 = 15.0f}, .type = OBSW_S20_F32},
     {.param_id = SRDB_PARAM_ADCS_KP,      .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
     {.param_id = SRDB_PARAM_ADCS_KD,      .value = {.f32 = 0.1f}, .type = OBSW_S20_F32},
+    /* LEOP autonomy — read by the Mode Manager every second (OBSW-SRS-189) */
+    {.param_id = SRDB_PARAM_STANDBY_SAFE_TIMEOUT,
+     .value = {.u32 = OBSW_STANDBY_SAFE_TIMEOUT_S}, .type = OBSW_S20_U32},
 };
 
 /* S8 function table — mode transition requests via Mode Manager. */
@@ -254,8 +258,13 @@ static void pus_task(void *param)
         /* Wake at least every PUS_POLL_MS so due S11 and S19 TCs run even
          * without uplink traffic. */
         bool have_tc = xQueueReceive(s_tc_queue, &item, pdMS_TO_TICKS(PUS_POLL_MS)) == pdTRUE;
-        if (have_tc)
-            obsw_tc_dispatcher_feed(&s_dispatcher, item.data, item.len);
+        if (have_tc) {
+            int rc = obsw_tc_dispatcher_feed(&s_dispatcher, item.data, item.len);
+            /* Ground contact = any well-formed TC, accepted or rejected
+             * (OBSW-SRS-188); unparseable frames do not count. */
+            if (rc != OBSW_TC_ERR_PARSE && rc != OBSW_TC_ERR_NULL)
+                obsw_mode_note_ground_contact();
+        }
 
         /* Due S11 activities: OBT is advanced by the FDIR task, copy it under
          * the lock. The schedule itself belongs to this task. */
@@ -363,6 +372,15 @@ void obsw_pus_s12_check(void)
     taskENTER_CRITICAL();
     obsw_s12_check(&s12_ctx);
     taskEXIT_CRITICAL();
+}
+
+uint32_t obsw_pus_s20_get_u32(uint16_t param_id, uint32_t default_val)
+{
+    for (uint8_t i = 0; i < sizeof(s20_params) / sizeof(s20_params[0]); i++) {
+        if (s20_params[i].param_id == param_id)
+            return s20_params[i].value.u32;
+    }
+    return default_val;
 }
 
 float obsw_pus_s20_get_float(uint16_t param_id, float default_val)

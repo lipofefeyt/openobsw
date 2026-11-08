@@ -42,7 +42,7 @@ An integration test exercises the full uplink/downlink path end-to-end.
  ┌─────────────────────────────────────────────────────────┐
  │               Mode Manager  (task/mode.h)                │
  │    FSM owner: STANDBY → SAFE → NOMINAL transitions       │
- │    300 s auto-timeout STANDBY→SAFE on boot               │
+ │    STANDBY→SAFE after N s without ground contact (LEOP)  │
  └────────────────────────┬────────────────────────────────┘
                           │  mode transitions
  ┌────────────────────────▼────────────────────────────────┐
@@ -303,7 +303,7 @@ The Mode Manager task (`task/mode.h`) is the sole owner of the FSM instance.
 ```mermaid
 stateDiagram-v2
     [*] --> STANDBY : obsw_fsm_init()
-    STANDBY --> SAFE : auto-timeout 300 s after boot
+    STANDBY --> SAFE : no ground contact for standby_safe_timeout (default 300 s)
     SAFE --> NOMINAL : obsw_mode_request_nominal() [TC(8,1) fid=1]
     NOMINAL --> SAFE : obsw_mode_request_safe() [TC(8,1) fid=2 or S5 HIGH]
     SAFE --> STANDBY : obsw_mode_request_standby() [TC(8,1) fid=3]
@@ -311,8 +311,16 @@ stateDiagram-v2
 ```
 
 **STANDBY** is the boot state. AOCS is off; only whitelisted TCs are
-accepted, as in SAFE. After 300 s the Mode Manager automatically transitions
-to SAFE.
+accepted, as in SAFE. LEOP autonomy (`fdir/standby_timer.h`,
+OBSW-SRS-187..189): if no ground contact arrives within
+`standby_safe_timeout` seconds (SRDB `0x0008`, default 300, `0` = at once)
+the Mode Manager commands SAFE so detumbling starts even when the first pass
+is missed. Any well-formed TC, accepted or rejected, restarts the
+countdown. On the STM32H7 the value is an S20 parameter read every second
+(TC(20,1) applies immediately, from SAFE/NOMINAL since STANDBY only allows
+TC(20,3)); its initial value is the build option
+`OBSW_STANDBY_SAFE_TIMEOUT_S`, e.g. `-DOBSW_STANDBY_SAFE_TIMEOUT_S=30` for a
+bench demo. The host sim starts in SAFE and skips STANDBY.
 
 **SAFE** is the fault-containment mode. Only B-dot AOCS runs (magnetometer +
 magnetorquers). A subset of TCs is accepted per the dispatcher TC whitelist.

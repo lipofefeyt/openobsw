@@ -9,21 +9,22 @@
  * Period: 1 000 ms (vTaskDelayUntil).
  * Priority: 2 — below FDIR/PUS, above AOCS.
  *
- * Auto-transition: STANDBY → SAFE after STANDBY_SAFE_TIMEOUT_S seconds
- * without a ground command.  This ensures the satellite begins detumbling
- * even if the first ground contact is delayed.
+ * Auto-transition (LEOP autonomy, OBSW-SRS-187..189): STANDBY → SAFE after
+ * the S20 parameter standby_safe_timeout seconds (default 300, build option
+ * OBSW_STANDBY_SAFE_TIMEOUT_S) without ground contact, so detumbling starts
+ * even if the first pass is missed. Any well-formed TC restarts the
+ * countdown; the value is re-read every second so TC(20,1) applies at once.
  */
 
 #include "obsw/task/mode.h"
+#include "obsw/fdir/standby_timer.h"
 #include "obsw/pus/s5.h"
+#include "obsw/task/pus.h"
 #include "obsw/srdb_generated.h"
 #include "FreeRTOS.h"
 #include "task.h"
 
 #include <string.h>
-
-/* Auto-transition timeout: 5 minutes. */
-#define STANDBY_SAFE_TIMEOUT_S  300U
 
 #define MODE_STACK_DEPTH  256U
 #define MODE_PRIORITY       2U
@@ -46,6 +47,7 @@ static obsw_s5_ctx_t  s_s5;
 static volatile bool s_req_safe     = false;
 static volatile bool s_req_nominal  = false;
 static volatile bool s_req_standby  = false;
+static volatile bool s_ground_contact = false;  /* set by PUS, consumed here */
 
 /* ── FSM hooks ───────────────────────────────────────────────────────── */
 
@@ -57,7 +59,8 @@ static void on_exit_safe(void *ctx)  { (void)ctx; }
 static void mode_task(void *param)
 {
     (void)param;
-    uint32_t standby_ticks = 0U;
+    obsw_standby_timer_t standby_timer;
+    obsw_standby_timer_reset(&standby_timer);
     obsw_fsm_mode_t last = obsw_fsm_mode(&s_fsm);
     TickType_t last_wake = xTaskGetTickCount();
 
@@ -83,12 +86,12 @@ static void mode_task(void *param)
         /* ── Auto-transition: STANDBY → SAFE after timeout ─────────── */
 
         cur = obsw_fsm_mode(&s_fsm);
-        if (cur == OBSW_FSM_STANDBY) {
-            if (++standby_ticks >= STANDBY_SAFE_TIMEOUT_S)
-                obsw_fsm_to_safe(&s_fsm);
-        } else {
-            standby_ticks = 0U;
-        }
+        bool contact = s_ground_contact;
+        s_ground_contact = false;
+        uint32_t timeout_s = obsw_pus_s20_get_u32(SRDB_PARAM_STANDBY_SAFE_TIMEOUT,
+                                                  OBSW_STANDBY_SAFE_TIMEOUT_S);
+        if (obsw_standby_timer_tick(&standby_timer, cur, timeout_s, contact))
+            obsw_fsm_to_safe(&s_fsm);
 
         /* ── Detect transitions and emit TM(5,x) events ─────────────── */
 
@@ -153,6 +156,11 @@ void obsw_mode_request_safe(void)
 void obsw_mode_request_nominal(void)
 {
     s_req_nominal = true;
+}
+
+void obsw_mode_note_ground_contact(void)
+{
+    s_ground_contact = true;
 }
 
 void obsw_mode_request_standby(void)
