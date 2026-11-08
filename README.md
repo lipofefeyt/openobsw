@@ -83,7 +83,7 @@ cd openobsw
 # Dev container (recommended): toolchains are installed by
 # scripts/setup-workspace.sh. Elsewhere, run that script on Ubuntu/Debian.
 source .venv/bin/activate
-source scripts/activate.sh   # aliases
+source scripts/activate.sh   # aliases; obsw-help prints docs/cheatsheet.md
 host-build                   # build host sim
 host-test                    # run the C tests
 ```
