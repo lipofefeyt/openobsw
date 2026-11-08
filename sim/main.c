@@ -585,6 +585,7 @@ int main(void)
     float last_sim_time = 0.0f;
 
     fprintf(stderr, "[OBSW] Host sim started (type-frame protocol v2).\n");
+    fprintf(stderr, "[OBSW] openobsw v%s\n", OBSW_VERSION_STRING);
     fprintf(stderr, "[OBSW] SRDB version: %s\n", SRDB_VERSION);
 
     uint8_t frame[1024];

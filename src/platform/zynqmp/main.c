@@ -168,7 +168,8 @@ int main(void)
     obsw_uart_ops.write((const uint8_t *)banner,
                         (uint16_t)strlen(banner), obsw_uart_ops.ctx);
 
-    const char *version = "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
+    const char *version = "[OBSW] openobsw v" OBSW_VERSION_STRING "\r\n"
+                          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
     obsw_uart_ops.write((const uint8_t *)version,
                         (uint16_t)strlen(version), obsw_uart_ops.ctx);
 
