@@ -33,6 +33,14 @@ option(OBSW_UART_ASCII_DEBUG "Interleave ASCII debug trace on USART3" OFF)
 # for bench A/B only.
 option(OBSW_LCD_KEEPALIVE "Periodic 200 ms LCD wake keepalive (legacy)" OFF)
 
+# LEOP autonomy: seconds in STANDBY without ground contact before the Mode
+# Manager commands SAFE (0 = SAFE immediately). Initial value of the S20
+# parameter standby_safe_timeout; a short value suits bench demos.
+set(OBSW_STANDBY_SAFE_TIMEOUT_S "300" CACHE STRING "STANDBY->SAFE timeout [s] (0 = immediate)")
+if(NOT OBSW_STANDBY_SAFE_TIMEOUT_S MATCHES "^[0-9]+$")
+    message(FATAL_ERROR "OBSW_STANDBY_SAFE_TIMEOUT_S must be a non-negative integer")
+endif()
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 # Pass -DOBSW_FREERTOS=ON to build with the FreeRTOS task architecture
@@ -102,6 +110,7 @@ add_library(obsw_stm32h7 STATIC
     ${OBSW_ROOT}/src/pus/s20.c
     ${OBSW_ROOT}/src/time/obt.c
     ${OBSW_ROOT}/src/fdir/fsm.c
+    ${OBSW_ROOT}/src/fdir/standby_timer.c
     ${OBSW_ROOT}/src/ui/dashboard.c
     ${OBSW_ROOT}/src/hal/stm32h7/uart.c
     ${OBSW_ROOT}/src/hal/stm32h7/spi.c
@@ -127,6 +136,9 @@ endif()
 if(OBSW_UART_ASCII_DEBUG)
     target_compile_definitions(obsw_stm32h7 PUBLIC OBSW_UART_ASCII_DEBUG)
 endif()
+
+target_compile_definitions(obsw_stm32h7 PUBLIC
+    OBSW_STANDBY_SAFE_TIMEOUT_S=${OBSW_STANDBY_SAFE_TIMEOUT_S}U)
 
 if(OBSW_LCD_KEEPALIVE)
     target_compile_definitions(obsw_stm32h7 PUBLIC OBSW_LCD_KEEPALIVE)

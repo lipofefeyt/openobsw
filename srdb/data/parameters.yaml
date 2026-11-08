@@ -104,6 +104,15 @@ parameters:
     subsystem: DHS/FDIR
     unit: ticks
 
+  - id: 0x0008
+    name: standby_safe_timeout
+    description: "LEOP autonomy: seconds in STANDBY without ground contact (any well-formed TC) before the OBSW commands SAFE; 0 = SAFE immediately. Default 300 s; STM32H7 build option OBSW_STANDBY_SAFE_TIMEOUT_S sets the initial value (issue #111)."
+    type: uint32
+    ptc: 1
+    pfc: 32
+    subsystem: DHS/FDIR
+    unit: s
+
   # ---- DHS OBC housekeeping (consumed by opensvf OBCEmulatorAdapter) ----
   #
   # These seven parameters form the canonical DHS OBC telemetry set.

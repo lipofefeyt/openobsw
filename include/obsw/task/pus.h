@@ -29,6 +29,12 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
 float obsw_pus_s20_get_float(uint16_t param_id, float default_val);
 
 /*
+ * Read an unsigned 32-bit S20 parameter value by ID; default_val if absent.
+ * Safe from any task (single aligned 32-bit read).
+ */
+uint32_t obsw_pus_s20_get_u32(uint16_t param_id, uint32_t default_val);
+
+/*
  * Advance the on-board time by dt_ms. Called from the FDIR full tick;
  * guarded against a concurrent TC(9,128) set from the PUS task.
  */

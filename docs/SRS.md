@@ -326,6 +326,16 @@ Watchdog expiry shall raise a high-severity event that commands SAFE.
 **OBSW-SRS-186** `[MOD]` `IMPLEMENTED` `T`
 Mode values reported in telemetry shall use the SRDB `obc_mode` enumeration (STANDBY=0, SAFE=1, NOMINAL=2), independent of the internal encoding.
 
+**OBSW-SRS-187** `[MOD]` `IMPLEMENTED` `T`
+In STANDBY the software shall command SAFE once `standby_safe_timeout` seconds (SRDB `0x0008`, default 300) have elapsed without ground contact; a timeout of 0 shall command SAFE on the first STANDBY tick.
+
+**OBSW-SRS-188** `[MOD]` `IMPLEMENTED` `T`
+Receiving a well-formed TC in STANDBY, whether accepted or rejected, shall restart the STANDBY countdown, and leaving STANDBY shall reset it.
+
+**OBSW-SRS-189** `[MOD]` `IMPLEMENTED` `I`
+The STM32H7 FreeRTOS build shall read the timeout from its S20 table each second, so TC(20,1) changes take effect without a restart, and shall initialise it from the build option `OBSW_STANDBY_SAFE_TIMEOUT_S`.
+*Evidence: inspection of `src/task/mode.c`, `src/task/pus.c` and `targets/stm32h7/CMakeLists.txt`.*
+
 ---
 
 ## 18. Attitude and orbit control [AOC]

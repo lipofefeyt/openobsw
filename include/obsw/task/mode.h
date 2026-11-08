@@ -34,4 +34,8 @@ void obsw_mode_request_safe(void);      /* any state → SAFE (fault fallback) *
 void obsw_mode_request_nominal(void);   /* SAFE → NOMINAL (ground command)   */
 void obsw_mode_request_standby(void);   /* any state → STANDBY (hibernation) */
 
+/* Report that a well-formed TC arrived from ground (accepted or rejected).
+ * Restarts the STANDBY → SAFE countdown (OBSW-SRS-188). Called by PUS. */
+void obsw_mode_note_ground_contact(void);
+
 #endif /* OBSW_TASK_MODE_H */

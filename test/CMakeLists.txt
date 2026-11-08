@@ -96,6 +96,11 @@ target_link_libraries(test_watchdog PRIVATE obsw unity)
 target_compile_options(test_watchdog PRIVATE ${TEST_SUPPRESS})
 add_test(NAME watchdog COMMAND test_watchdog)
 
+add_executable(test_standby_timer unit/test_standby_timer.c)
+target_link_libraries(test_standby_timer PRIVATE obsw unity)
+target_compile_options(test_standby_timer PRIVATE ${TEST_SUPPRESS})
+add_test(NAME standby_timer COMMAND test_standby_timer)
+
 add_executable(test_s5_fdir unit/test_s5_fdir.c)
 target_link_libraries(test_s5_fdir PRIVATE obsw unity)
 target_compile_options(test_s5_fdir PRIVATE ${TEST_SUPPRESS})
