@@ -610,6 +610,15 @@ Parameters are addressed by a 16-bit ID. Ranges in use:
 | `0x3001–0x3032` | Orbit / dynamics config | `orbit_altitude_km`, `sc_inertia_xx`, `sc_omega_x0` |
 | `0x4001–0x400A` | DHS OBC HK (opensvf) | `obc_mode`, `obc_obt`, `obc_health` |
 
+S20 holds every parameter as a 32-bit slot. How a slot is read numerically
+(S12 limit checks) follows the parameter's SRDB type: `uint8/16/32` unsigned,
+`int8/16/32` signed, `float32` IEEE 754. The generated header carries this as
+`SRDB_PARAM_<NAME>_S20_TYPE`, and every S20 table takes its `.type` from that
+macro. `obc_temperature` (`0x0001`) is the one signed parameter: `int16` raw
+counts with `degC = 0.1 * raw - 40`, so 85 degC is raw 1250 and -45 degC is
+raw -50. TC(20,1) sets it as a big-endian `int32`; S12 limits on it are given
+in raw counts.
+
 HK sets in use:
 
 | id | Name | SPID | Contents |

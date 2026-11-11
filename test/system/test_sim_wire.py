@@ -9,7 +9,7 @@ import pytest
 
 from conftest import (REPO, FAIL_ILLEGAL_SUBSVC, FAIL_ILLEGAL_SVC, FAIL_MEM_ACCESS,
                       FAIL_MODE_GATED, HK_AOCS, HK_DHS_OBC, MODE_NOMINAL, MODE_SAFE,
-                      PARAM_BDOT_GAIN, PARAM_OBC_UPTIME, Stream)
+                      PARAM_BDOT_GAIN, PARAM_OBC_TEMPERATURE, PARAM_OBC_UPTIME, Stream)
 
 DHS_OBC_FMT = ">BIBBBHB"  # mode, obt, wd, mem, health, reset, cpu (opensvf decoder)
 
@@ -200,6 +200,24 @@ def test_s12_limit_crossing_raises_event_once(run):
     events = [t for t in out.tms if t.service == 5]
     assert [(t.subservice, struct.unpack(">H", t.app[:2])[0]) for t in events] == [(2, 0x0202)]
     assert struct.unpack(">f", events[0].app[2:6])[0] == pytest.approx(3.0)
+
+
+@pytest.mark.requirement("OBSW-SRS-172")
+@pytest.mark.requirement("OBSW-SRS-292")
+def test_s12_low_limit_on_negative_raw_temperature(run):
+    """obc_temperature is int16 in the SRDB: raw -200 is below a -100 low limit."""
+    s = Stream()
+    s.nominal()
+    s.tc(12, 3, s12_add(PARAM_OBC_TEMPERATURE, -100.0, 1250.0, 0x0201, 0x0202, 2))
+    s.ticks(2)
+    s.tc(20, 1, struct.pack(">Hi", PARAM_OBC_TEMPERATURE, -50))
+    s.ticks(2)
+    s.tc(20, 1, struct.pack(">Hi", PARAM_OBC_TEMPERATURE, -200))
+    s.ticks(2)
+    out = run(s)
+    events = [t for t in out.tms if t.service == 5]
+    assert [(t.subservice, struct.unpack(">H", t.app[:2])[0]) for t in events] == [(2, 0x0201)]
+    assert struct.unpack(">f", events[0].app[2:6])[0] == pytest.approx(-200.0)
 
 
 @pytest.mark.requirement("OBSW-SRS-295")

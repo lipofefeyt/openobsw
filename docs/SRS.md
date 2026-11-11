@@ -298,7 +298,7 @@ The software shall set the 32-bit raw value of a parameter on TC(20,1) and repor
 The software shall reject TC(20,1) and TC(20,3) for an unknown parameter ID (code `0x0004`) or truncated user data (code `0x0005`).
 
 **OBSW-SRS-172** `[S20]` `IMPLEMENTED` `T`
-Each S20 parameter shall carry its SRDB type (unsigned, signed or float), and services that use parameter values numerically shall convert them according to that type.
+Each S20 parameter shall carry its SRDB type (unsigned, signed or float), taken from the generated SRDB header, and services that use parameter values numerically shall convert them according to that type.
 
 ---
 
@@ -366,7 +366,7 @@ Quaternion operations shall reject a zero-norm quaternion and null inputs instea
 The SRDB shall define parameters, telecommands, events and housekeeping sets in YAML and validate IDs, ranges, types and cross-references on load.
 
 **OBSW-SRS-221** `[SDB]` `IMPLEMENTED` `T`
-The SRDB shall generate a C header with parameter, event, HK set and telecommand identifiers, the safe-trigger event list, the SAFE TC whitelist and parameter enumeration values.
+The SRDB shall generate a C header with parameter, event, HK set and telecommand identifiers, each parameter's S20 value type, the safe-trigger event list, the SAFE TC whitelist and parameter enumeration values.
 
 **OBSW-SRS-222** `[SDB]` `IMPLEMENTED` `T`
 The SRDB shall generate an XTCE 1.2 mission database whose HK containers match the TM(3,25) layout produced on board.

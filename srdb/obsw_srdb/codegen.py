@@ -60,6 +60,13 @@ def _param_bits(p: Parameter) -> int:
     return p.pfc
 
 
+def _s20_type(p: Parameter) -> str:
+    """obsw_s20_type_t enumerator for a parameter's 32-bit S20 slot (PTC 1/2/5)."""
+    if p.ptc == 5:
+        return "OBSW_S20_F32"
+    return "OBSW_S20_I32" if p.ptc == 2 else "OBSW_S20_U32"
+
+
 def _tc_param_bits(ptype: str) -> int:
     """Bit width for a TC argument type string."""
     return {"uint8": 8, "uint16": 16, "uint32": 32,
@@ -172,6 +179,19 @@ def generate_header(srdb: SRDB) -> str:
     for p in srdb.parameters:
         macro = f"SRDB_PARAM_{p.name.upper()}"
         lines.append(f"#define {macro:<40s} 0x{p.id:04X}U  /**< {p.description} */")
+    lines.append("")
+
+    lines += [
+        "/* ---------------------------------------------------------------- */",
+        "/* Parameter S20 value types (obsw_s20_type_t, obsw/pus/s20.h)      */",
+        "/* How the 32-bit S20 slot of each parameter is interpreted. Use as */",
+        "/* .type in S20 tables so a table cannot disagree with the SRDB.    */",
+        "/* ---------------------------------------------------------------- */",
+        "",
+    ]
+    for p in srdb.parameters:
+        macro = f"SRDB_PARAM_{p.name.upper()}_S20_TYPE"
+        lines.append(f"#define {macro:<48s} {_s20_type(p)}")
     lines.append("")
 
     enum_params = [p for p in srdb.parameters if p.enumeration]
