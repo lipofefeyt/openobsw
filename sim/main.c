@@ -526,11 +526,11 @@ int main(void)
     s5_ctx.tm_store           = &tm_store;
     s5_ctx.apid               = SRDB_APID_DEFAULT;
     s5_ctx.fsm                = (struct obsw_fsm_ctx *)&fsm_ctx;
-    s5_ctx.safe_trigger_count = SRDB_SAFE_TRIGGER_COUNT;
     {
-        uint16_t ids[] = SRDB_SAFE_TRIGGER_IDS;
-        for (uint8_t i = 0; i < SRDB_SAFE_TRIGGER_COUNT; i++)
-            s5_ctx.safe_trigger_ids[i] = ids[i];
+        static const uint16_t ids[] = SRDB_SAFE_TRIGGER_IDS;
+        _Static_assert(SRDB_SAFE_TRIGGER_COUNT <= OBSW_S5_MAX_SAFE_TRIGGERS,
+                       "SRDB safe-trigger list does not fit obsw_s5_ctx_t");
+        (void)obsw_s5_set_safe_triggers(&s5_ctx, ids, SRDB_SAFE_TRIGGER_COUNT);
     }
 
     s17_ctx.tm_store = &tm_store;

@@ -20,6 +20,7 @@
 #define OBSW_PUS_S5_H
 
 #include "obsw/pus/pus_tm.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 /* Forward declaration — avoids circular include with fsm.h */
@@ -96,6 +97,21 @@ extern "C"
                        uint16_t event_id,
                        const uint8_t *data,
                        uint8_t data_len);
+
+    /**
+     * Load the safe-trigger list, replacing the previous one. Every target
+     * loads the generated SRDB_SAFE_TRIGGER_IDS through this, so the list
+     * cannot differ from the SRDB.
+     *
+     * @param ctx    S5 context.
+     * @param ids    Event IDs (may be NULL when count is 0).
+     * @param count  Number of IDs.
+     * @return true if the whole list was loaded. If count exceeds
+     *         OBSW_S5_MAX_SAFE_TRIGGERS the first OBSW_S5_MAX_SAFE_TRIGGERS
+     *         IDs are loaded and false is returned; a NULL ctx, or NULL ids
+     *         with a non-zero count, loads nothing and returns false.
+     */
+    bool obsw_s5_set_safe_triggers(obsw_s5_ctx_t *ctx, const uint16_t *ids, uint8_t count);
 
 #ifdef __cplusplus
 }

@@ -232,7 +232,7 @@ The software shall delete housekeeping sets created by TC(3,1) on TC(3,3) (`N | 
 The software shall report events as TM(5,1) to TM(5,4) for informational, low, medium and high severity, carrying the event ID and any auxiliary data.
 
 **OBSW-SRS-111** `[S5]` `IMPLEMENTED` `T`
-A high-severity event whose ID is in the configured safe-trigger list shall command the mode machine to SAFE; other events shall not change the mode.
+A high-severity event whose ID is in the configured safe-trigger list shall command the mode machine to SAFE; other events shall not change the mode. On every target the configured list shall be the one generated from the SRDB (`safe_trigger: true` events).
 
 ---
 
