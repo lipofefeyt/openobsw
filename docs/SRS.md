@@ -336,6 +336,10 @@ Receiving a well-formed TC in STANDBY, whether accepted or rejected, shall resta
 The STM32H7 FreeRTOS build shall read the timeout from its S20 table each second, so TC(20,1) changes take effect without a restart, and shall initialise it from the build option `OBSW_STANDBY_SAFE_TIMEOUT_S`.
 *Evidence: inspection of `src/task/mode.c`, `src/task/pus.c` and `targets/stm32h7/CMakeLists.txt`.*
 
+**OBSW-SRS-190** `[MOD]` `IMPLEMENTED` `T`
+The host sim and the STM32H7 FreeRTOS build shall report every mode transition as an S5 event without auxiliary data: `safe_mode_entry` (`0x0002`, high severity) on entering SAFE, `standby_entry` (`0x0004`, informational) on entering STANDBY and `nominal_entry` (`0x0005`, informational) on entering NOMINAL. The mode at boot shall not be reported, and these reports shall not themselves command a mode change. The host sim shall report the event with the TC or in the control tick that changed the mode; the FreeRTOS build at the next Mode Manager tick (within 1 s).
+*Evidence: `test/system` for the host sim; inspection of `src/task/mode.c` for FreeRTOS.*
+
 ---
 
 ## 18. Attitude and orbit control [AOC]

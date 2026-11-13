@@ -96,6 +96,80 @@ def test_s8_safe_and_standby_functions_change_reported_mode(run):
     assert modes == [2, 1, 0]
 
 
+# ---- Mode-transition events ---------------------------------------------------
+
+EV_SAFE_MODE_ENTRY, EV_STANDBY_ENTRY, EV_NOMINAL_ENTRY = 0x0002, 0x0004, 0x0005
+MODE_EVENTS = (EV_SAFE_MODE_ENTRY, EV_STANDBY_ENTRY, EV_NOMINAL_ENTRY)
+
+
+def by_tick(out):
+    """TM of each end-of-tick-delimited segment, as (service, subservice, app)."""
+    segments, cur = [], []
+    for kind, item in out.events:
+        if kind == "tm":
+            cur.append((item.service, item.subservice, item.app))
+        elif kind == "eot":
+            segments.append(cur)
+            cur = []
+    return segments
+
+
+def mode_events(tms):
+    """(subservice, event_id, aux length) of the mode events in a TM list."""
+    return [(sub, struct.unpack(">H", app[:2])[0], len(app) - 2) for svc, sub, app in tms
+            if svc == 5 and struct.unpack(">H", app[:2])[0] in MODE_EVENTS]
+
+
+@pytest.mark.requirement("OBSW-SRS-190")
+def test_each_mode_transition_is_reported_once_with_the_tc_that_caused_it(run):
+    s = Stream()
+    s.ticks(3)                              # boot mode (SAFE) is not a transition
+    s.nominal()                             # SAFE -> NOMINAL
+    s.tc(8, 1, struct.pack(">HB", 2, 0))    # NOMINAL -> SAFE
+    s.tc(8, 1, struct.pack(">HB", 2, 0))    # already SAFE: nothing to report
+    s.tc(8, 1, struct.pack(">HB", 3, 0))    # SAFE -> STANDBY
+    s.ticks(3)
+    segments = by_tick(run(s))
+    assert [mode_events(seg) for seg in segments] == [
+        [], [], [],
+        [(1, EV_NOMINAL_ENTRY, 0)],
+        [(4, EV_SAFE_MODE_ENTRY, 0)],
+        [],
+        [(1, EV_STANDBY_ENTRY, 0)],
+        [], [], [],
+    ]
+    # The event follows the S1 reports of the TC that changed the mode
+    assert [(svc, sub) for svc, sub, _ in segments[3]] == [(1, 1), (1, 7), (5, 1)]
+
+
+@pytest.mark.requirement("OBSW-SRS-190")
+@pytest.mark.requirement("OBSW-SRS-295")
+def test_safe_trigger_reports_safe_mode_entry_in_the_same_tick_without_retrigger(run):
+    s = Stream()
+    s.nominal()
+    s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, EV_POWER_FAULT_3V3, 4))
+    s.ticks(8, dt=1.0)
+    segments = by_tick(run(s))
+    high = [[struct.unpack(">H", app[:2])[0] for svc, sub, app in seg if (svc, sub) == (5, 4)]
+            for seg in segments]
+    # One tick carries the monitoring event, then the mode event; no other tick has either
+    assert [ids for ids in high if ids] == [[EV_POWER_FAULT_3V3, EV_SAFE_MODE_ENTRY]]
+
+
+@pytest.mark.requirement("OBSW-SRS-190")
+@pytest.mark.requirement("OBSW-SRS-306")
+def test_s19_reacts_to_a_mode_event(run):
+    s = Stream()
+    s.nominal()
+    link = s.tc(19, 1, struct.pack(">H", EV_SAFE_MODE_ENTRY) + tc_packet(17, 1))
+    s.tc(8, 1, struct.pack(">HB", 2, 0))    # SAFE: TC(17,1) is on the whitelist
+    s.ticks(2)
+    out = run(s)
+    assert [t.subservice for t in out.s1_for(link)] == [1, 7]
+    assert [t.subservice for t in out.s1_for(0x3FFF)] == [1, 7]
+    assert any((t.service, t.subservice) == (17, 2) for t in out.tms)
+
+
 @pytest.mark.requirement("OBSW-SRS-061")
 def test_unrouted_tcs_get_specific_tm12_codes(run):
     s = Stream()
@@ -197,7 +271,8 @@ def test_s12_limit_crossing_raises_event_once(run):
     s.ticks(6, dt=1.0)  # obc_uptime counts sim seconds: crosses 2.5 once
     out = run(s)
     assert [t.subservice for t in out.s1_for(add)] == [1, 7]
-    events = [t for t in out.tms if t.service == 5]
+    events = [t for t in out.tms if t.service == 5
+              and struct.unpack(">H", t.app[:2])[0] in (0x0201, 0x0202)]
     assert [(t.subservice, struct.unpack(">H", t.app[:2])[0]) for t in events] == [(2, 0x0202)]
     assert struct.unpack(">f", events[0].app[2:6])[0] == pytest.approx(3.0)
 

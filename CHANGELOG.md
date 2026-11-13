@@ -8,6 +8,12 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Added
 
+- Host sim reports mode transitions as S5 events, like the FreeRTOS Mode
+  Manager: `safe_mode_entry` (`0x0002`, HIGH), `standby_entry` (`0x0004`) and
+  `nominal_entry` (`0x0005`), with the TC or in the tick that changed the
+  mode (OBSW-SRS-190). SRDB: event `0x0003` `safe_mode_exit`, which no target
+  ever emitted, is removed, and `safe_mode_entry` no longer declares a
+  `trigger_source` auxiliary byte that no target sent.
 - STM32H750 LCD dashboard: fixed 26×10 layout with mode, OBT, reset cause,
   TC/TM link counters, last TM and event, AOCS law, magnetometer field and
   commanded dipole, uptime and watchdog count. The core formatter
