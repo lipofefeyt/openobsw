@@ -126,6 +126,7 @@ alias renode-stm32h7-build='cmake -S $OPENOBSW_REPO/targets/stm32h7 \
 alias renode-stm32h7-clean='rm -rfv $OPENOBSW_REPO/build_stm32h7_renode'
 alias renode-test-leop='python3 $OPENOBSW_REPO/renode/test_leop_stm32h7.py'
 alias renode-test-fdir='python3 $OPENOBSW_REPO/renode/test_fdir_stm32h7.py'
+alias renode-test-s12-safe='python3 $OPENOBSW_REPO/renode/test_s12_safe_stm32h7.py'
 
 # ── Physics harnesses (opensvf-kde boundary) ─────────────────────────────
 alias bdot-harness='python3 $OPENOBSW_REPO/sim/bdot_harness.py'

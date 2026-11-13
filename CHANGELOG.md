@@ -21,6 +21,12 @@ README roadmap. Releases before v0.16 are described on the
   build option `OBSW_STANDBY_SAFE_TIMEOUT_S` sets the initial value (#111).
 - STM32H7 build options `OBSW_UART_ASCII_DEBUG` and `OBSW_LCD_KEEPALIVE`
   (both default OFF).
+- STM32H7 FreeRTOS: S12 monitoring now commands SAFE, as on the host sim. A
+  HIGH monitoring event on the SRDB safe-trigger list moves the Mode
+  Manager's FSM to SAFE from the FDIR tick (OBSW-SRS-295). The Mode Manager
+  makes its own transitions inside a critical section so the two writers
+  cannot interleave, and a recover-to-NOMINAL request pending from before
+  the fault is discarded. `renode/test_s12_safe_stm32h7.py` (`renode-test-s12-safe`).
 
 ### Changed
 

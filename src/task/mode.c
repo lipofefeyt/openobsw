@@ -51,6 +51,9 @@ static volatile bool s_ground_contact = false;  /* set by PUS, consumed here */
 
 /* ── FSM hooks ───────────────────────────────────────────────────────── */
 
+/* Both run inside an FSM transition, in whichever task commanded it (Mode
+ * Manager, or FDIR for an S12 safe trigger) and with a critical section held:
+ * keep them short and non-blocking. */
 static void on_enter_safe(void *ctx) { (void)ctx; }
 static void on_exit_safe(void *ctx)  { (void)ctx; }
 
@@ -67,10 +70,20 @@ static void mode_task(void *param)
     for (;;) {
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(1000));
 
-        obsw_fsm_mode_t cur = obsw_fsm_mode(&s_fsm);
+        /* The FSM has a second writer: an S5 context wired to it commands
+         * SAFE from the FDIR task (S12 monitoring, obsw_pus_s12_check(), which
+         * holds a critical section). FDIR has the higher priority, so without
+         * a lock here it could run in the middle of one of the transitions
+         * below. Every transition in this task is therefore made inside a
+         * critical section too, with the mode read inside it. */
+        uint32_t timeout_s = obsw_pus_s20_get_u32(SRDB_PARAM_STANDBY_SAFE_TIMEOUT,
+                                                  OBSW_STANDBY_SAFE_TIMEOUT_S);
+
+        taskENTER_CRITICAL();
 
         /* ── Process pending requests ──────────────────────────────── */
 
+        obsw_fsm_mode_t cur = obsw_fsm_mode(&s_fsm);
         if (s_req_safe) {
             s_req_safe = false;
             obsw_fsm_to_safe(&s_fsm);
@@ -88,14 +101,14 @@ static void mode_task(void *param)
         cur = obsw_fsm_mode(&s_fsm);
         bool contact = s_ground_contact;
         s_ground_contact = false;
-        uint32_t timeout_s = obsw_pus_s20_get_u32(SRDB_PARAM_STANDBY_SAFE_TIMEOUT,
-                                                  OBSW_STANDBY_SAFE_TIMEOUT_S);
         if (obsw_standby_timer_tick(&standby_timer, cur, timeout_s, contact))
             obsw_fsm_to_safe(&s_fsm);
 
         /* ── Detect transitions and emit TM(5,x) events ─────────────── */
 
         cur = obsw_fsm_mode(&s_fsm);
+
+        taskEXIT_CRITICAL();
         if (cur != last) {
             switch (cur) {
             case OBSW_FSM_SAFE:

@@ -313,8 +313,19 @@ void obsw_pus_task_init(obsw_tm_store_t *tm_store,
 
     s9_ctx.s1         = &s1_ctx;
 
+    /* S12 events go through an S5 context wired to the mode FSM and the SRDB
+     * safe-trigger list, as on the host sim: a HIGH monitoring event on that
+     * list commands SAFE (OBSW-SRS-295). The transition runs in the FDIR task,
+     * inside the critical section of obsw_pus_s12_check(). */
     s12_s5.tm_store = tm_store;
     s12_s5.apid     = SRDB_APID_DEFAULT;
+    s12_s5.fsm      = obsw_mode_get_fsm();
+    {
+        static const uint16_t ids[] = SRDB_SAFE_TRIGGER_IDS;
+        _Static_assert(SRDB_SAFE_TRIGGER_COUNT <= OBSW_S5_MAX_SAFE_TRIGGERS,
+                       "SRDB safe-trigger list does not fit obsw_s5_ctx_t");
+        (void)obsw_s5_set_safe_triggers(&s12_s5, ids, SRDB_SAFE_TRIGGER_COUNT);
+    }
     obsw_s12_init(&s12_ctx, &s1_ctx, &s12_s5, s20_params, s20_ctx.table_len,
                   s12_defs, (uint8_t)(sizeof(s12_defs) / sizeof(s12_defs[0])));
     obsw_s19_init(&s19_ctx, &s1_ctx, s19_defs, (uint8_t)(sizeof(s19_defs) / sizeof(s19_defs[0])));
@@ -367,10 +378,26 @@ uint32_t obsw_pus_obt_seconds(void)
     return obsw_obt_seconds(&s_obt);
 }
 
+/* Called from the FDIR task. The critical section covers everything a limit
+ * crossing does: the S12 definition table (shared with the PUS task's TC(12,x)
+ * handlers), the TM(5,x) report, the S19 event hook and, for a HIGH event on
+ * the safe-trigger list, obsw_fsm_to_safe() on the Mode Manager's FSM with
+ * its on_enter_safe hook. The Mode Manager takes the same lock around its own
+ * transitions, so every write to the FSM is atomic.
+ *
+ * If the check moved the FSM into SAFE, it is also filed as a SAFE request:
+ * that discards a recover-to-NOMINAL request still pending from before the
+ * fault, which would otherwise undo the SAFE entry at the next Mode Manager
+ * tick. A recovery requested afterwards is honoured as usual. */
 void obsw_pus_s12_check(void)
 {
+    const obsw_fsm_ctx_t *fsm = obsw_mode_get_fsm();
+
     taskENTER_CRITICAL();
+    bool was_safe = obsw_fsm_is_safe(fsm);
     obsw_s12_check(&s12_ctx);
+    if (!was_safe && obsw_fsm_is_safe(fsm))
+        obsw_mode_request_safe();
     taskEXIT_CRITICAL();
 }
 
