@@ -64,3 +64,25 @@ int obsw_s5_report(obsw_s5_ctx_t *ctx,
 
     return rc;
 }
+
+bool obsw_s5_set_safe_triggers(obsw_s5_ctx_t *ctx, const uint16_t *ids, uint8_t count)
+{
+    if (!ctx || (!ids && (count > 0U)))
+    {
+        return false;
+    }
+
+    bool complete = true;
+    uint8_t n = count;
+    if (n > OBSW_S5_MAX_SAFE_TRIGGERS)
+    {
+        n = (uint8_t)OBSW_S5_MAX_SAFE_TRIGGERS;
+        complete = false;
+    }
+    for (uint8_t i = 0; i < n; i++)
+    {
+        ctx->safe_trigger_ids[i] = ids[i];
+    }
+    ctx->safe_trigger_count = n;
+    return complete;
+}

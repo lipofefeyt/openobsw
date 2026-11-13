@@ -31,6 +31,11 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Fixed
 
+- STM32H7 FreeRTOS FDIR hard-coded three safe-trigger events and missed
+  `watchdog_expiry` (`0x0010`), which the SRDB also marks. All targets now
+  load the generated `SRDB_SAFE_TRIGGER_IDS` through the new
+  `obsw_s5_set_safe_triggers()`, which never writes past the list; the build
+  fails if the SRDB list outgrows `OBSW_S5_MAX_SAFE_TRIGGERS`.
 - STM32H750 LCD went black ~0.5 s after every boot: the backlight on PE10
   is active-low and the driver drove it HIGH as "on". This was previously
   attributed to an ST7735R power-supervisor reset; the 200 ms FDIR re-wake

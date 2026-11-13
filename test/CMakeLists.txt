@@ -102,7 +102,7 @@ target_compile_options(test_standby_timer PRIVATE ${TEST_SUPPRESS})
 add_test(NAME standby_timer COMMAND test_standby_timer)
 
 add_executable(test_s5_fdir unit/test_s5_fdir.c)
-target_link_libraries(test_s5_fdir PRIVATE obsw unity)
+target_link_libraries(test_s5_fdir PRIVATE obsw obsw_srdb_generated unity)
 target_compile_options(test_s5_fdir PRIVATE ${TEST_SUPPRESS})
 add_test(NAME s5_fdir COMMAND test_s5_fdir)
 

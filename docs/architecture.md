@@ -404,11 +404,16 @@ obsw_wd_init(&wd, 10, on_wd_expiry, &fsm);
 event ID, `obsw_fsm_to_safe()` is called automatically:
 
 ```c
-s5.fsm                 = (struct obsw_fsm_ctx *)&fsm;
-s5.safe_trigger_ids[0] = EVENT_POWER_FAULT;
-s5.safe_trigger_ids[1] = EVENT_COMMS_LOSS;
-s5.safe_trigger_count  = 2;
+static const uint16_t ids[] = SRDB_SAFE_TRIGGER_IDS;   /* generated from events.yaml */
+s5.fsm = (struct obsw_fsm_ctx *)&fsm;
+(void)obsw_s5_set_safe_triggers(&s5, ids, SRDB_SAFE_TRIGGER_COUNT);
 ```
+
+The host sim, the MSP430 target and the FreeRTOS FDIR task all load the
+generated list this way, so the events that command SAFE are the SRDB's
+`safe_trigger: true` events on every target. Each site also has a
+`_Static_assert` that the list fits `OBSW_S5_MAX_SAFE_TRIGGERS` (the MSP430
+build sets it to 4, exactly the current SRDB count).
 
 If `fsm` is NULL, S5 behaves exactly as in v0.3 — no breaking change.
 

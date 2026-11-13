@@ -320,10 +320,13 @@ void obsw_fdir_task_init(obsw_tm_store_t *tm_store)
     s_s5.msg_counter         = 0;
     s_s5.timestamp           = 0;
     s_s5.fsm                 = obsw_mode_get_fsm();
-    s_s5.safe_trigger_ids[0] = SRDB_EVENT_TEMPERATURE_HARD_LIMIT;
-    s_s5.safe_trigger_ids[1] = SRDB_EVENT_POWER_FAULT_3V3;
-    s_s5.safe_trigger_ids[2] = SRDB_EVENT_POWER_FAULT_5V;
-    s_s5.safe_trigger_count  = 3;
+    {
+        /* Same generated list as the host sim and the MSP430 target */
+        static const uint16_t ids[] = SRDB_SAFE_TRIGGER_IDS;
+        _Static_assert(SRDB_SAFE_TRIGGER_COUNT <= OBSW_S5_MAX_SAFE_TRIGGERS,
+                       "SRDB safe-trigger list does not fit obsw_s5_ctx_t");
+        (void)obsw_s5_set_safe_triggers(&s_s5, ids, SRDB_SAFE_TRIGGER_COUNT);
+    }
 
     /* S3 — wire AOCS B-dot HK params to live AOCS HK state struct.
      * obsw_aocs_task_init() must be called before obsw_fdir_task_init() so
