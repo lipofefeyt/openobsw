@@ -26,18 +26,12 @@ events:
   - id: 0x0002
     name: safe_mode_entry
     severity: HIGH
-    description: "Transition to SAFE mode initiated"
+    description: "Transition to SAFE mode completed"
     safe_trigger: false # already transitioning — no re-trigger
-    auxiliary_data:
-      - name: trigger_source
-        type: uint8
-        description: "0=watchdog, 1=trap, 2=ground_cmd, 3=s5_event"
 
-  - id: 0x0003
-    name: safe_mode_exit
-    severity: INFO
-    description: "Recovery to NOMINAL mode completed"
-    safe_trigger: false
+  # 0x0003 was safe_mode_exit. No target ever emitted it: leaving SAFE is
+  # reported by the entry event of the mode that follows (0x0004 or 0x0005).
+  # The ID is left unused.
 
   - id: 0x0004
     name: standby_entry
