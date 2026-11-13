@@ -53,6 +53,11 @@ class TestCsvIoSuite:
                 assert e1.name == e2.name
                 assert e1.severity == e2.severity
                 assert e1.safe_trigger == e2.safe_trigger
+                assert ([(a.name, a.type) for a in e1.auxiliary_data]
+                        == [(a.name, a.type) for a in e2.auxiliary_data])
+            aux = {e.name: [(a.name, a.type.value) for a in e.auxiliary_data]
+                   for e in srdb2.events}
+            assert aux["temperature_hard_limit"] == [("value", "float32")]
 
     def test_round_trip_telecommands(self) -> None:
         """Telecommands survive export → import unchanged."""

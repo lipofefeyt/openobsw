@@ -48,6 +48,10 @@ extern "C" {
 #define OBSW_S12_ADD_LEN 15U
 #define OBSW_S12_DELETE_LEN 2U
 
+/** Auxiliary data of every event S12 raises: the monitored value as one
+ *  big-endian IEEE 754 float32, whatever the parameter's own type. */
+#define OBSW_S12_EVENT_AUX_LEN 4U
+
 /** One monitoring definition. One per parameter: adding replaces. */
 typedef struct {
     uint16_t param_id;

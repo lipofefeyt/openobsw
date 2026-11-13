@@ -55,6 +55,15 @@ static obsw_s6_ctx_t  s6_ctx  = {0};
  * this target go through the Mode Manager, not directly from S5. */
 static obsw_s12_ctx_t s12_ctx = {0};
 static obsw_s12_def_t s12_defs[8];
+
+/* The SRDB's limit events are raised by S12, whose auxiliary data is always
+ * one float32: fail the build if events.yaml declares anything else. */
+_Static_assert(SRDB_EVENT_POWER_FAULT_3V3_AUX_LEN == OBSW_S12_EVENT_AUX_LEN, "power_fault_3v3 aux");
+_Static_assert(SRDB_EVENT_POWER_FAULT_5V_AUX_LEN == OBSW_S12_EVENT_AUX_LEN, "power_fault_5v aux");
+_Static_assert(SRDB_EVENT_TEMPERATURE_SOFT_LIMIT_AUX_LEN == OBSW_S12_EVENT_AUX_LEN,
+               "temperature_soft_limit aux");
+_Static_assert(SRDB_EVENT_TEMPERATURE_HARD_LIMIT_AUX_LEN == OBSW_S12_EVENT_AUX_LEN,
+               "temperature_hard_limit aux");
 static obsw_s5_ctx_t  s12_s5  = {0};
 
 /* S19: reacts to S12 events. The FDIR task queues actions (inside the

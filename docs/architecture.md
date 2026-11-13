@@ -412,6 +412,20 @@ s5.safe_trigger_count  = 2;
 
 If `fsm` is NULL, S5 behaves exactly as in v0.3 — no breaking change.
 
+### Event auxiliary data
+
+TM(5,x) application data is the event ID (2 bytes) followed by the event's
+auxiliary data, declared per event in `srdb/data/events.yaml`. The SRDB's
+limit events (`power_fault_3v3`, `power_fault_5v`, `temperature_soft_limit`,
+`temperature_hard_limit`) are raised by S12 monitoring, and S12 always sends
+the monitored value as one big-endian IEEE 754 float32, whatever the
+parameter's own type: `obc_temperature` raw 1300 arrives as `1300.0`. Their
+SRDB entries declare `value: float32` accordingly. The generated header
+carries `SRDB_EVENT_<NAME>_AUX_LEN`, and the host sim and the FreeRTOS PUS
+task fail to compile if one of these differs from `OBSW_S12_EVENT_AUX_LEN`.
+An event ID bound through TC(12,3) that the SRDB defines with another layout
+is still sent with the float32 value.
+
 ---
 
 ### FDIR event flow
