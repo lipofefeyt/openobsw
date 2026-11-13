@@ -9,7 +9,7 @@ The output file can be uploaded directly to LinkedIn as a video post.
 
 Usage
 -----
-  source .venv/bin/activate
+  source scripts/activate.sh
   python3 sim/demo.py [--output demo.mp4]
 
 Requirements: matplotlib, imageio[ffmpeg]  (both in requirements)

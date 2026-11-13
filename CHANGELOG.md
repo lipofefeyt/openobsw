@@ -28,6 +28,10 @@ README roadmap. Releases before v0.16 are described on the
   `# TM(s,ss)` labels are behind `OBSW_UART_ASCII_DEBUG`.
 - ST7735R wake sequence is one register table shared by all wake paths.
 - TMTC's 8-entry TM log replaced by saturating link statistics.
+- Dev setup: the devcontainer and native WSL2 no longer fight over one
+  Python venv. `scripts/env.sh` selects `.venv` (devcontainer, plain Linux)
+  or `.venv-wsl` (WSL2); `host-build` refuses a `build/` configured from the
+  other environment instead of looping.
 
 ### Fixed
 

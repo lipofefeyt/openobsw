@@ -82,11 +82,15 @@ cd openobsw
 
 # Dev container (recommended): toolchains are installed by
 # scripts/setup-workspace.sh. Elsewhere, run that script on Ubuntu/Debian.
-source .venv/bin/activate
-source scripts/activate.sh   # aliases; obsw-help prints docs/cheatsheet.md
+source scripts/activate.sh   # venv + aliases; obsw-help prints docs/cheatsheet.md
 host-build                   # build host sim
 host-test                    # run the C tests
 ```
+
+`activate.sh` picks the venv for where you are: `.venv` in the dev container
+and on plain Linux, `.venv-wsl` in native WSL2. The two share one working
+tree and a venv only works where it was created, so each side keeps its own
+(`scripts/env.sh`); `setup-workspace.sh` creates the right one.
 
 Without the aliases:
 

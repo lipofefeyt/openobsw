@@ -19,7 +19,7 @@ Pass criterion
 
 Usage
 -----
-  source .venv/bin/activate
+  source scripts/activate.sh
   python3 sim/bdot_harness.py [--sim PATH] [--dt DT] [--max-periods N]
   bdot-harness          # activate.sh alias
 """

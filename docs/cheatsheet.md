@@ -9,10 +9,14 @@ which works the same in the **devcontainer** (VS Code terminal) and in
 | Where | Do |
 |---|---|
 | Devcontainer | Nothing. `post-create.sh` already sources `activate.sh`. |
-| WSL2 | `source ~/workspace/openobsw/scripts/activate.sh && obsw-install` |
+| WSL2 | `bash ~/workspace/openobsw/scripts/setup-workspace.sh --no-build` once (tools and `.venv-wsl`), then `source ~/workspace/openobsw/scripts/activate.sh && obsw-install` |
 
 `obsw-install` adds the `source` line to `~/.bashrc`. It's safe to run twice.
 The banner shows where you are: `activated (devcontainer)` or `activated (wsl)`.
+
+Both use the same working tree but not the same Python venv: `.venv` belongs
+to the devcontainer, `.venv-wsl` to WSL2. `$OPENOBSW_PYTHON` is the right one.
+`build/` is shared and belongs to whichever side configured it last.
 
 ## Where to run what
 
@@ -27,7 +31,7 @@ The banner shows where you are: `activated (devcontainer)` or `activated (wsl)`.
 | Command | Does |
 |---|---|
 | `host-rebuild` | Clean configure and build of `build/` (tests and sim) |
-| `host-build` | Incremental build |
+| `host-build` | Incremental build. Refuses if `build/` was configured in the other environment; run `host-rebuild`. |
 | `host-test` | All ctest tests (`ctest --test-dir build -R <name>` for one) |
 | `host-sim` / `host-ping` | Run the sim / send it a TC(17,1) |
 
@@ -80,6 +84,9 @@ designed behaviour, not a fault.
 
 | Symptom | Fix |
 |---|---|
+| `no venv at .../.venv-wsl` (or `.venv`) on activation | `bash scripts/setup-workspace.sh --no-build` in this environment. |
+| `build/ was configured from ...` | The other environment configured `build/` last. `host-rebuild`. |
+| `No module named 'obsw_srdb'` | Wrong Python: something activated another venv after `activate.sh`. Use `$OPENOBSW_PYTHON -m pytest ...` or re-source `activate.sh`. |
 | `init mode failed (unable to connect to the target)` | Hold **RST** while OpenOCD starts; the aliases already use `reset_config none separate` and 480 kHz. |
 | `program` can't find the file | Use `$HOME/...`, not `~`, inside `-c "..."` (the aliases do this). |
 | Probe: `failed to read memory` | The board reset or the SWD wires moved. Restart `stm32h7-ocd`, holding RST. |
