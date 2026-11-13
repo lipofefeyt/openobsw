@@ -184,7 +184,7 @@ from `safe_allowed: true` in `srdb/data/telecommands.yaml` as
 | TM store | `obsw_tm_store_t` ring, 32 slots | PUS + FDIR | TMTC | Lock-free `volatile` head/tail. Two same-priority writers (PUS prio 3, FDIR prio 3) never preempt each other mid-enqueue on single-core; TMTC (prio 4) only advances `tail`, not `head`. |
 | AOCS HK | `obsw_aocs_hk_t` volatile struct | AOCS | FDIR (S3) | Each field is a single 32-bit write — atomic on Cortex-M7. `mag_valid` written last so reader sees consistent data when valid=1. |
 | Task notify | `xTaskNotify` | PUS | TMTC | Immediate TM drain after each TC dispatch |
-| FSM pointer | `obsw_fsm_ctx_t *` | FDIR (owner) | PUS (gate + S8) | Set once at init; FSM transitions only from PUS task — no concurrent write conflict |
+| Mode FSM | `obsw_fsm_ctx_t` in `mode.c` | Mode Manager (requests, LEOP timer); FDIR task via S12 (HIGH safe-trigger event → SAFE) | PUS (TC gate), AOCS, FDIR | Two writers. Every transition is made inside a critical section: the Mode Manager around its request and timer block, the FDIR task inside `obsw_pus_s12_check()`. Readers take single-word reads of `mode`. A SAFE entry made by S12 is also filed with `obsw_mode_request_safe()`, which discards a recover-to-NOMINAL request pending from before the fault. |
 
 ---
 
