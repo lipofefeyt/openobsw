@@ -24,6 +24,10 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Changed
 
+- S20 tables take each parameter's type from the generated
+  `SRDB_PARAM_<NAME>_S20_TYPE`. `obc_temperature` (`int16` in the SRDB) is
+  now signed in the host sim, so S12 limits work on negative raw values; it
+  was compared as unsigned before.
 - STM32H7 default build keeps USART3 binary-only: FDIR debug markers and
   `# TM(s,ss)` labels are behind `OBSW_UART_ASCII_DEBUG`.
 - ST7735R wake sequence is one register table shared by all wake paths.

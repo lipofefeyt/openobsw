@@ -28,6 +28,23 @@ class TestCodegen:
         assert "SRDB_PARAM_OBC_VOLTAGE_3V3" in header
         assert "SRDB_PARAM_OBC_UPTIME" in header
 
+    def test_parameter_s20_type_macros(self, srdb):
+        """Each parameter's S20 slot type follows its SRDB type (PTC)."""
+        header = generate_header(srdb)
+
+        def s20_type(name: str) -> str:
+            line = next(l for l in header.splitlines()
+                        if l.startswith(f"#define SRDB_PARAM_{name}_S20_TYPE "))
+            return line.split()[-1]
+
+        assert s20_type("OBC_TEMPERATURE") == "OBSW_S20_I32"   # int16
+        assert s20_type("OBC_VOLTAGE_3V3") == "OBSW_S20_U32"   # uint16
+        assert s20_type("OBC_UPTIME") == "OBSW_S20_U32"        # uint32
+        assert s20_type("BDOT_GAIN") == "OBSW_S20_F32"         # float32
+        expected = {1: "OBSW_S20_U32", 2: "OBSW_S20_I32", 5: "OBSW_S20_F32"}
+        for p in srdb.parameters:
+            assert s20_type(p.name.upper()) == expected[p.ptc], p.name
+
     def test_event_macros(self, srdb):
         header = generate_header(srdb)
         assert "SRDB_EVENT_BOOT_COMPLETE" in header

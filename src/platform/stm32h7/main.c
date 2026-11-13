@@ -92,9 +92,12 @@ static void system_clock_init(void)
  static obsw_s20_ctx_t  s20_ctx = {0};
 
  static obsw_s20_param_t s20_params[] = {
-     {.param_id = SRDB_PARAM_OBC_UPTIME,           .value = {.u32 = 0}},
-     {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT,.value = {.u32 = 0}},
-     {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,  .value = {.u32 = 0}},
+     {.param_id = SRDB_PARAM_OBC_UPTIME, .value = {.u32 = 0},
+      .type = SRDB_PARAM_OBC_UPTIME_S20_TYPE},
+     {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT, .value = {.u32 = 0},
+      .type = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT_S20_TYPE},
+     {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT, .value = {.u32 = 0},
+      .type = SRDB_PARAM_WATCHDOG_KICK_COUNT_S20_TYPE},
  };
 
  static obsw_tc_route_t routes[] = {

@@ -27,6 +27,7 @@ END_OF_TICK = 0xFF
 # HK set IDs and parameter IDs used by the tests (srdb/data)
 HK_DHS_OBC = 3
 HK_AOCS = 4
+PARAM_OBC_TEMPERATURE = 0x0001
 PARAM_OBC_UPTIME = 0x0004
 PARAM_BDOT_GAIN = 0x20A0
 

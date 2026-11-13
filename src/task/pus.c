@@ -82,17 +82,24 @@ static const obsw_s6_region_t s6_regions[] = {
 };
 
 static obsw_s20_param_t s20_params[] = {
-    {.param_id = SRDB_PARAM_OBC_UPTIME,            .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT, .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,   .value = {.u32 = 0}},
+    {.param_id = SRDB_PARAM_OBC_UPTIME, .value = {.u32 = 0},
+     .type = SRDB_PARAM_OBC_UPTIME_S20_TYPE},
+    {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT, .value = {.u32 = 0},
+     .type = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT_S20_TYPE},
+    {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT, .value = {.u32 = 0},
+     .type = SRDB_PARAM_WATCHDOG_KICK_COUNT_S20_TYPE},
     /* AOCS control gains — tunable via TC(20,1), read by AOCS task each tick */
-    {.param_id = SRDB_PARAM_BDOT_GAIN,    .value = {.f32 = 1.0e4f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_BDOT_HPF_TAU, .value = {.f32 = 15.0f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_ADCS_KP,      .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_ADCS_KD,      .value = {.f32 = 0.1f}, .type = OBSW_S20_F32},
+    {.param_id = SRDB_PARAM_BDOT_GAIN, .value = {.f32 = 1.0e4f},
+     .type = SRDB_PARAM_BDOT_GAIN_S20_TYPE},
+    {.param_id = SRDB_PARAM_BDOT_HPF_TAU, .value = {.f32 = 15.0f},
+     .type = SRDB_PARAM_BDOT_HPF_TAU_S20_TYPE},
+    {.param_id = SRDB_PARAM_ADCS_KP, .value = {.f32 = 0.5f},
+     .type = SRDB_PARAM_ADCS_KP_S20_TYPE},
+    {.param_id = SRDB_PARAM_ADCS_KD, .value = {.f32 = 0.1f},
+     .type = SRDB_PARAM_ADCS_KD_S20_TYPE},
     /* LEOP autonomy — read by the Mode Manager every second (OBSW-SRS-189) */
-    {.param_id = SRDB_PARAM_STANDBY_SAFE_TIMEOUT,
-     .value = {.u32 = OBSW_STANDBY_SAFE_TIMEOUT_S}, .type = OBSW_S20_U32},
+    {.param_id = SRDB_PARAM_STANDBY_SAFE_TIMEOUT, .value = {.u32 = OBSW_STANDBY_SAFE_TIMEOUT_S},
+     .type = SRDB_PARAM_STANDBY_SAFE_TIMEOUT_S20_TYPE},
 };
 
 /* S8 function table — mode transition requests via Mode Manager. */
