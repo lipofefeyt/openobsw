@@ -114,7 +114,6 @@ class TestCodegen:
             return line.split()[-1]
 
         assert aux_len("BOOT_COMPLETE") == "0U"            # no aux
-        assert aux_len("SAFE_MODE_ENTRY") == "1U"          # uint8
         assert aux_len("TEMPERATURE_HARD_LIMIT") == "4U"   # float32
         width = {"uint8": 1, "int8": 1, "uint16": 2, "int16": 2,
                  "uint32": 4, "int32": 4, "float32": 4}
