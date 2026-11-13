@@ -51,6 +51,11 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Fixed
 
+- The 4-byte time field of every TM packet was always zero: each service
+  context has a `timestamp` the caller is meant to keep current, and no
+  target did. The host sim and the STM32H7 FreeRTOS tasks now stamp it with
+  OBT seconds before they report (OBSW-SRS-153), so events and verification
+  reports carry on-board time, not only HK set 3's `obc_obt`.
 - STM32H7 FreeRTOS FDIR hard-coded three safe-trigger events and missed
   `watchdog_expiry` (`0x0010`), which the SRDB also marks. All targets now
   load the generated `SRDB_SAFE_TRIGGER_IDS` through the new

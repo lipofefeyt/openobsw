@@ -217,6 +217,49 @@ def test_set_obt_is_reported_big_endian_in_dhs_obc_hk(run):
     assert obt == 1001  # 1000.5 s + 10 x 0.1 s, truncated to seconds
 
 
+@pytest.mark.requirement("OBSW-SRS-153")
+def test_every_tm_packet_carries_onboard_time(run):
+    """TM of every service is stamped with OBT seconds, also after TC(9,128)."""
+    s = Stream()
+    s.ticks(15)                                    # OBT 1.5 s
+    s.nominal()                                    # S1, mode event
+    set_obt = s.tc(9, 128, struct.pack(">IH", 1000, 0))
+    s.tc(17, 1)                                    # S17
+    s.tc(20, 3, struct.pack(">H", PARAM_BDOT_GAIN))  # S20
+    s.tc(6, 9, struct.pack(">IHB", 0x100, 4, 0))   # S6
+    s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.55, 0x0201, EV_POWER_FAULT_3V3, 4))
+    s.ticks(30)                                    # HK, S12 event, SAFE mode event
+    out = run(s)
+
+    # One segment per input frame, in order: 15 ticks, 6 TCs, 30 ticks
+    segments, cur = [], []
+    for kind, item in out.events:
+        if kind == "tm":
+            cur.append(item)
+        elif kind == "eot":
+            segments.append(cur)
+            cur = []
+    assert len(segments) == 15 + 6 + 30
+
+    for k, seg in enumerate(segments[:15], start=1):   # boot: OBT 0.1 .. 1.5 s
+        assert all(t.time == k // 10 for t in seg), f"boot tick {k}"
+    assert [t.time for t in segments[15]] == [1] * len(segments[15])   # nominal()
+    # TC(9,128)'s own reports were built before the new time was taken over
+    assert [(t.subservice, t.time) for t in out.s1_for(set_obt)] == [(1, 1), (7, 1)]
+    for seg in segments[17:21]:                    # TCs after the set: 1000 s
+        assert seg and all(t.time == 1000 for t in seg)
+    for k, seg in enumerate(segments[21:], start=1):   # tick k after the set
+        assert all(t.time == 1000 + k // 10 for t in seg), f"tick {k}"
+
+    stamped = {t.service for seg in segments[17:] for t in seg}
+    assert stamped == {1, 3, 5, 6, 17, 20}
+    # The packet time equals obc_obt reported in the same tick's HK set 3
+    for seg in segments[21:]:
+        for t in seg:
+            if (t.service, t.subservice) == (3, 25) and t.app[0] == HK_DHS_OBC:
+                assert struct.unpack(DHS_OBC_FMT, t.app[1:])[1] == t.time
+
+
 @pytest.mark.requirement("OBSW-SRS-204")
 @pytest.mark.requirement("OBSW-SRS-092")
 def test_gain_set_by_s20_appears_in_aocs_hk_as_big_endian_float(run):

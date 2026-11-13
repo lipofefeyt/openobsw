@@ -51,6 +51,7 @@ class Tm:
     service: int
     subservice: int
     app: bytes
+    time: int = 0  # 4-byte time field of the PUS-C TM secondary header
 
     @property
     def tc_seq(self) -> int:
@@ -119,7 +120,8 @@ def parse(out: bytes) -> Output:
         body = out[i + 3:i + 3 + n]
         i += 3 + n
         if kind == FRAME_TM:
-            res.events.append(("tm", Tm(body[7], body[8], body[17:])))
+            res.events.append(("tm", Tm(body[7], body[8], body[17:],
+                                        struct.unpack(">I", body[13:17])[0])))
         elif kind == FRAME_ACTUATOR:
             res.events.append(("act", body))
         else:

@@ -139,6 +139,20 @@ static obsw_s8_entry_t s8_table[] = {
     {.function_id = OBSW_S8_FN_REQUEST_STANDBY, .fn = fn_request_standby, .ctx = NULL},
 };
 
+/* TM time. Every service context stamps its packets with its own timestamp
+ * field, which the caller keeps current. All contexts this task reports
+ * through are set here from the whole seconds of OBT, so none can be forgotten
+ * at a call site. s12_s5 is stamped in obsw_pus_s12_check(), in the task that
+ * uses it. The 32-bit seconds read is atomic on Cortex-M. */
+static void stamp_tm_time(void)
+{
+    uint32_t now = obsw_obt_seconds(&s_obt);
+    s1_ctx.timestamp  = now;
+    s6_ctx.timestamp  = now;
+    s17_ctx.timestamp = now;
+    s20_ctx.timestamp = now;
+}
+
 /* OBT is advanced by the FDIR task and set here by TC(9,128); the critical
  * section keeps the 6-byte coarse/fine update from tearing across tasks. */
 static int s9_set_obt_locked(const obsw_tc_t *tc, obsw_tc_responder_t respond, void *ctx)
@@ -274,6 +288,7 @@ static void pus_task(void *param)
         /* Wake at least every PUS_POLL_MS so due S11 and S19 TCs run even
          * without uplink traffic. */
         bool have_tc = xQueueReceive(s_tc_queue, &item, pdMS_TO_TICKS(PUS_POLL_MS)) == pdTRUE;
+        stamp_tm_time();
         if (have_tc) {
             int rc = obsw_tc_dispatcher_feed(&s_dispatcher, item.data, item.len);
             /* Ground contact = any well-formed TC, accepted or rejected
@@ -410,6 +425,7 @@ void obsw_pus_s12_check(void)
     const obsw_fsm_ctx_t *fsm = obsw_mode_get_fsm();
 
     taskENTER_CRITICAL();
+    s12_s5.timestamp = obsw_obt_seconds(&s_obt);
     bool was_safe = obsw_fsm_is_safe(fsm);
     obsw_s12_check(&s12_ctx);
     if (!was_safe && obsw_fsm_is_safe(fsm))

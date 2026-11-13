@@ -278,6 +278,12 @@ static void fdir_task(void *param)
         dbg_puts("F\r\n");   /* full tick marker — appears every 1 s on serial monitor */
 
         obsw_pus_obt_advance(1000U);
+
+        /* TM time for everything this task reports this tick (boot event, HK) */
+        uint32_t now = obsw_pus_obt_seconds();
+        s_s5.timestamp = now;
+        s_s3.timestamp = now;
+
         obsw_pus_s12_check();
 
         /* 3. Heartbeat LED (PE3, 1 Hz) and HK kick counter. */
