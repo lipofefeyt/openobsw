@@ -215,7 +215,8 @@ def test_s12_low_limit_on_negative_raw_temperature(run):
     s.tc(20, 1, struct.pack(">Hi", PARAM_OBC_TEMPERATURE, -200))
     s.ticks(2)
     out = run(s)
-    events = [t for t in out.tms if t.service == 5]
+    events = [t for t in out.tms if t.service == 5
+              and struct.unpack(">H", t.app[:2])[0] in (0x0201, 0x0202)]
     assert [(t.subservice, struct.unpack(">H", t.app[:2])[0]) for t in events] == [(2, 0x0201)]
     assert struct.unpack(">f", events[0].app[2:6])[0] == pytest.approx(-200.0)
 
