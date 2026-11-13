@@ -104,6 +104,24 @@ class TestCodegen:
             macro = f"SRDB_EVENT_{e.name.upper()}"
             assert macro in header, f"Missing macro {macro}"
 
+    def test_event_aux_length_macros(self, srdb):
+        """Each event's aux length is the sum of its SRDB aux field widths."""
+        header = generate_header(srdb)
+
+        def aux_len(name: str) -> str:
+            line = next(l for l in header.splitlines()
+                        if l.startswith(f"#define SRDB_EVENT_{name}_AUX_LEN "))
+            return line.split()[-1]
+
+        assert aux_len("BOOT_COMPLETE") == "0U"            # no aux
+        assert aux_len("SAFE_MODE_ENTRY") == "1U"          # uint8
+        assert aux_len("TEMPERATURE_HARD_LIMIT") == "4U"   # float32
+        width = {"uint8": 1, "int8": 1, "uint16": 2, "int16": 2,
+                 "uint32": 4, "int32": 4, "float32": 4}
+        for e in srdb.events:
+            expected = sum(width[a.type.value] for a in e.auxiliary_data)
+            assert aux_len(e.name.upper()) == f"{expected}U", e.name
+
     def test_cli_writes_file(self, srdb, tmp_path):
         from obsw_srdb.codegen import generate_header
         header = generate_header(srdb)

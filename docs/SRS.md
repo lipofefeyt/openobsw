@@ -435,7 +435,7 @@ The software shall add, or replace for the same parameter, a monitoring definiti
 The software shall reject TC(12,3) without changing state when the data is truncated, the parameter is unknown, the severity is outside 1..4 or the low limit exceeds the high limit (code `0x0005`), and when the definition table is full (code `0x0004`).
 
 **OBSW-SRS-292** `[S12]` `IMPLEMENTED` `T`
-Each control tick, while monitoring is enabled, the software shall compare every monitored parameter's current value with its limits and raise the definition's S5 event, with the value as auxiliary data, once on entry into a low or high out-of-limit state; the event shall not repeat until the value returns inside that limit.
+Each control tick, while monitoring is enabled, the software shall compare every monitored parameter's current value with its limits and raise the definition's S5 event, with the value as auxiliary data (one big-endian IEEE 754 float32, whatever the parameter's type), once on entry into a low or high out-of-limit state; the event shall not repeat until the value returns inside that limit. The SRDB shall declare that auxiliary layout for the limit events it defines, and the build shall fail if a declared length differs.
 
 **OBSW-SRS-293** `[S12]` `IMPLEMENTED` `T`
 The software shall disable monitoring on TC(12,2), keeping the definitions, and enable it on TC(12,1), clearing every latched out-of-limit state.

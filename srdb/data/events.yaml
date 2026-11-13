@@ -7,6 +7,12 @@
 #   description     Human-readable description
 #   safe_trigger    If true and severity=HIGH, triggers safe mode transition
 #   auxiliary_data  Optional list of structured aux data fields
+#
+# Limit events (power faults, temperature limits) are raised by S12 on-board
+# monitoring, which reports the monitored parameter's value as one big-endian
+# IEEE 754 float32, whatever the parameter's own type. Their auxiliary_data
+# is therefore a single float32; the build checks its length against
+# OBSW_S12_EVENT_AUX_LEN.
 
 events:
   # ---- Boot / lifecycle --------------------------------------------------
@@ -61,9 +67,9 @@ events:
     description: "3.3V rail voltage outside hard limits"
     safe_trigger: true
     auxiliary_data:
-      - name: measured_mv
-        type: uint16
-        description: "Measured voltage in mV"
+      - name: value
+        type: float32
+        description: "Monitored value at the limit crossing, in mV (S12 reports float32)"
 
   - id: 0x0021
     name: power_fault_5v
@@ -71,9 +77,9 @@ events:
     description: "5V rail voltage outside hard limits"
     safe_trigger: true
     auxiliary_data:
-      - name: measured_mv
-        type: uint16
-        description: "Measured voltage in mV"
+      - name: value
+        type: float32
+        description: "Monitored value at the limit crossing, in mV (S12 reports float32)"
 
   # ---- Communications ----------------------------------------------------
 
@@ -99,9 +105,9 @@ events:
     description: "OBC temperature exceeded soft limit"
     safe_trigger: false
     auxiliary_data:
-      - name: temperature_raw
-        type: int16
-        description: "Raw ADC reading"
+      - name: value
+        type: float32
+        description: "Monitored value at the limit crossing, in raw counts (S12 reports float32)"
 
   - id: 0x0051
     name: temperature_hard_limit
@@ -109,6 +115,6 @@ events:
     description: "OBC temperature exceeded hard limit"
     safe_trigger: true
     auxiliary_data:
-      - name: temperature_raw
-        type: int16
-        description: "Raw ADC reading"
+      - name: value
+        type: float32
+        description: "Monitored value at the limit crossing, in raw counts (S12 reports float32)"

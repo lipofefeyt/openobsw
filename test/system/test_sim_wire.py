@@ -222,6 +222,29 @@ def test_s12_definitions_need_nominal(run):
     assert [(t.subservice, t.failure_code) for t in out.s1_for(add)] == [(2, FAIL_MODE_GATED)]
 
 
+@pytest.mark.requirement("OBSW-SRS-292")
+def test_s12_raised_limit_events_carry_the_aux_their_srdb_entry_declares(run):
+    """Ground decodes TM(5,x) aux from the SRDB: it must be what S12 sends."""
+    from obsw_srdb import SRDBLoader
+    srdb = SRDBLoader.load(REPO / "srdb" / "data")
+    events = {e.name: e for e in srdb.events}
+    subservice = {"INFO": 1, "LOW": 2, "MEDIUM": 3, "HIGH": 4}
+    for name in ("power_fault_3v3", "power_fault_5v",
+                 "temperature_soft_limit", "temperature_hard_limit"):
+        ev = events[name]
+        assert [a.type.value for a in ev.auxiliary_data] == ["float32"], name
+        sev = subservice[ev.severity.value]
+        s = Stream()
+        s.nominal()
+        s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, ev.id, sev))
+        s.ticks(6, dt=1.0)  # obc_uptime counts sim seconds: crosses 2.5 once
+        raised = [t for t in run(s).tms if t.service == 5
+                  and struct.unpack(">H", t.app[:2])[0] == ev.id]
+        assert [t.subservice for t in raised] == [sev], name
+        assert len(raised[0].app) == 2 + 4, f"{name}: aux is {len(raised[0].app) - 2} B"
+        assert struct.unpack(">f", raised[0].app[2:])[0] == pytest.approx(3.0), name
+
+
 # ---- S19 ---------------------------------------------------------------------
 
 def tc_packet(svc, sub, app=b"", seq=0x3FFF, apid=0x010):

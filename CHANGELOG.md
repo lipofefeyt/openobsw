@@ -46,6 +46,11 @@ README roadmap. Releases before v0.16 are described on the
   CMake reads `project(VERSION)` from it, and the banners print both (#117).
 - LCD showed stale lines: the console was re-initialised every second
   without clearing the screen.
+- SRDB limit events (`0x0020`, `0x0021`, `0x0050`, `0x0051`) declared `uint16`
+  or `int16` auxiliary data, but they are raised by S12, which sends the
+  monitored value as a big-endian float32. They now declare `value: float32`;
+  the generated header gains `SRDB_EVENT_<NAME>_AUX_LEN` and the build checks
+  it against `OBSW_S12_EVENT_AUX_LEN`.
 
 ## [v0.18] — Service parity with OpenSVF
 

@@ -206,6 +206,18 @@ def generate_header(srdb: SRDB) -> str:
 
     lines += [
         "/* ---------------------------------------------------------------- */",
+        "/* Event auxiliary data length in TM(5,x), bytes after the event ID */",
+        "/* ---------------------------------------------------------------- */",
+        "",
+    ]
+    for e in srdb.events:
+        macro = f"SRDB_EVENT_{e.name.upper()}_AUX_LEN"
+        aux_len = sum(_tc_param_bits(a.type.value) // 8 for a in e.auxiliary_data)
+        lines.append(f"#define {macro:<48s} {aux_len}U")
+    lines.append("")
+
+    lines += [
+        "/* ---------------------------------------------------------------- */",
         "/* HK Set IDs                                                       */",
         "/* ---------------------------------------------------------------- */",
         "",

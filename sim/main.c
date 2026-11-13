@@ -80,6 +80,15 @@ static obsw_s9_ctx_t  s9_ctx  = {.obt = &obt};
 static obsw_s20_ctx_t  s20_ctx = {0};
 static obsw_s12_ctx_t  s12_ctx = {0};
 static obsw_s12_def_t  s12_defs[16];
+
+/* The SRDB's limit events are raised by S12, whose auxiliary data is always
+ * one float32: fail the build if events.yaml declares anything else. */
+_Static_assert(SRDB_EVENT_POWER_FAULT_3V3_AUX_LEN == OBSW_S12_EVENT_AUX_LEN, "power_fault_3v3 aux");
+_Static_assert(SRDB_EVENT_POWER_FAULT_5V_AUX_LEN == OBSW_S12_EVENT_AUX_LEN, "power_fault_5v aux");
+_Static_assert(SRDB_EVENT_TEMPERATURE_SOFT_LIMIT_AUX_LEN == OBSW_S12_EVENT_AUX_LEN,
+               "temperature_soft_limit aux");
+_Static_assert(SRDB_EVENT_TEMPERATURE_HARD_LIMIT_AUX_LEN == OBSW_S12_EVENT_AUX_LEN,
+               "temperature_hard_limit aux");
 static obsw_s19_ctx_t  s19_ctx = {0};
 static obsw_s19_def_t  s19_defs[8];
 static obsw_s11_ctx_t  s11_ctx = {0};
