@@ -587,7 +587,7 @@ without Renode. It drives `obsw_sim` as a subprocess via wire protocol v3.
 **Reference result:** detumbles from |ω|=0.866 rad/s in **2533 s (0.44 periods)**
 
 ```bash
-source .venv/bin/activate
+source scripts/activate.sh
 python3 sim/bdot_harness.py               # default: 550km SSO, ω₀=[0.5,0.5,0.5] rad/s
 python3 sim/bdot_harness.py --max-periods 5 --omega0 1 1 1   # higher tumble
 bdot-harness                              # alias in activate.sh

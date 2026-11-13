@@ -5,10 +5,19 @@
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)
 
+# ── Where am I? (devcontainer vs native WSL2) and which venv ─────────
+# env.sh sets OPENOBSW_ENV and OPENOBSW_VENV: the tree is shared between
+# the devcontainer and WSL2, and each needs its own venv.
+source "$REPO/scripts/env.sh"
+
 # ── Python venv ───────────────────────────────────────────────────────
-[ -f "$REPO/.venv/bin/activate" ] && source "$REPO/.venv/bin/activate"
+if [ -f "$OPENOBSW_VENV/bin/activate" ]; then
+    source "$OPENOBSW_VENV/bin/activate"
+else
+    echo "[openobsw] no venv at $OPENOBSW_VENV ($OPENOBSW_ENV) — run: bash $REPO/scripts/setup-workspace.sh" >&2
+fi
 export OPENOBSW_REPO="$REPO"
-export OPENOBSW_PYTHON="$REPO/.venv/bin/python3"
+export OPENOBSW_PYTHON="$OPENOBSW_VENV/bin/python3"
 
 # ── aarch64-none-elf bare-metal toolchain ────────────────────────────
 [ -d /opt/arm-gnu-toolchain/bin ] && export PATH="/opt/arm-gnu-toolchain/bin:$PATH"
@@ -23,22 +32,30 @@ if [ -z "$AARCH64_GLIBC" ]; then
     [ -n "$_GLIBC" ] && export AARCH64_GLIBC="$_GLIBC"
 fi
 
-# ── Where am I? (devcontainer vs native WSL2) ────────────────────────
+# ── OpenOCD host ──────────────────────────────────────────────────────
 # The ST-Link is only visible in native WSL2 (usbipd), so flashing and the
 # OpenOCD server run there; the devcontainer builds and probes over TCP.
-if [ -f /.dockerenv ] || [ -n "$REMOTE_CONTAINERS" ] || [ -n "$CODESPACES" ]; then
-    export OPENOBSW_ENV=devcontainer
+if [ "$OPENOBSW_ENV" = devcontainer ]; then
     export OBSW_OCD_HOST="${OBSW_OCD_HOST:-172.17.0.1}"   # WSL2 host via docker bridge
-elif grep -qi microsoft /proc/version 2>/dev/null; then
-    export OPENOBSW_ENV=wsl
-    export OBSW_OCD_HOST="${OBSW_OCD_HOST:-127.0.0.1}"
 else
-    export OPENOBSW_ENV=linux
     export OBSW_OCD_HOST="${OBSW_OCD_HOST:-127.0.0.1}"
 fi
 
 # ── Host sim (x86_64, build/) ────────────────────────────────────────
-alias host-build='cmake --build $OPENOBSW_REPO/build -j$(nproc)'
+# build/ is shared with the other environment too, and a CMake cache is
+# pinned to the path it was configured from: refuse rather than let ninja
+# loop re-running cmake.
+unalias host-build 2>/dev/null
+host-build() {
+    local src
+    src=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$OPENOBSW_REPO/build/CMakeCache.txt" 2>/dev/null)
+    if [ -n "$src" ] && [ "$src" != "$OPENOBSW_REPO" ]; then
+        echo "[openobsw] build/ was configured from $src, not $OPENOBSW_REPO." >&2
+        echo "           Run host-rebuild to reconfigure it for this environment ($OPENOBSW_ENV)." >&2
+        return 1
+    fi
+    cmake --build "$OPENOBSW_REPO/build" -j"$(nproc)"
+}
 alias host-clean='rm -rfv $OPENOBSW_REPO/build'
 alias host-rebuild='host-clean && cmake -S $OPENOBSW_REPO -B $OPENOBSW_REPO/build \
     -DCMAKE_BUILD_TYPE=Debug -DOBSW_BUILD_TESTS=ON -DOBSW_BUILD_SIM=ON \
