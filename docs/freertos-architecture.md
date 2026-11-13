@@ -154,9 +154,11 @@ Each 1 s tick:
    LSI ≈ 32 kHz, reload 1000).
 2. **Boot event** — on first tick only, emits
    `SRDB_EVENT_BOOT_COMPLETE` (INFO).
-3. **Mode change detection** — if FSM mode changed since last tick, increments
-   `s_safe_mode_count` and emits `SRDB_EVENT_SAFE_MODE_ENTRY` (HIGH) or
-   `SRDB_EVENT_SAFE_MODE_EXIT` (INFO).
+3. **Mode change detection** — if the FSM entered SAFE since the last tick,
+   increments `s_safe_mode_count` (HK). The mode events themselves come from
+   the Mode Manager task, at its next 1 s tick: `SRDB_EVENT_SAFE_MODE_ENTRY`
+   (HIGH), `SRDB_EVENT_STANDBY_ENTRY` or `SRDB_EVENT_NOMINAL_ENTRY` (INFO),
+   without auxiliary data (OBSW-SRS-190). The host sim reports the same three.
 4. **S3 HK tick** — calls `obsw_s3_tick()` advancing all enabled HK set
    countdowns. Enabled sets emit TM(3,25) when their countdown reaches zero.
 5. **LCD dashboard** — builds an `obsw_dash_snapshot_t` (mode, OBT, reset

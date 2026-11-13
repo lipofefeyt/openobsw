@@ -38,8 +38,8 @@ static void report(obsw_s12_ctx_t *s, const obsw_s12_def_t *d, uint16_t event_id
 {
     obsw_s20_value_t v;
     v.f32 = value;
-    const uint8_t aux[4] = {(uint8_t)(v.u32 >> 24), (uint8_t)(v.u32 >> 16), (uint8_t)(v.u32 >> 8),
-                            (uint8_t)v.u32};
+    const uint8_t aux[OBSW_S12_EVENT_AUX_LEN] = {(uint8_t)(v.u32 >> 24), (uint8_t)(v.u32 >> 16),
+                                                 (uint8_t)(v.u32 >> 8), (uint8_t)v.u32};
     (void)obsw_s5_report(s->s5, d->severity, event_id, aux, (uint8_t)sizeof(aux));
 }
 

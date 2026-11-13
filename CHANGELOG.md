@@ -8,6 +8,12 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Added
 
+- Host sim reports mode transitions as S5 events, like the FreeRTOS Mode
+  Manager: `safe_mode_entry` (`0x0002`, HIGH), `standby_entry` (`0x0004`) and
+  `nominal_entry` (`0x0005`), with the TC or in the tick that changed the
+  mode (OBSW-SRS-190). SRDB: event `0x0003` `safe_mode_exit`, which no target
+  ever emitted, is removed, and `safe_mode_entry` no longer declares a
+  `trigger_source` auxiliary byte that no target sent.
 - STM32H750 LCD dashboard: fixed 26×10 layout with mode, OBT, reset cause,
   TC/TM link counters, last TM and event, AOCS law, magnetometer field and
   commanded dipole, uptime and watchdog count. The core formatter
@@ -30,10 +36,18 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Changed
 
+- S20 tables take each parameter's type from the generated
+  `SRDB_PARAM_<NAME>_S20_TYPE`. `obc_temperature` (`int16` in the SRDB) is
+  now signed in the host sim, so S12 limits work on negative raw values; it
+  was compared as unsigned before.
 - STM32H7 default build keeps USART3 binary-only: FDIR debug markers and
   `# TM(s,ss)` labels are behind `OBSW_UART_ASCII_DEBUG`.
 - ST7735R wake sequence is one register table shared by all wake paths.
 - TMTC's 8-entry TM log replaced by saturating link statistics.
+- Dev setup: the devcontainer and native WSL2 no longer fight over one
+  Python venv. `scripts/env.sh` selects `.venv` (devcontainer, plain Linux)
+  or `.venv-wsl` (WSL2); `host-build` refuses a `build/` configured from the
+  other environment instead of looping.
 
 ### Fixed
 
@@ -57,6 +71,11 @@ README roadmap. Releases before v0.16 are described on the
   CMake reads `project(VERSION)` from it, and the banners print both (#117).
 - LCD showed stale lines: the console was re-initialised every second
   without clearing the screen.
+- SRDB limit events (`0x0020`, `0x0021`, `0x0050`, `0x0051`) declared `uint16`
+  or `int16` auxiliary data, but they are raised by S12, which sends the
+  monitored value as a big-endian float32. They now declare `value: float32`;
+  the generated header gains `SRDB_EVENT_<NAME>_AUX_LEN` and the build checks
+  it against `OBSW_S12_EVENT_AUX_LEN`.
 
 ## [v0.18] — Service parity with OpenSVF
 

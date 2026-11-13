@@ -9,7 +9,7 @@ import pytest
 
 from conftest import (REPO, FAIL_ILLEGAL_SUBSVC, FAIL_ILLEGAL_SVC, FAIL_MEM_ACCESS,
                       FAIL_MODE_GATED, HK_AOCS, HK_DHS_OBC, MODE_NOMINAL, MODE_SAFE,
-                      PARAM_BDOT_GAIN, PARAM_OBC_UPTIME, Stream)
+                      PARAM_BDOT_GAIN, PARAM_OBC_TEMPERATURE, PARAM_OBC_UPTIME, Stream)
 
 DHS_OBC_FMT = ">BIBBBHB"  # mode, obt, wd, mem, health, reset, cpu (opensvf decoder)
 
@@ -94,6 +94,80 @@ def test_s8_safe_and_standby_functions_change_reported_mode(run):
     out = run(s)
     modes = [struct.unpack(DHS_OBC_FMT, p)[0] for p in out.hk(HK_DHS_OBC)]
     assert modes == [2, 1, 0]
+
+
+# ---- Mode-transition events ---------------------------------------------------
+
+EV_SAFE_MODE_ENTRY, EV_STANDBY_ENTRY, EV_NOMINAL_ENTRY = 0x0002, 0x0004, 0x0005
+MODE_EVENTS = (EV_SAFE_MODE_ENTRY, EV_STANDBY_ENTRY, EV_NOMINAL_ENTRY)
+
+
+def by_tick(out):
+    """TM of each end-of-tick-delimited segment, as (service, subservice, app)."""
+    segments, cur = [], []
+    for kind, item in out.events:
+        if kind == "tm":
+            cur.append((item.service, item.subservice, item.app))
+        elif kind == "eot":
+            segments.append(cur)
+            cur = []
+    return segments
+
+
+def mode_events(tms):
+    """(subservice, event_id, aux length) of the mode events in a TM list."""
+    return [(sub, struct.unpack(">H", app[:2])[0], len(app) - 2) for svc, sub, app in tms
+            if svc == 5 and struct.unpack(">H", app[:2])[0] in MODE_EVENTS]
+
+
+@pytest.mark.requirement("OBSW-SRS-190")
+def test_each_mode_transition_is_reported_once_with_the_tc_that_caused_it(run):
+    s = Stream()
+    s.ticks(3)                              # boot mode (SAFE) is not a transition
+    s.nominal()                             # SAFE -> NOMINAL
+    s.tc(8, 1, struct.pack(">HB", 2, 0))    # NOMINAL -> SAFE
+    s.tc(8, 1, struct.pack(">HB", 2, 0))    # already SAFE: nothing to report
+    s.tc(8, 1, struct.pack(">HB", 3, 0))    # SAFE -> STANDBY
+    s.ticks(3)
+    segments = by_tick(run(s))
+    assert [mode_events(seg) for seg in segments] == [
+        [], [], [],
+        [(1, EV_NOMINAL_ENTRY, 0)],
+        [(4, EV_SAFE_MODE_ENTRY, 0)],
+        [],
+        [(1, EV_STANDBY_ENTRY, 0)],
+        [], [], [],
+    ]
+    # The event follows the S1 reports of the TC that changed the mode
+    assert [(svc, sub) for svc, sub, _ in segments[3]] == [(1, 1), (1, 7), (5, 1)]
+
+
+@pytest.mark.requirement("OBSW-SRS-190")
+@pytest.mark.requirement("OBSW-SRS-295")
+def test_safe_trigger_reports_safe_mode_entry_in_the_same_tick_without_retrigger(run):
+    s = Stream()
+    s.nominal()
+    s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, EV_POWER_FAULT_3V3, 4))
+    s.ticks(8, dt=1.0)
+    segments = by_tick(run(s))
+    high = [[struct.unpack(">H", app[:2])[0] for svc, sub, app in seg if (svc, sub) == (5, 4)]
+            for seg in segments]
+    # One tick carries the monitoring event, then the mode event; no other tick has either
+    assert [ids for ids in high if ids] == [[EV_POWER_FAULT_3V3, EV_SAFE_MODE_ENTRY]]
+
+
+@pytest.mark.requirement("OBSW-SRS-190")
+@pytest.mark.requirement("OBSW-SRS-306")
+def test_s19_reacts_to_a_mode_event(run):
+    s = Stream()
+    s.nominal()
+    link = s.tc(19, 1, struct.pack(">H", EV_SAFE_MODE_ENTRY) + tc_packet(17, 1))
+    s.tc(8, 1, struct.pack(">HB", 2, 0))    # SAFE: TC(17,1) is on the whitelist
+    s.ticks(2)
+    out = run(s)
+    assert [t.subservice for t in out.s1_for(link)] == [1, 7]
+    assert [t.subservice for t in out.s1_for(0x3FFF)] == [1, 7]
+    assert any((t.service, t.subservice) == (17, 2) for t in out.tms)
 
 
 @pytest.mark.requirement("OBSW-SRS-061")
@@ -197,9 +271,29 @@ def test_s12_limit_crossing_raises_event_once(run):
     s.ticks(6, dt=1.0)  # obc_uptime counts sim seconds: crosses 2.5 once
     out = run(s)
     assert [t.subservice for t in out.s1_for(add)] == [1, 7]
-    events = [t for t in out.tms if t.service == 5]
+    events = [t for t in out.tms if t.service == 5
+              and struct.unpack(">H", t.app[:2])[0] in (0x0201, 0x0202)]
     assert [(t.subservice, struct.unpack(">H", t.app[:2])[0]) for t in events] == [(2, 0x0202)]
     assert struct.unpack(">f", events[0].app[2:6])[0] == pytest.approx(3.0)
+
+
+@pytest.mark.requirement("OBSW-SRS-172")
+@pytest.mark.requirement("OBSW-SRS-292")
+def test_s12_low_limit_on_negative_raw_temperature(run):
+    """obc_temperature is int16 in the SRDB: raw -200 is below a -100 low limit."""
+    s = Stream()
+    s.nominal()
+    s.tc(12, 3, s12_add(PARAM_OBC_TEMPERATURE, -100.0, 1250.0, 0x0201, 0x0202, 2))
+    s.ticks(2)
+    s.tc(20, 1, struct.pack(">Hi", PARAM_OBC_TEMPERATURE, -50))
+    s.ticks(2)
+    s.tc(20, 1, struct.pack(">Hi", PARAM_OBC_TEMPERATURE, -200))
+    s.ticks(2)
+    out = run(s)
+    events = [t for t in out.tms if t.service == 5
+              and struct.unpack(">H", t.app[:2])[0] in (0x0201, 0x0202)]
+    assert [(t.subservice, struct.unpack(">H", t.app[:2])[0]) for t in events] == [(2, 0x0201)]
+    assert struct.unpack(">f", events[0].app[2:6])[0] == pytest.approx(-200.0)
 
 
 @pytest.mark.requirement("OBSW-SRS-295")
@@ -220,6 +314,29 @@ def test_s12_definitions_need_nominal(run):
     add = s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, 0x0202, 2))
     out = run(s)
     assert [(t.subservice, t.failure_code) for t in out.s1_for(add)] == [(2, FAIL_MODE_GATED)]
+
+
+@pytest.mark.requirement("OBSW-SRS-292")
+def test_s12_raised_limit_events_carry_the_aux_their_srdb_entry_declares(run):
+    """Ground decodes TM(5,x) aux from the SRDB: it must be what S12 sends."""
+    from obsw_srdb import SRDBLoader
+    srdb = SRDBLoader.load(REPO / "srdb" / "data")
+    events = {e.name: e for e in srdb.events}
+    subservice = {"INFO": 1, "LOW": 2, "MEDIUM": 3, "HIGH": 4}
+    for name in ("power_fault_3v3", "power_fault_5v",
+                 "temperature_soft_limit", "temperature_hard_limit"):
+        ev = events[name]
+        assert [a.type.value for a in ev.auxiliary_data] == ["float32"], name
+        sev = subservice[ev.severity.value]
+        s = Stream()
+        s.nominal()
+        s.tc(12, 3, s12_add(PARAM_OBC_UPTIME, None, 2.5, 0x0201, ev.id, sev))
+        s.ticks(6, dt=1.0)  # obc_uptime counts sim seconds: crosses 2.5 once
+        raised = [t for t in run(s).tms if t.service == 5
+                  and struct.unpack(">H", t.app[:2])[0] == ev.id]
+        assert [t.subservice for t in raised] == [sev], name
+        assert len(raised[0].app) == 2 + 4, f"{name}: aux is {len(raised[0].app) - 2} B"
+        assert struct.unpack(">f", raised[0].app[2:])[0] == pytest.approx(3.0), name
 
 
 # ---- S19 ---------------------------------------------------------------------

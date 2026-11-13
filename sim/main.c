@@ -80,6 +80,15 @@ static obsw_s9_ctx_t  s9_ctx  = {.obt = &obt};
 static obsw_s20_ctx_t  s20_ctx = {0};
 static obsw_s12_ctx_t  s12_ctx = {0};
 static obsw_s12_def_t  s12_defs[16];
+
+/* The SRDB's limit events are raised by S12, whose auxiliary data is always
+ * one float32: fail the build if events.yaml declares anything else. */
+_Static_assert(SRDB_EVENT_POWER_FAULT_3V3_AUX_LEN == OBSW_S12_EVENT_AUX_LEN, "power_fault_3v3 aux");
+_Static_assert(SRDB_EVENT_POWER_FAULT_5V_AUX_LEN == OBSW_S12_EVENT_AUX_LEN, "power_fault_5v aux");
+_Static_assert(SRDB_EVENT_TEMPERATURE_SOFT_LIMIT_AUX_LEN == OBSW_S12_EVENT_AUX_LEN,
+               "temperature_soft_limit aux");
+_Static_assert(SRDB_EVENT_TEMPERATURE_HARD_LIMIT_AUX_LEN == OBSW_S12_EVENT_AUX_LEN,
+               "temperature_hard_limit aux");
 static obsw_s19_ctx_t  s19_ctx = {0};
 static obsw_s19_def_t  s19_defs[8];
 static obsw_s11_ctx_t  s11_ctx = {0};
@@ -106,7 +115,7 @@ static uint32_t param_wd_kick_count    = 0;
     static obsw_s3_param_t name[] = {__VA_ARGS__}
 
 /* nominal_hk (SID 1): thermal and power are S20 stubs in the sim */
-static int16_t  hk_obc_temperature = 0;  /* obc_temperature [0.1 degC]  */
+static int16_t  hk_obc_temperature = 0;  /* raw; degC = 0.1 * raw - 40   */
 static uint16_t hk_obc_v3v3        = 0;  /* obc_voltage_3v3 [mV]        */
 static uint16_t hk_obc_v5v         = 0;  /* obc_voltage_5v [mV]         */
 static uint32_t hk_obc_uptime      = 0;  /* obc_uptime [s]              */
@@ -255,28 +264,34 @@ static obsw_s8_entry_t s8_table[] = {
 /* Values are initialised to zero — the ground can set them via TC(20,1).   */
 /* ------------------------------------------------------------------------ */
 
+/* One table row. The type comes from the generated SRDB header, so the
+ * numeric interpretation (S12 limit checks) cannot drift from the SRDB. */
+#define S20_ROW(NAME, ...)                                                     \
+    {.param_id = SRDB_PARAM_##NAME, .value = {__VA_ARGS__},                    \
+     .type = SRDB_PARAM_##NAME##_S20_TYPE}
+
 static obsw_s20_param_t s20_params[] = {
-    {.param_id = SRDB_PARAM_OBC_TEMPERATURE,         .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_OBC_VOLTAGE_3V3,         .value = {.u32 = 3300}},
-    {.param_id = SRDB_PARAM_OBC_VOLTAGE_5V,          .value = {.u32 = 5000}},
-    {.param_id = SRDB_PARAM_OBC_UPTIME,              .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_SAFE_MODE_ENTRY_COUNT,   .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_WATCHDOG_KICK_COUNT,     .value = {.u32 = 0}},
-    {.param_id = SRDB_PARAM_WATCHDOG_TICKS_REMAINING,.value = {.u32 = 30}},
-    {.param_id = SRDB_PARAM_BDOT_GAIN,               .value = {.f32 = 1.0e4f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_BDOT_HPF_TAU,            .value = {.f32 = 15.0f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_ADCS_KP,                 .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_ADCS_KD,                 .value = {.f32 = 0.1f}, .type = OBSW_S20_F32},
+    S20_ROW(OBC_TEMPERATURE, .i32 = 0),
+    S20_ROW(OBC_VOLTAGE_3V3, .u32 = 3300),
+    S20_ROW(OBC_VOLTAGE_5V, .u32 = 5000),
+    S20_ROW(OBC_UPTIME, .u32 = 0),
+    S20_ROW(SAFE_MODE_ENTRY_COUNT, .u32 = 0),
+    S20_ROW(WATCHDOG_KICK_COUNT, .u32 = 0),
+    S20_ROW(WATCHDOG_TICKS_REMAINING, .u32 = 30),
+    S20_ROW(BDOT_GAIN, .f32 = 1.0e4f),
+    S20_ROW(BDOT_HPF_TAU, .f32 = 15.0f),
+    S20_ROW(ADCS_KP, .f32 = 0.5f),
+    S20_ROW(ADCS_KD, .f32 = 0.1f),
     /* Orbit and dynamics configuration (#68) — readable via TC(20,3) */
-    {.param_id = SRDB_PARAM_ORBIT_ALTITUDE_KM,        .value = {.f32 = 550.0f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_ORBIT_INCLINATION_DEG,    .value = {.f32 = 97.4f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_SC_INERTIA_XX,            .value = {.f32 = 2.0e-3f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_SC_INERTIA_YY,            .value = {.f32 = 2.5e-3f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_SC_INERTIA_ZZ,            .value = {.f32 = 1.5e-3f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_MTQ_MAX_DIPOLE,           .value = {.f32 = 10.0f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_SC_OMEGA_X0,              .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_SC_OMEGA_Y0,              .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
-    {.param_id = SRDB_PARAM_SC_OMEGA_Z0,              .value = {.f32 = 0.5f}, .type = OBSW_S20_F32},
+    S20_ROW(ORBIT_ALTITUDE_KM, .f32 = 550.0f),
+    S20_ROW(ORBIT_INCLINATION_DEG, .f32 = 97.4f),
+    S20_ROW(SC_INERTIA_XX, .f32 = 2.0e-3f),
+    S20_ROW(SC_INERTIA_YY, .f32 = 2.5e-3f),
+    S20_ROW(SC_INERTIA_ZZ, .f32 = 1.5e-3f),
+    S20_ROW(MTQ_MAX_DIPOLE, .f32 = 10.0f),
+    S20_ROW(SC_OMEGA_X0, .f32 = 0.5f),
+    S20_ROW(SC_OMEGA_Y0, .f32 = 0.5f),
+    S20_ROW(SC_OMEGA_Z0, .f32 = 0.5f),
 };
 
 static float s20_get_f32(uint16_t param_id, float default_val)
@@ -371,6 +386,34 @@ static void on_enter_safe(void *ctx) {
     (void)ctx;
     param_safe_entry_count++;
     fprintf(stderr, "[OBSW] Entered SAFE mode\n");
+}
+
+/* Mode-transition events, reported as the FreeRTOS Mode Manager does
+ * (src/task/mode.c): compare the mode with the last one reported, after every
+ * TC and every control tick. They go through their own S5 context with no
+ * FSM, so reporting safe_mode_entry (HIGH) can never command a transition. */
+static obsw_s5_ctx_t   mode_s5_ctx = {0};
+static obsw_fsm_mode_t mode_reported;
+
+static void report_mode_change(void)
+{
+    obsw_fsm_mode_t cur = obsw_fsm_mode(&fsm_ctx);
+    if (cur == mode_reported)
+        return;
+    switch (cur) {
+    case OBSW_FSM_SAFE:
+        (void)obsw_s5_report(&mode_s5_ctx, OBSW_S5_HIGH, SRDB_EVENT_SAFE_MODE_ENTRY, NULL, 0);
+        break;
+    case OBSW_FSM_NOMINAL:
+        (void)obsw_s5_report(&mode_s5_ctx, OBSW_S5_INFO, SRDB_EVENT_NOMINAL_ENTRY, NULL, 0);
+        break;
+    case OBSW_FSM_STANDBY:
+        (void)obsw_s5_report(&mode_s5_ctx, OBSW_S5_INFO, SRDB_EVENT_STANDBY_ENTRY, NULL, 0);
+        break;
+    default:
+        break;
+    }
+    mode_reported = cur;
 }
 
 static void on_watchdog_expiry(void *ctx) {
@@ -485,6 +528,7 @@ int main(void)
     };
     obsw_fsm_init(&fsm_ctx, &fsm_cfg);
     obsw_fsm_to_safe(&fsm_ctx);   /* sim skips STANDBY auto-timeout; start in SAFE */
+    mode_reported = obsw_fsm_mode(&fsm_ctx); /* the boot mode is not a transition */
 
     /* PUS service contexts */
     s1_ctx.tm_store = &tm_store;
@@ -552,6 +596,12 @@ int main(void)
     s5_ctx.on_event     = obsw_s19_on_event;
     s5_ctx.on_event_ctx = &s19_ctx;
 
+    /* Mode events: fsm stays NULL (no re-trigger); S19 reacts to them too */
+    mode_s5_ctx.tm_store     = &tm_store;
+    mode_s5_ctx.apid         = SRDB_APID_DEFAULT;
+    mode_s5_ctx.on_event     = obsw_s19_on_event;
+    mode_s5_ctx.on_event_ctx = &s19_ctx;
+
     obsw_s11_init(&s11_ctx, &s1_ctx, s11_acts, (uint8_t)(sizeof(s11_acts) / sizeof(s11_acts[0])));
 
     /* Watchdog */
@@ -605,6 +655,8 @@ int main(void)
                 fprintf(stderr, "[OBSW] TC not allowed in current mode\n");
             else if (rc != OBSW_TC_OK)
                 fprintf(stderr, "[OBSW] Dispatcher error: %d\n", rc);
+
+            report_mode_change(); /* e.g. TC(8,1): event follows its S1 reports */
 
             /* Drain TM generated by this TC */
             {
@@ -731,6 +783,7 @@ int main(void)
 
                 obsw_wd_kick(&wd_ctx);
                 obsw_s12_check(&s12_ctx);
+                report_mode_change(); /* S11/S19 actions, watchdog, S12 safe trigger */
                 obsw_s3_tick(&s3_ctx);
 
                 /* Drain all TM of this tick, HK and S12 events included, so it

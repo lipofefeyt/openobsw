@@ -15,6 +15,8 @@ set -euo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)
 cd "$REPO"
+source "$REPO/scripts/env.sh"   # OPENOBSW_ENV, OPENOBSW_VENV
+VENV="$OPENOBSW_VENV"
 
 BUILD=1
 for arg in "$@"; do
@@ -114,31 +116,36 @@ echo "    $(renode --version 2>/dev/null | head -1)"
 # ------------------------------------------------------------------ #
 # 5. Python venv                                                      #
 # ------------------------------------------------------------------ #
-# Recreate only when broken: venv shebangs hard-code the path the venv
-# was created at, so a venv made on the WSL2 host fails in the container.
+# A venv hard-codes the path and interpreter it was created with, so the
+# devcontainer and native WSL2 each get their own (scripts/env.sh): one made
+# on either side never has to be recreated for the other.
 step "5/6 Python venv"
-if ! "$REPO/.venv/bin/python3" -c "import sys" &>/dev/null; then
-    echo "    creating .venv"
-    python3 -m venv --clear "$REPO/.venv"
+if ! "$VENV/bin/python3" -c "import sys" &>/dev/null; then
+    echo "    creating ${VENV#"$REPO"/} ($OPENOBSW_ENV)"
+    python3 -m venv --clear "$VENV"
 fi
-"$REPO/.venv/bin/pip" install -q --disable-pip-version-check numpy matplotlib
-"$REPO/.venv/bin/pip" install -q --disable-pip-version-check -e "$REPO/srdb/[dev]"
-echo "    $("$REPO/.venv/bin/python3" --version)"
+"$VENV/bin/pip" install -q --disable-pip-version-check numpy matplotlib
+"$VENV/bin/pip" install -q --disable-pip-version-check -e "$REPO/srdb/[dev]"
+echo "    $("$VENV/bin/python3" --version) in ${VENV#"$REPO"/}"
 
 # ------------------------------------------------------------------ #
 # 6. Host sim build + tests                                           #
 # ------------------------------------------------------------------ #
 step "6/6 host build + tests"
 if [ "$BUILD" -eq 1 ]; then
-    if [ ! -f "$REPO/build/CMakeCache.txt" ]; then
-        cmake -S "$REPO" -B "$REPO/build" -G Ninja \
+    # Configure when there is no cache, or when build/ was configured from
+    # the other environment's path (a CMake cache is pinned to its source dir).
+    cached_src=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' \
+                     "$REPO/build/CMakeCache.txt" 2>/dev/null || true)
+    if [ "$cached_src" != "$REPO" ]; then
+        cmake --fresh -S "$REPO" -B "$REPO/build" -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DOBSW_BUILD_TESTS=ON -DOBSW_BUILD_SIM=ON \
-            -DPython3_EXECUTABLE="$REPO/.venv/bin/python3"
+            -DPython3_EXECUTABLE="$VENV/bin/python3"
     fi
     cmake --build "$REPO/build" -j"$(nproc)"
     ctest --test-dir "$REPO/build" --output-on-failure -q
-    "$REPO/.venv/bin/pytest" -q "$REPO/srdb/tests"
+    "$VENV/bin/pytest" -q "$REPO/srdb/tests"
 else
     echo "    skipped (--no-build)"
 fi

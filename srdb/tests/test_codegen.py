@@ -28,6 +28,23 @@ class TestCodegen:
         assert "SRDB_PARAM_OBC_VOLTAGE_3V3" in header
         assert "SRDB_PARAM_OBC_UPTIME" in header
 
+    def test_parameter_s20_type_macros(self, srdb):
+        """Each parameter's S20 slot type follows its SRDB type (PTC)."""
+        header = generate_header(srdb)
+
+        def s20_type(name: str) -> str:
+            line = next(l for l in header.splitlines()
+                        if l.startswith(f"#define SRDB_PARAM_{name}_S20_TYPE "))
+            return line.split()[-1]
+
+        assert s20_type("OBC_TEMPERATURE") == "OBSW_S20_I32"   # int16
+        assert s20_type("OBC_VOLTAGE_3V3") == "OBSW_S20_U32"   # uint16
+        assert s20_type("OBC_UPTIME") == "OBSW_S20_U32"        # uint32
+        assert s20_type("BDOT_GAIN") == "OBSW_S20_F32"         # float32
+        expected = {1: "OBSW_S20_U32", 2: "OBSW_S20_I32", 5: "OBSW_S20_F32"}
+        for p in srdb.parameters:
+            assert s20_type(p.name.upper()) == expected[p.ptc], p.name
+
     def test_event_macros(self, srdb):
         header = generate_header(srdb)
         assert "SRDB_EVENT_BOOT_COMPLETE" in header
@@ -103,6 +120,23 @@ class TestCodegen:
         for e in srdb.events:
             macro = f"SRDB_EVENT_{e.name.upper()}"
             assert macro in header, f"Missing macro {macro}"
+
+    def test_event_aux_length_macros(self, srdb):
+        """Each event's aux length is the sum of its SRDB aux field widths."""
+        header = generate_header(srdb)
+
+        def aux_len(name: str) -> str:
+            line = next(l for l in header.splitlines()
+                        if l.startswith(f"#define SRDB_EVENT_{name}_AUX_LEN "))
+            return line.split()[-1]
+
+        assert aux_len("BOOT_COMPLETE") == "0U"            # no aux
+        assert aux_len("TEMPERATURE_HARD_LIMIT") == "4U"   # float32
+        width = {"uint8": 1, "int8": 1, "uint16": 2, "int16": 2,
+                 "uint32": 4, "int32": 4, "float32": 4}
+        for e in srdb.events:
+            expected = sum(width[a.type.value] for a in e.auxiliary_data)
+            assert aux_len(e.name.upper()) == f"{expected}U", e.name
 
     def test_cli_writes_file(self, srdb, tmp_path):
         from obsw_srdb.codegen import generate_header

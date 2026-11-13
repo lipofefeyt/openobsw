@@ -18,7 +18,7 @@ Two checks against a running obsw_sim (SAFE mode, wire protocol v3):
      Pass: |ω| < 0.05 rad/s within 3 orbital periods.
 
 Usage:
-  source .venv/bin/activate
+  source scripts/activate.sh
   python3 sim/bdot_hpf_validation.py [--sim PATH] [--dt DT]
 """
 

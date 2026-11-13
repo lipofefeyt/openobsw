@@ -16,6 +16,7 @@ void tearDown(void)
 
 #define P_TEMP 0x0001U /* uint32 parameter */
 #define P_GAIN 0x20A0U /* float parameter  */
+#define P_RAW 0x0009U  /* int32 parameter  */
 #define EV_LOW 0x0101U
 #define EV_HIGH 0x0102U
 
@@ -28,6 +29,7 @@ static obsw_s12_def_t defs[2];
 static obsw_s20_param_t params[] = {
     {.param_id = P_TEMP, .value = {.u32 = 20}},
     {.param_id = P_GAIN, .value = {.f32 = 1.0e4f}, .type = OBSW_S20_F32},
+    {.param_id = P_RAW, .value = {.i32 = 0}, .type = OBSW_S20_I32},
 };
 
 static void setup_ctx(void)
@@ -41,7 +43,8 @@ static void setup_ctx(void)
     s5.apid     = 0x010;
     params[0].value.u32 = 20;
     params[1].value.f32 = 1.0e4f;
-    obsw_s12_init(&s12, &s1, &s5, params, 2, defs, 2);
+    params[2].value.i32 = 0;
+    obsw_s12_init(&s12, &s1, &s5, params, 3, defs, 2);
 }
 
 static uint8_t ud[32];
@@ -282,6 +285,22 @@ void test_low_crossing_on_float_parameter(void)
     expect_event(3, EV_LOW, 4.5e3f);
 }
 
+/* A negative raw value on a signed parameter is below a negative low limit;
+ * read unsigned it would be 4e9 and never trip.
+ * @verifies OBSW-SRS-292, OBSW-SRS-172 */
+void test_low_crossing_on_negative_signed_parameter(void)
+{
+    setup_ctx();
+    add_ok(P_RAW, -100.0f, 1250.0f, 2);
+    params[2].value.i32 = -50;
+    obsw_s12_check(&s12);
+    TEST_ASSERT_TRUE(obsw_tm_store_empty(&store)); /* inside both limits */
+
+    params[2].value.i32 = -200;
+    obsw_s12_check(&s12);
+    expect_event(2, EV_LOW, -200.0f);
+}
+
 /* @verifies OBSW-SRS-292 */
 void test_nan_limits_never_trip(void)
 {
@@ -361,6 +380,7 @@ int main(void)
     RUN_TEST(test_delete_all);
     RUN_TEST(test_high_crossing_raises_event_once_until_recovery);
     RUN_TEST(test_low_crossing_on_float_parameter);
+    RUN_TEST(test_low_crossing_on_negative_signed_parameter);
     RUN_TEST(test_nan_limits_never_trip);
     RUN_TEST(test_disable_stops_checks_and_enable_rearms);
     RUN_TEST(test_high_severity_safe_trigger_commands_safe);

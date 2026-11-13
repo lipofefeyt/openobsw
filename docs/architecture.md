@@ -417,6 +417,20 @@ build sets it to 4, exactly the current SRDB count).
 
 If `fsm` is NULL, S5 behaves exactly as in v0.3 — no breaking change.
 
+### Event auxiliary data
+
+TM(5,x) application data is the event ID (2 bytes) followed by the event's
+auxiliary data, declared per event in `srdb/data/events.yaml`. The SRDB's
+limit events (`power_fault_3v3`, `power_fault_5v`, `temperature_soft_limit`,
+`temperature_hard_limit`) are raised by S12 monitoring, and S12 always sends
+the monitored value as one big-endian IEEE 754 float32, whatever the
+parameter's own type: `obc_temperature` raw 1300 arrives as `1300.0`. Their
+SRDB entries declare `value: float32` accordingly. The generated header
+carries `SRDB_EVENT_<NAME>_AUX_LEN`, and the host sim and the FreeRTOS PUS
+task fail to compile if one of these differs from `OBSW_S12_EVENT_AUX_LEN`.
+An event ID bound through TC(12,3) that the SRDB defines with another layout
+is still sent with the float32 value.
+
 ---
 
 ### FDIR event flow
@@ -592,7 +606,7 @@ without Renode. It drives `obsw_sim` as a subprocess via wire protocol v3.
 **Reference result:** detumbles from |ω|=0.866 rad/s in **2533 s (0.44 periods)**
 
 ```bash
-source .venv/bin/activate
+source scripts/activate.sh
 python3 sim/bdot_harness.py               # default: 550km SSO, ω₀=[0.5,0.5,0.5] rad/s
 python3 sim/bdot_harness.py --max-periods 5 --omega0 1 1 1   # higher tumble
 bdot-harness                              # alias in activate.sh
@@ -614,6 +628,15 @@ Parameters are addressed by a 16-bit ID. Ranges in use:
 | `0x20A0–0x20A2` | AOCS gains (S20-tunable) | `bdot_gain`, `adcs_kp`, `adcs_kd` |
 | `0x3001–0x3032` | Orbit / dynamics config | `orbit_altitude_km`, `sc_inertia_xx`, `sc_omega_x0` |
 | `0x4001–0x400A` | DHS OBC HK (opensvf) | `obc_mode`, `obc_obt`, `obc_health` |
+
+S20 holds every parameter as a 32-bit slot. How a slot is read numerically
+(S12 limit checks) follows the parameter's SRDB type: `uint8/16/32` unsigned,
+`int8/16/32` signed, `float32` IEEE 754. The generated header carries this as
+`SRDB_PARAM_<NAME>_S20_TYPE`, and every S20 table takes its `.type` from that
+macro. `obc_temperature` (`0x0001`) is the one signed parameter: `int16` raw
+counts with `degC = 0.1 * raw - 40`, so 85 degC is raw 1250 and -45 degC is
+raw -50. TC(20,1) sets it as a big-endian `int32`; S12 limits on it are given
+in raw counts.
 
 HK sets in use:
 

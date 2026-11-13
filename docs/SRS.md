@@ -298,7 +298,7 @@ The software shall set the 32-bit raw value of a parameter on TC(20,1) and repor
 The software shall reject TC(20,1) and TC(20,3) for an unknown parameter ID (code `0x0004`) or truncated user data (code `0x0005`).
 
 **OBSW-SRS-172** `[S20]` `IMPLEMENTED` `T`
-Each S20 parameter shall carry its SRDB type (unsigned, signed or float), and services that use parameter values numerically shall convert them according to that type.
+Each S20 parameter shall carry its SRDB type (unsigned, signed or float), taken from the generated SRDB header, and services that use parameter values numerically shall convert them according to that type.
 
 ---
 
@@ -336,6 +336,10 @@ Receiving a well-formed TC in STANDBY, whether accepted or rejected, shall resta
 The STM32H7 FreeRTOS build shall read the timeout from its S20 table each second, so TC(20,1) changes take effect without a restart, and shall initialise it from the build option `OBSW_STANDBY_SAFE_TIMEOUT_S`.
 *Evidence: inspection of `src/task/mode.c`, `src/task/pus.c` and `targets/stm32h7/CMakeLists.txt`.*
 
+**OBSW-SRS-190** `[MOD]` `IMPLEMENTED` `T`
+The host sim and the STM32H7 FreeRTOS build shall report every mode transition as an S5 event without auxiliary data: `safe_mode_entry` (`0x0002`, high severity) on entering SAFE, `standby_entry` (`0x0004`, informational) on entering STANDBY and `nominal_entry` (`0x0005`, informational) on entering NOMINAL. The mode at boot shall not be reported, and these reports shall not themselves command a mode change. The host sim shall report the event with the TC or in the control tick that changed the mode; the FreeRTOS build at the next Mode Manager tick (within 1 s).
+*Evidence: `test/system` for the host sim; inspection of `src/task/mode.c` for FreeRTOS.*
+
 ---
 
 ## 18. Attitude and orbit control [AOC]
@@ -366,7 +370,7 @@ Quaternion operations shall reject a zero-norm quaternion and null inputs instea
 The SRDB shall define parameters, telecommands, events and housekeeping sets in YAML and validate IDs, ranges, types and cross-references on load.
 
 **OBSW-SRS-221** `[SDB]` `IMPLEMENTED` `T`
-The SRDB shall generate a C header with parameter, event, HK set and telecommand identifiers, the safe-trigger event list, the SAFE TC whitelist and parameter enumeration values.
+The SRDB shall generate a C header with parameter, event, HK set and telecommand identifiers, each parameter's S20 value type, the safe-trigger event list, the SAFE TC whitelist and parameter enumeration values.
 
 **OBSW-SRS-222** `[SDB]` `IMPLEMENTED` `T`
 The SRDB shall generate an XTCE 1.2 mission database whose HK containers match the TM(3,25) layout produced on board.
@@ -435,7 +439,7 @@ The software shall add, or replace for the same parameter, a monitoring definiti
 The software shall reject TC(12,3) without changing state when the data is truncated, the parameter is unknown, the severity is outside 1..4 or the low limit exceeds the high limit (code `0x0005`), and when the definition table is full (code `0x0004`).
 
 **OBSW-SRS-292** `[S12]` `IMPLEMENTED` `T`
-Each control tick, while monitoring is enabled, the software shall compare every monitored parameter's current value with its limits and raise the definition's S5 event, with the value as auxiliary data, once on entry into a low or high out-of-limit state; the event shall not repeat until the value returns inside that limit.
+Each control tick, while monitoring is enabled, the software shall compare every monitored parameter's current value with its limits and raise the definition's S5 event, with the value as auxiliary data (one big-endian IEEE 754 float32, whatever the parameter's type), once on entry into a low or high out-of-limit state; the event shall not repeat until the value returns inside that limit. The SRDB shall declare that auxiliary layout for the limit events it defines, and the build shall fail if a declared length differs.
 
 **OBSW-SRS-293** `[S12]` `IMPLEMENTED` `T`
 The software shall disable monitoring on TC(12,2), keeping the definitions, and enable it on TC(12,1), clearing every latched out-of-limit state.

@@ -26,7 +26,7 @@ Pass criterion
 
 Usage
 -----
-  source .venv/bin/activate
+  source scripts/activate.sh
   python3 sim/adcs_harness.py [--sim PATH] [--dt DT] [--angle-deg DEG]
   adcs-harness          # activate.sh alias
 """
