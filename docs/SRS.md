@@ -448,7 +448,7 @@ The software shall disable monitoring on TC(12,2), keeping the definitions, and 
 The software shall delete the definition for a parameter on TC(12,4), rejecting an unknown parameter with code `0x0005`, and delete all definitions on TC(12,5).
 
 **OBSW-SRS-295** `[S12]` `IMPLEMENTED` `T`
-Monitoring events shall be reported through S5, so that a high-severity event on the safe-trigger list commands SAFE where S5 is connected to the mode machine (host sim).
+Monitoring events shall be reported through S5, so that a high-severity event on the safe-trigger list commands SAFE on the host sim and on the STM32H7 FreeRTOS build. On the FreeRTOS build the transition shall be atomic with respect to the Mode Manager's own transitions, and a recover-to-NOMINAL request still pending from before that transition shall be discarded.
 
 **OBSW-SRS-296** `[S12]` `IMPLEMENTED` `T`
 The host sim and STM32H7 FreeRTOS builds shall route TC(12,1) to TC(12,5) and run the monitoring check every control tick (FreeRTOS: the FDIR full tick).
