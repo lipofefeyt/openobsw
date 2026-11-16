@@ -280,6 +280,10 @@ On-board time shall advance by the elapsed time of each control tick with no acc
 **OBSW-SRS-152** `[S9]` `IMPLEMENTED` `T`
 The software shall set on-board time to the value carried by TC(9,128) and reject a TC with fewer than 6 bytes of user data.
 
+**OBSW-SRS-153** `[S9]` `IMPLEMENTED` `T`
+Every TM packet of the host sim and the STM32H7 FreeRTOS build shall carry the whole seconds of on-board time in the 4-byte time field of its secondary header: in the host sim the time of the last control tick or TC(9,128), in the FreeRTOS build the time read by the reporting task before it reports. The verification reports of the TC(9,128) that sets the time carry the time before the change. Targets without on-board time (MSP430, STM32H7 and ZynqMP bare-metal loops) leave the field at zero.
+*Evidence: `test/system` for the host sim; inspection of `src/task/pus.c`, `src/task/fdir.c` and `src/task/mode.c` for FreeRTOS.*
+
 ---
 
 ## 15. Test [S17]

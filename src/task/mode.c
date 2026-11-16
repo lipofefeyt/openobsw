@@ -110,6 +110,7 @@ static void mode_task(void *param)
 
         taskEXIT_CRITICAL();
         if (cur != last) {
+            s_s5.timestamp = obsw_pus_obt_seconds();   /* TM time of the mode event */
             switch (cur) {
             case OBSW_FSM_SAFE:
                 obsw_s5_report(&s_s5, OBSW_S5_HIGH,
