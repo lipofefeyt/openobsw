@@ -53,7 +53,7 @@ it yields for 1 ms via `ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(1))`. The PUS
 task calls `xTaskNotify(tmtc_handle, ...)` after each TC dispatch so TMTC
 wakes immediately to drain the TM store.
 
-**Uplink:** Reads wire-protocol v3 frames (`[type][uint16 BE len][body]`).
+**Uplink:** Reads wire-protocol v4 frames (`[type][uint16 BE len][body]`).
 TC frames (type `0x01`) are placed on the TC queue for the PUS task as
 `obsw_tc_frame_item_t` items (raw frame + length, up to 512 B). Other frame
 types are silently discarded.
@@ -252,7 +252,7 @@ waits.
 
 `-DOBSW_UART_ASCII_DEBUG=ON` re-enables the FDIR `B`/`k`/`F` markers and
 the `# TM(s,ss)` labels on USART3. They share the UART with binary wire
-protocol v3, so the default build leaves them out.
+protocol v4, so the default build leaves them out.
 
 ---
 

@@ -1,4 +1,4 @@
-"""obsw_sim over wire protocol v3: framing, mode gate, services and HK encoding."""
+"""obsw_sim over wire protocol v4: framing, mode gate, services and HK encoding."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ import pytest
 
 from conftest import (REPO, FAIL_ILLEGAL_SUBSVC, FAIL_ILLEGAL_SVC, FAIL_MEM_ACCESS,
                       FAIL_MODE_GATED, HK_AOCS, HK_DHS_OBC, MODE_NOMINAL, MODE_SAFE,
-                      PARAM_BDOT_GAIN, PARAM_OBC_TEMPERATURE, PARAM_OBC_UPTIME, Stream)
+                      PARAM_BDOT_GAIN, PARAM_OBC_TEMPERATURE, PARAM_OBC_UPTIME, Stream,
+                      parse)
 
 DHS_OBC_FMT = ">BIBBBHB"  # mode, obt, wd, mem, health, reset, cpu (opensvf decoder)
 
@@ -496,3 +497,65 @@ def test_every_boot_hk_set_matches_its_srdb_layout(run):
     assert {1, 2, 3, 4, 6} <= set(seen), f"sets reported: {sorted(seen)}"
     for sid, length in seen.items():
         assert length == expected[sid], f"set {sid}: {length} B on board, {expected[sid]} B in SRDB"
+
+
+# ---- Thermal input (wire protocol v4) -------------------------------------------
+
+EV_TEMPERATURE_HARD_LIMIT = 0x0051  # HIGH, safe_trigger: true in srdb/data/events.yaml
+NOMINAL_HK_FMT = ">hHHI"            # obc_temperature, v3v3, v5v, uptime (set 1)
+SENSOR_BODY_V3 = 47
+
+
+def hk_temperatures(out):
+    return [struct.unpack(NOMINAL_HK_FMT, p)[0] for p in out.hk(1)]
+
+
+@pytest.mark.requirement("OBSW-SRS-245")
+def test_sensor_frame_of_another_length_stops_the_sim(run_process):
+    s = Stream()
+    s.ticks(2)
+    s.sensor(bytes(SENSOR_BODY_V3))   # a v3 sender
+    s.ticks(2)
+    proc = run_process(s)
+    assert b"(wire protocol v4)" in proc.stderr
+    assert proc.returncode == 2
+    assert b"sensor frame of 47 B, wire protocol v4 expects 50 B (v3 sender?)" in proc.stderr
+    # The two good ticks were answered; nothing after the rejected frame
+    events = parse(proc.stdout).events
+    assert [k for k, _ in events if k != "tm"] == ["act", "eot", "act", "eot"]
+
+
+@pytest.mark.requirement("OBSW-SRS-246")
+def test_valid_thermal_input_drives_obc_temperature(run):
+    s = Stream()
+    s.nominal()
+    s.ticks(10, temperature_raw=900)                     # 50 degC
+    s.ticks(10)                                          # invalid: value held
+    s.tc(20, 1, struct.pack(">HI", PARAM_OBC_TEMPERATURE, 700))
+    s.ticks(10)                                          # TC(20,1) still sets it
+    s.ticks(10, temperature_raw=-150)                    # frame overrides, negative raw
+    assert hk_temperatures(run(s)) == [900, 900, 700, -150]
+
+
+@pytest.mark.requirement("OBSW-SRS-246")
+@pytest.mark.requirement("OBSW-SRS-295")
+def test_thermal_fault_commands_safe_and_cleared_value_is_observable_in_safe(run):
+    """Recovery-evidence outcome A: the anomaly clears while the OBSW stays in SAFE."""
+    s = Stream()
+    s.nominal()
+    s.tc(12, 3, s12_add(PARAM_OBC_TEMPERATURE, None, 1250.0, 0x0050,
+                        EV_TEMPERATURE_HARD_LIMIT, 4))   # 85 degC
+    s.ticks(10, temperature_raw=1000)
+    s.ticks(10, temperature_raw=1300)                    # 90 degC: fault
+    s.ticks(20, temperature_raw=1000)                    # cleared, no TC sent
+    out = run(s)
+
+    high = [(struct.unpack(">H", t.app[:2])[0], t.app[2:])
+            for t in out.tms if (t.service, t.subservice) == (5, 4)]
+    assert [ev for ev, _ in high] == [EV_TEMPERATURE_HARD_LIMIT, EV_SAFE_MODE_ENTRY]
+    assert struct.unpack(">f", high[0][1])[0] == pytest.approx(1300.0)
+    assert hk_temperatures(out) == [1000, 1300, 1000, 1000]
+    modes = [struct.unpack(DHS_OBC_FMT, p)[0] for p in out.hk(HK_DHS_OBC)]
+    assert modes[-2:] == [MODE_SAFE, MODE_SAFE]          # no automatic recovery
+    transitions = [ev for _, ev, _ in mode_events([tm for seg in by_tick(out) for tm in seg])]
+    assert transitions == [EV_NOMINAL_ENTRY, EV_SAFE_MODE_ENTRY]

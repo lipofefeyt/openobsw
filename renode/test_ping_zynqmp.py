@@ -3,7 +3,7 @@
 renode/test_ping_zynqmp.py — Send TC(17,1) to obsw_zynqmp in Renode.
 
 Connects to the TCP terminal exposed by Renode on port 3456.
-Uses wire protocol v3 (type-prefixed frames) matching obsw_zynqmp.
+Uses wire protocol v4 (type-prefixed frames) matching obsw_zynqmp.
 
 Usage:
     # Terminal 1: start Renode

@@ -1,5 +1,5 @@
 """
-System tests: drive the real obsw_sim binary over wire protocol v3.
+System tests: drive the real obsw_sim binary over wire protocol v4.
 
 The binary is taken from $OBSW_SIM, else build/sim/obsw_sim. Each test
 builds one input stream (TC and sensor frames), runs the sim to EOF and
@@ -81,7 +81,7 @@ class Output:
 
 
 class Stream:
-    """Builds a wire protocol v3 input stream."""
+    """Builds a wire protocol v4 input stream."""
 
     def __init__(self) -> None:
         self.data = b""
@@ -96,12 +96,17 @@ class Stream:
         self.data += bytes([FRAME_TC]) + struct.pack(">H", len(pkt)) + pkt
         return self.seq
 
-    def ticks(self, n: int, dt: float = 0.1) -> None:
-        """Append n sensor frames (all sensors invalid), dt seconds apart."""
+    def ticks(self, n: int, dt: float = 0.1, temperature_raw: int | None = None) -> None:
+        """Append n sensor frames, dt seconds apart. AOCS sensors are invalid; the
+        thermal input is valid with temperature_raw (SRDB counts) when given."""
         for _ in range(n):
             self.sim_time += dt
-            body = bytes(13 + 17 + 13) + struct.pack("<f", self.sim_time)
-            self.data += bytes([FRAME_SENSOR]) + struct.pack(">H", len(body)) + body
+            thermal = struct.pack("<hB", temperature_raw or 0, temperature_raw is not None)
+            self.sensor(bytes(13 + 17 + 13) + struct.pack("<f", self.sim_time) + thermal)
+
+    def sensor(self, body: bytes) -> None:
+        """Append a type-0x02 frame with an arbitrary body."""
+        self.data += bytes([FRAME_SENSOR]) + struct.pack(">H", len(body)) + body
 
     def nominal(self) -> int:
         """TC(8,1) function 1: recover to NOMINAL."""
@@ -147,4 +152,13 @@ def run(sim_path: Path):
         proc = subprocess.run([str(sim_path)], input=stream.data,
                               capture_output=True, timeout=20, check=True)
         return parse(proc.stdout)
+    return _run
+
+
+@pytest.fixture
+def run_process(sim_path: Path):
+    """Run the sim without checking its exit status."""
+    def _run(stream: Stream) -> subprocess.CompletedProcess:
+        return subprocess.run([str(sim_path)], input=stream.data,
+                              capture_output=True, timeout=20)
     return _run

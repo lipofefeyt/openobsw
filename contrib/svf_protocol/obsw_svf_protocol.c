@@ -2,7 +2,7 @@
  * @file obsw_svf_protocol.c
  * @brief SVF pipe protocol — portable implementation.
  *
- * Implements the SVF wire protocol v3.
+ * Implements the SVF wire protocol v4.
  * Platform I/O provided via svf_io_read/write/flush.
  *
  * No dynamic allocation. No OS dependencies.
@@ -43,8 +43,7 @@ void svf_init(const char *srdb_version)
      * For Linux host: use fprintf(stderr, ...).
      * For bare-metal: use your UART debug port.
      * The SVF OBCEmulatorAdapter reads these lines from stderr. */
-    const char *banner =
-        "[OBSW] Host sim started (type-frame protocol v2).\n";
+    const char *banner     = "[OBSW] Host sim started (wire protocol v4).\n";
     const char *ver_prefix = "[OBSW] SRDB version: ";
     const char *newline    = "\n";
 

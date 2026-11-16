@@ -401,6 +401,12 @@ The host sim shall answer every TC frame with all TM it produces before the next
 **OBSW-SRS-244** `[SIM]` `IMPLEMENTED` `T`
 The host sim shall emit all TM produced during a sensor tick, including housekeeping and monitoring events, before that tick's end-of-tick marker.
 
+**OBSW-SRS-245** `[SIM]` `IMPLEMENTED` `T`
+The host sim shall implement wire protocol v4, in which the sensor frame (0x02) is the 50-byte `obsw_sensor_frame_t` of `sim/sensor_inject.h` (the 47-byte v3 frame followed by `int16 obc_temperature_raw` and `uint8 thermal_valid`), print the protocol version in its start-up banner, and on a sensor frame of any other length report the length on stderr and exit with status 2.
+
+**OBSW-SRS-246** `[SIM]` `IMPLEMENTED` `T`
+When a sensor frame has `thermal_valid` set, the host sim shall write `obc_temperature_raw` into `obc_temperature` (S20 0x0001, SRDB raw counts) before that tick's S12 monitoring and housekeeping; when it is clear, `obc_temperature` shall keep its last value, set by an earlier frame or by TC(20,1).
+
 **OBSW-SRS-242** `[SIM]` `IMPLEMENTED` `T`
 The host sim shall boot in SAFE.
 

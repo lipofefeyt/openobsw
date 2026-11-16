@@ -5,7 +5,7 @@
  * Drop this header + obsw_svf_protocol.c into your OBSW to add
  * OpenSVF Software-in-the-Loop (SIL) support in ~4 hours.
  *
- * Wire protocol v3 — type-prefixed frames:
+ * Wire protocol v4 — type-prefixed frames:
  *
  *   SVF → OBSW stdin:
  *     [0x01][uint16 BE len][TC bytes]        TC uplink
@@ -49,9 +49,11 @@ extern "C" {
 #define SVF_FRAME_TM        0x04U  /**< PUS TM packet (OBSW → SVF)    */
 #define SVF_SYNC_BYTE       0xFFU  /**< End of tick marker             */
 
+#define SVF_PROTOCOL_VERSION 4U    /**< Wire protocol version          */
+
 /* ------------------------------------------------------------------ */
 /* Sensor frame (SVF → OBSW, type 0x02)                               */
-/* All floats little-endian. Total size: 29 bytes.                    */
+/* All fields little-endian. Total size: 50 bytes (v4).               */
 /* ------------------------------------------------------------------ */
 
 #pragma pack(push, 1)
@@ -70,10 +72,13 @@ typedef struct {
     float    gyro_z;      /**< Gyroscope Z [rad/s]                   */
     uint8_t  gyro_valid;  /**< 1 = valid measurement                 */
     float    sim_time;    /**< Current simulation time [s]           */
+    int16_t obc_temperature_raw; /**< OBC temperature, SRDB raw counts
+                                      (degC = 0.1 * raw - 40) — v4  */
+    uint8_t thermal_valid;       /**< 1 = write obc_temperature this tick */
 } svf_sensor_frame_t;
 #pragma pack(pop)
 
-#define SVF_SENSOR_FRAME_LEN ((uint16_t)sizeof(svf_sensor_frame_t))
+#define SVF_SENSOR_FRAME_LEN ((uint16_t)sizeof(svf_sensor_frame_t)) /* 50 */
 
 /* ------------------------------------------------------------------ */
 /* Actuator frame (OBSW → SVF, type 0x03)                            */

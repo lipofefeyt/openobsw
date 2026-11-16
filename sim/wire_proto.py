@@ -1,5 +1,5 @@
 """
-sim/wire_proto.py — Wire protocol v3 helpers shared by openobsw harnesses.
+sim/wire_proto.py — Wire protocol v4 helpers shared by openobsw harnesses.
 
 Frame format (framed pipe over stdin/stdout):
   → OBSW  0x01 [uint16 BE len] [TC space packet bytes]   TC uplink
@@ -34,9 +34,9 @@ SYNC_EOT     = 0xFF
 
 APID_DEFAULT = 0x010
 
-SENSOR_LEN = 47
+SENSOR_LEN = 50
 ACTUAT_LEN = 29
-SENSOR_FMT = '<fffBffffBfffBf'   # 47 bytes
+SENSOR_FMT = '<fffBffffBfffBfhB'  # 50 bytes (v4: + obc_temperature_raw, thermal_valid)
 ACTUAT_FMT = '<ffffffBf'         # 29 bytes
 
 # ── SRDB parameter IDs (mirrors srdb/data/parameters.yaml) ───────────────
@@ -91,7 +91,7 @@ def build_tc(apid, svc, subsvc, data=b''):
 
 
 def send_tc(proc, tc_bytes):
-    """Send a TC wrapped in wire protocol v3 type-0x01 frame."""
+    """Send a TC wrapped in wire protocol v4 type-0x01 frame."""
     proc.stdin.write(bytes([FRAME_TC]) + struct.pack('>H', len(tc_bytes)) + tc_bytes)
     proc.stdin.flush()
 
@@ -111,7 +111,8 @@ def drain_tc_response(proc):
 # =========================================================================
 
 def send_sensor(proc, B_body, q, omega, t, *,
-                mag_valid=1, st_valid=1, gyro_valid=1):
+                mag_valid=1, st_valid=1, gyro_valid=1,
+                obc_temperature_raw=0, thermal_valid=0):
     """Pack and send a type-0x02 sensor frame.
 
     Args:
@@ -122,12 +123,15 @@ def send_sensor(proc, B_body, q, omega, t, *,
         mag_valid:  1 if magnetometer reading is valid
         st_valid:   1 if star tracker reading is valid
         gyro_valid: 1 if gyro reading is valid
+        obc_temperature_raw: OBC temperature, SRDB raw counts (degC = 0.1 * raw - 40)
+        thermal_valid: 1 to write obc_temperature from the frame this tick
     """
     payload = struct.pack(SENSOR_FMT,
         float(B_body[0]), float(B_body[1]), float(B_body[2]), int(mag_valid),
         float(q[0]),      float(q[1]),      float(q[2]),      float(q[3]), int(st_valid),
         float(omega[0]),  float(omega[1]),  float(omega[2]),  int(gyro_valid),
         float(t),
+        int(obc_temperature_raw), int(thermal_valid),
     )
     proc.stdin.write(bytes([FRAME_SENSOR]) + struct.pack('>H', len(payload)) + payload)
     proc.stdin.flush()

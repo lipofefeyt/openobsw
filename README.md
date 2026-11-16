@@ -107,7 +107,7 @@ pytest srdb/tests
 ### Tests and traceability
 
 - 23 ctest suites (22 unit, 1 integration).
-- System tests: `pytest test/system` drives the built `obsw_sim` over wire protocol v3 (set `OBSW_SIM` to another binary).
+- System tests: `pytest test/system` drives the built `obsw_sim` over wire protocol v4 (set `OBSW_SIM` to another binary).
 - SRDB Python tests: `pytest srdb/tests`.
 - Requirements: [docs/SRS.md](docs/SRS.md). Every test names the requirements it verifies (`/* @verifies OBSW-SRS-NNN */` in C, `@pytest.mark.requirement` in Python). `python3 tools/trace.py --lib build/src/libobsw.a --out build/traceability.md` checks that every implemented requirement is tested and writes the matrix; CI runs it on every PR.
 - Static analysis: CI runs cppcheck with the MISRA C:2012 addon on the core library and fails on any finding outside the documented Advisory deviations ([docs/misra-deviations.md](docs/misra-deviations.md)).
@@ -131,7 +131,7 @@ openobsw/
 │   ├── hal/         UART, I2C, QMC5883L, LCD per target
 │   └── platform/    STM32H7 and ZynqMP entry points, startup, linker scripts
 ├── targets/msp430-fr5969/   MSP430 build
-├── sim/             host sim: wire protocol v3 over stdin/stdout
+├── sim/             host sim: wire protocol v4 over stdin/stdout
 ├── renode/          ZynqMP and STM32H7 Renode platforms and ping tests
 └── srdb/            Spacecraft Resource Database: YAML → C header + XTCE
 ```
@@ -142,7 +142,7 @@ See [docs/architecture.md](docs/architecture.md),
 
 ---
 
-## Wire protocol v3
+## Wire protocol v4
 
 The same framing runs over stdin/stdout (host sim), the QEMU pipe and the
 Renode socket:
@@ -150,7 +150,7 @@ Renode socket:
 ```
 Host/SVF → OBSW:
   [0x01][uint16 BE len][PUS TC bytes]       TC uplink
-  [0x02][uint16 BE len][sensor_frame_t]     MAG/GYRO/ST sensor injection
+  [0x02][uint16 BE len][sensor_frame_t]     MAG/GYRO/ST + OBC thermal injection
 
 OBSW → Host/SVF:
   [0x03][uint16 BE len][actuator_frame_t]   MTQ dipoles + RW torques
@@ -158,8 +158,10 @@ OBSW → Host/SVF:
   [0xFF]                                    End of tick (sync byte)
 ```
 
-`sensor_frame_t` (47 bytes, packed, little-endian): MAG xyz + valid, ST
-quaternion + valid, GYRO xyz + valid, sim_time.
+`sensor_frame_t` (50 bytes, packed, little-endian): MAG xyz + valid, ST
+quaternion + valid, GYRO xyz + valid, sim_time, OBC temperature (int16 SRDB
+raw counts) + valid. The host sim exits on a sensor frame of any other length
+(a v3 sender's 47 bytes, for one).
 
 `actuator_frame_t` (29 bytes, packed, little-endian): MTQ dipoles xyz, RW
 torques xyz, controller byte, sim_time.

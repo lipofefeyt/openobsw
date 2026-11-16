@@ -2,7 +2,7 @@
 """
 sim/bdot_hpf_validation.py — Issue #70 closed-loop validation.
 
-Two checks against a running obsw_sim (SAFE mode, wire protocol v3):
+Two checks against a running obsw_sim (SAFE mode, wire protocol v4):
 
   A) Orbital-aliasing rejection (spurious spin-up)
      Full rigid-body dynamics started from rest (q=[1,0,0,0], ω=0).  The only

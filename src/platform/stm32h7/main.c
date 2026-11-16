@@ -3,7 +3,7 @@
  * @brief STM32H750VBT6 bare-metal entry point.
  *
  * Initialises the system clock, UART, watchdog (disabled),
- * and the OBSW PUS dispatcher. Runs the wire protocol v3
+ * and the OBSW PUS dispatcher. Runs the wire protocol v4
  * main loop — same protocol as the host sim and ZynqMP target.
  *
  * Clock configuration:
@@ -204,7 +204,7 @@ static void system_clock_init(void)
 
      /* Boot banner — UART first, always, before any LCD init that might hang */
      const char *banner =
-         "\r\n[OBSW] STM32H750 started (wire protocol v3).\r\n"
+         "\r\n[OBSW] STM32H750 started (wire protocol v4).\r\n"
          "[OBSW] openobsw v" OBSW_VERSION_STRING "\r\n"
          "[OBSW] SRDB version: " SRDB_VERSION "\r\n";
      uart_write_buf((const uint8_t *)banner, (uint16_t)strlen(banner));
@@ -272,7 +272,7 @@ static void system_clock_init(void)
      /* Never reached */
      for (;;);
  #else
-     /* Superloop path — wire protocol v3 (used for Renode smoke-tests) */
+     /* Superloop path — wire protocol v4 (used for Renode smoke-tests) */
      uint32_t tick = 0;
      while (1) {
          uint8_t type = uart_getc();

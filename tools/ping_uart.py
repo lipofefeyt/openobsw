@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-tools/ping_uart.py — Send TC(17,1) ping to STM32H750 over UART (wire protocol v3).
+tools/ping_uart.py — Send TC(17,1) ping to STM32H750 over UART (wire protocol v4).
 
 Usage:
     python3 tools/ping_uart.py [/dev/ttyUSB0] [--count N]
 
 Requires: pip install pyserial
 
-Wire protocol v3 (uplink / downlink):
+Wire protocol v4 (uplink / downlink):
     → 0x01 [uint16 BE len] [space packet bytes]   TC uplink
     ← 0x04 [uint16 BE len] [TM packet bytes]      TM downlink
     ← 0xFF                                         end-of-tick
@@ -43,7 +43,7 @@ TC_PING = bytes([
 
 
 def frame_tc(packet: bytes) -> bytes:
-    """Wrap a space packet in wire protocol v3 TC uplink frame."""
+    """Wrap a space packet in wire protocol v4 TC uplink frame."""
     return b'\x01' + struct.pack('>H', len(packet)) + packet
 
 
@@ -61,7 +61,7 @@ TM_LABELS = {
 
 
 def decode_tm_packets(data: bytes) -> list[tuple[int, int, bytes]]:
-    """Parse wire protocol v3 TM stream; return list of (service, subservice, payload)."""
+    """Parse wire protocol v4 TM stream; return list of (service, subservice, payload)."""
     results = []
     i = 0
     while i < len(data):
