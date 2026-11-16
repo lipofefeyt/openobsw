@@ -11,7 +11,7 @@
  */
 
 #define OBSW_VERSION_MAJOR 0
-#define OBSW_VERSION_MINOR 18
+#define OBSW_VERSION_MINOR 19
 #define OBSW_VERSION_PATCH 0
 
 #define OBSW_VERSION_STR_(x) #x
