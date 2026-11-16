@@ -114,7 +114,7 @@ static void dbg_puts(const char *s)
     while (*s) dbg_putc(*s++);
 }
 #else
-/* Default build: USART3 carries only wire protocol v3 — no ASCII trace. */
+/* Default build: USART3 carries only wire protocol v4 — no ASCII trace. */
 #define dbg_putc(c) ((void)0)
 #define dbg_puts(s) ((void)0)
 #endif

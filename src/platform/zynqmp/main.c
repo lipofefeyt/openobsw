@@ -4,7 +4,7 @@
  *
  * Runs the openobsw PUS stack on ZynqMP Cortex-A53 (APU).
  * Uses Cadence UART HAL for I/O (uart0 @ 0xFF000000).
- * Wire protocol v3: type-prefixed frames (same as obsw_sim).
+ * Wire protocol v4: type-prefixed frames (same as obsw_sim).
  */
 
 #include "obsw/hal/io.h"
@@ -27,6 +27,11 @@ extern void obsw_uart_init(void);
 #define OBSW_FRAME_ACTUATOR 0x03U
 #define OBSW_FRAME_TM       0x04U
 #define OBSW_SYNC_BYTE      0xFFU
+
+/* obsw_sensor_frame_t of wire protocol v4 (sim/sensor_inject.h), 50 B. A frame
+ * of any other length is ignored: no actuator frame, end-of-tick only. The
+ * thermal fields at the end are not used on this target. */
+#define OBSW_SENSOR_FRAME_LEN 50U
 
 /* ------------------------------------------------------------------ */
 /* UART helpers                                                        */
@@ -163,8 +168,7 @@ int main(void)
 {
     obsw_uart_init();
 
-    const char *banner =
-        "[OBSW] ZynqMP started (type-frame protocol v2).\r\n";
+    const char *banner = "[OBSW] ZynqMP started (wire protocol v4).\r\n";
     obsw_uart_ops.write((const uint8_t *)banner,
                         (uint16_t)strlen(banner), obsw_uart_ops.ctx);
 
@@ -246,7 +250,7 @@ int main(void)
         if (type == OBSW_FRAME_TC) {
             obsw_tc_dispatcher_feed(&dispatcher, frame, frame_len);
 
-        } else if (type == OBSW_FRAME_SENSOR) {
+        } else if (type == OBSW_FRAME_SENSOR && frame_len == OBSW_SENSOR_FRAME_LEN) {
             float mag_x, mag_y, mag_z;
             uint8_t mag_valid;
             float st_qw, st_qx, st_qy, st_qz;

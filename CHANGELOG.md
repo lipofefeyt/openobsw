@@ -8,6 +8,17 @@ README roadmap. Releases before v0.16 are described on the
 
 ### Added
 
+- **Wire protocol v4** (#122): the sensor frame gains an OBC thermal input,
+  `int16 obc_temperature_raw` (SRDB raw counts) and `uint8 thermal_valid`,
+  after `sim_time` (47 → 50 bytes). When valid, the host sim writes it into
+  `obc_temperature` (S20 `0x0001`) before the tick's S12 check and HK, so a
+  simulator can raise and clear a thermal anomaly in any mode, SAFE included,
+  where TC(20,1) is gated (OBSW-SRS-246). The host sim exits with status 2 on
+  a sensor frame of any other length, naming a v3 sender (OBSW-SRS-245);
+  ZynqMP and the STM32H7 superloop ignore such frames. All banners print the
+  protocol version (`[OBSW] Host sim started (wire protocol v4).`).
+  **Breaking for SVF senders:** opensvf must send the 50-byte frame (opensvf
+  #194) before it can pin this release.
 - Host sim reports mode transitions as S5 events, like the FreeRTOS Mode
   Manager: `safe_mode_entry` (`0x0002`, HIGH), `standby_entry` (`0x0004`) and
   `nominal_entry` (`0x0005`), with the TC or in the tick that changed the

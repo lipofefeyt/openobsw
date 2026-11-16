@@ -141,7 +141,9 @@ typedef struct {
     float   gyro_x, gyro_y, gyro_z;           // Gyroscope [rad/s]
     uint8_t gyro_valid;
     float   sim_time;                          // Simulation time [s]
-} svf_sensor_frame_t;  // 29 bytes, little-endian
+    int16_t obc_temperature_raw;               // SRDB raw counts (v4)
+    uint8_t thermal_valid;                     // 1 = drive obc_temperature
+} svf_sensor_frame_t;  // 50 bytes, little-endian (wire protocol v4)
 ```
 
 ### Actuator frame layout (OBSW → SVF, type 0x03)
@@ -167,7 +169,7 @@ gcc -std=c11 -o obsw_sim \
 
 # Test it starts correctly
 echo "" | ./obsw_sim
-# [OBSW] Host sim started (type-frame protocol v2).
+# [OBSW] Host sim started (wire protocol v4).
 # [OBSW] SRDB version: 1.0.0
 ```
 

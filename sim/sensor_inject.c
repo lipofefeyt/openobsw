@@ -31,7 +31,7 @@ uint8_t obsw_sim_read_frame(uint8_t *buf, uint16_t buf_len, uint16_t *out_len)
 
 bool obsw_sim_parse_sensor(const uint8_t *buf, uint16_t len, obsw_sensor_frame_t *out)
 {
-    if (!buf || !out || len < OBSW_SENSOR_FRAME_LEN)
+    if (!buf || !out || len != OBSW_SENSOR_FRAME_LEN)
         return false;
     memcpy(out, buf, sizeof(obsw_sensor_frame_t));
     return true;

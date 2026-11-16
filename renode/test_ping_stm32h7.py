@@ -3,7 +3,7 @@
 renode/test_ping_stm32h7.py — Send TC(17,1) to obsw_stm32h7 in Renode.
 
 Connects to the TCP terminal exposed by Renode on port 3456.
-Uses wire protocol v3 (type-prefixed frames) matching obsw_stm32h7.
+Uses wire protocol v4 (type-prefixed frames) matching obsw_stm32h7.
 
 Usage:
     # Terminal 1: build then start Renode

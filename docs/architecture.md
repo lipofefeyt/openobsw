@@ -543,7 +543,7 @@ else if (mode == OBSW_FSM_SAFE && sensor.mag_valid)
 
 ---
 
-## Wire protocol v3 — host sim and opensvf-kde boundary
+## Wire protocol v4 — host sim and opensvf-kde boundary
 
 The host sim speaks a simple length-prefixed frame protocol over stdin/stdout.
 The same protocol is used by any external harness (`sim/bdot_harness.py`,
@@ -565,7 +565,9 @@ TM packets generated during the tick, the actuator frame (0x03), then EOT.
 
 ### Sensor frame — `obsw_sensor_frame_t`
 
-47 bytes, packed little-endian. Python struct format: `<fffBffffBfffBf`.
+50 bytes, packed little-endian. Python struct format: `<fffBffffBfffBfhB`.
+The host sim exits with status 2 on a sensor frame of any other length (v3
+senders send 47 bytes); the ZynqMP and STM32H7 superloop targets ignore it.
 
 | Field | Type | Unit | Notes |
 |---|---|---|---|
@@ -576,6 +578,8 @@ TM packets generated during the tick, the actuator frame (0x03), then EOT.
 | `gyro_x / y / z` | float32 | rad/s | Gyroscope, body frame |
 | `gyro_valid` | uint8 | — | 1 = valid |
 | `sim_time` | float32 | s | Simulation clock; used to compute dt |
+| `obc_temperature_raw` | int16 | raw | OBC temperature, SRDB encoding: degC = 0.1 * raw − 40 (v4) |
+| `thermal_valid` | uint8 | — | 1 = write `obc_temperature` (S20 0x0001) this tick, before S12 and HK; 0 = keep the last value (TC(20,1) still sets it) |
 
 ### Actuator frame — `obsw_actuator_frame_t`
 
@@ -593,7 +597,7 @@ TM packets generated during the tick, the actuator frame (0x03), then EOT.
 ## B-dot convergence harness — `sim/bdot_harness.py`
 
 A closed-loop convergence test that exercises the full SAFE-mode control path
-without Renode. It drives `obsw_sim` as a subprocess via wire protocol v3.
+without Renode. It drives `obsw_sim` as a subprocess via wire protocol v4.
 
 **Physics model:**
 - Circular SSO orbit at 550 km, inclination 97.4°
@@ -663,7 +667,7 @@ openobsw is the reference OBSW target for
 | openobsw | Control laws (B-dot, PD ADCS), PUS command interface, mode FSM |
 | opensvf-kde | Plant model (orbital mechanics, IGRF field, rigid-body dynamics) |
 
-The boundary is **wire protocol v3** — the sensor/actuator frame pair
+The boundary is **wire protocol v4** — the sensor/actuator frame pair
 described in the section above. opensvf-kde runs as a co-process, injects
 sensor frames (0x02) each tick, and reads back actuator commands (0x03).
 
@@ -678,7 +682,7 @@ flowchart LR
         DYN --> ORB
     end
     subgraph "openobsw (host sim)"
-        SF -->|stdin| SIM[obsw_sim\nwire protocol v3]
+        SF -->|stdin| SIM[obsw_sim\nwire protocol v4]
         SIM -->|stdout| AF
         SIM --> MODE[Mode Manager\nFSM gate]
         MODE --> BDOT[B-dot / PD ADCS]
@@ -810,7 +814,7 @@ and MSP430 register names correctly. See the README for the configuration.
 
 The STM32H750VBT6 (WeAct board) is the **high-performance OBC** target —
 Cortex-M7 at 480 MHz, 128 KB internal flash, 512 KB AXI SRAM. It runs the
-same wire protocol v3 stack as the host sim and ZynqMP target.
+same wire protocol v4 stack as the host sim and ZynqMP target.
 
 | Resource | Value |
 |---|---|
@@ -882,7 +886,7 @@ python3 renode/test_ping_stm32h7.py # alias: renode-ping-stm32h7
 ```
 
 The platform model (`renode/stm32h750.repl`) wires USART3 to a TCP socket
-terminal on port 3456. UART output and wire-protocol v3 frames are exchanged
+terminal on port 3456. UART output and wire-protocol v4 frames are exchanged
 over that socket. RCC and GPIOD are stub memories that absorb `obsw_uart_init()`
 register writes without faulting.
 
@@ -977,7 +981,8 @@ Type 0x02 — Sensor injection:
 ```
 
 `obsw_sensor_frame_t` carries magnetometer (Tesla), star tracker
-(quaternion), and gyro (rad/s) data with per-sensor validity flags.
+(quaternion), gyro (rad/s) and OBC temperature (SRDB raw counts) data with
+per-sensor validity flags.
 This matches OpenSVF equipment model output units directly.
 
 The `OBCEmulatorAdapter` in OpenSVF reads sensor values from

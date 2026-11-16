@@ -1,9 +1,9 @@
 /**
- * @file sim/main.c  
- * @brief Host simulation harness — type-frame protocol.
+ * @file sim/main.c
+ * @brief Host simulation harness — wire protocol v4 (sensor_inject.h).
  *
  * Type 0x01: TC uplink   [0x01][uint16 BE len][TC bytes]
- * Type 0x02: Sensor data [0x02][uint16 BE len][obsw_sensor_frame_t]
+ * Type 0x02: Sensor data [0x02][uint16 BE len][obsw_sensor_frame_t, 50 B]
  */
 
 #include "obsw/obsw.h"
@@ -650,7 +650,9 @@ int main(void)
 
     float last_sim_time = 0.0f;
 
-    fprintf(stderr, "[OBSW] Host sim started (type-frame protocol v2).\n");
+    fprintf(stderr,
+            "[OBSW] Host sim started (wire protocol v%u).\n",
+            (unsigned)OBSW_WIRE_PROTOCOL_VERSION);
     fprintf(stderr, "[OBSW] openobsw v%s\n", OBSW_VERSION_STRING);
     fprintf(stderr, "[OBSW] SRDB version: %s\n", SRDB_VERSION);
 
@@ -685,7 +687,22 @@ int main(void)
 
         } else if (type == OBSW_FRAME_SENSOR) {
             obsw_sensor_frame_t sensor;
-            if (obsw_sim_parse_sensor(frame, frame_len, &sensor)) {
+            if (!obsw_sim_parse_sensor(frame, frame_len, &sensor)) {
+                /* A sender on another protocol version: stop rather than run
+                 * on without sensors or thermal input */
+                fprintf(stderr,
+                        "[OBSW] FATAL: sensor frame of %u B, wire protocol v%u expects %u B%s\n",
+                        (unsigned)frame_len,
+                        (unsigned)OBSW_WIRE_PROTOCOL_VERSION,
+                        (unsigned)OBSW_SENSOR_FRAME_LEN,
+                        frame_len == OBSW_SENSOR_FRAME_LEN_V3 ? " (v3 sender?)" : "");
+                return 2;
+            }
+            {
+                /* Thermal input, before this tick's S12 check and HK */
+                if (sensor.thermal_valid)
+                    s20_params[0].value.i32 = sensor.obc_temperature_raw; /* obc_temperature */
+
                 /* Due S11 activities, then S19 actions queued by last
                  * tick's events, run before the control step */
                 (void)obsw_s11_run(&s11_ctx, &obt, &dispatcher);

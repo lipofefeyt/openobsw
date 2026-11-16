@@ -1,4 +1,4 @@
-"""renode/proto.py — Wire protocol v3 helpers for openobsw Renode tests.
+"""renode/proto.py — Wire protocol v4 helpers for openobsw Renode tests.
 
 Usage:
     import proto
@@ -26,7 +26,7 @@ FRAME_ACT    = 0x03
 FRAME_TM     = 0x04
 SYNC_EOT     = 0xFF
 
-_SENSOR_FMT = '<fffBffffBfffBf'   # 47 bytes LE — obsw_sensor_frame_t
+_SENSOR_FMT = '<fffBffffBfffBfhB'  # 50 bytes LE — obsw_sensor_frame_t (v4)
 _ACTUAT_FMT = '<ffffffBf'         # 29 bytes LE — obsw_actuator_frame_t
 
 APID_DEFAULT = 0x010
@@ -70,8 +70,9 @@ def build_s20_set(param_id, value_u32, apid=APID_DEFAULT):
     return build_tc(apid, 20, 1, struct.pack(">HI", param_id, value_u32))
 
 
-def build_sensor(q, omega, t, mag=None, mag_valid=0, st_valid=1, gyro_valid=1):
-    """Build a 47-byte obsw_sensor_frame_t payload (little-endian)."""
+def build_sensor(q, omega, t, mag=None, mag_valid=0, st_valid=1, gyro_valid=1,
+                 obc_temperature_raw=0, thermal_valid=0):
+    """Build a 50-byte obsw_sensor_frame_t payload (little-endian)."""
     if mag is None:
         mag = (0.0, 0.0, 0.0)
     return struct.pack(_SENSOR_FMT,
@@ -79,11 +80,12 @@ def build_sensor(q, omega, t, mag=None, mag_valid=0, st_valid=1, gyro_valid=1):
         float(q[0]),     float(q[1]),     float(q[2]),     float(q[3]),  int(st_valid),
         float(omega[0]), float(omega[1]), float(omega[2]), int(gyro_valid),
         float(t),
+        int(obc_temperature_raw), int(thermal_valid),
     )
 
 
 def send_tc(sock, tc_bytes):
-    """Send a TC wrapped in wire protocol v3 type-0x01 frame."""
+    """Send a TC wrapped in wire protocol v4 type-0x01 frame."""
     sock.sendall(bytes([FRAME_TC]) + struct.pack(">H", len(tc_bytes)) + tc_bytes)
 
 

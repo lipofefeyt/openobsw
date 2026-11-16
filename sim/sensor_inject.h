@@ -73,10 +73,24 @@ typedef struct {
 
     /* Simulation time [s] — for derivative calculations */
     float sim_time;
+
+    /* OBC thermal sensor (wire protocol v4). Raw counts in the SRDB
+     * encoding of obc_temperature: degC = 0.1 * raw - 40 (85 degC = 1250).
+     * When thermal_valid is 1 the sim writes the value into obc_temperature
+     * (S20 0x0001) before the tick's monitoring and HK; when 0 the parameter
+     * keeps its last value, so TC(20,1) still sets it. */
+    int16_t obc_temperature_raw;
+    uint8_t thermal_valid;
 } obsw_sensor_frame_t;
 #pragma pack(pop)
 
-#define OBSW_SENSOR_FRAME_LEN ((uint16_t)sizeof(obsw_sensor_frame_t))
+/** Wire protocol version; printed in the start-up banner. */
+#define OBSW_WIRE_PROTOCOL_VERSION 4U
+
+#define OBSW_SENSOR_FRAME_LEN ((uint16_t)sizeof(obsw_sensor_frame_t)) /* 50 B */
+#define OBSW_SENSOR_FRAME_LEN_V3 47U /**< v3 frame (no thermal fields), rejected */
+
+_Static_assert(sizeof(obsw_sensor_frame_t) == 50U, "obsw_sensor_frame_t must be 50 B (v4)");
 
 /* ------------------------------------------------------------------ */
 /* Frame reading                                                       */
@@ -97,7 +111,8 @@ uint8_t obsw_sim_read_frame(uint8_t *buf, uint16_t buf_len, uint16_t *out_len);
 
 /**
  * Parse a sensor injection frame from a byte buffer.
- * Returns true if the buffer is large enough and parsing succeeded.
+ * Returns true only if len is exactly OBSW_SENSOR_FRAME_LEN; a frame of any
+ * other length (a v3 sender's 47 B, for one) is not parsed.
  */
 bool obsw_sim_parse_sensor(const uint8_t *buf, uint16_t len, obsw_sensor_frame_t *out);
 

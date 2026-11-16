@@ -1,5 +1,5 @@
 /*
- * TMTC task — TC uplink and TM downlink over USART3 (wire protocol v3).
+ * TMTC task — TC uplink and TM downlink over USART3 (wire protocol v4).
  *
  * This task has the highest priority (4) and owns the physical UART link.
  * It polls for incoming bytes, assembles type-framed TC packets, pushes them
@@ -9,10 +9,10 @@
  * yields for up to 1 ms using ulTaskNotifyTake(). The PUS task sends a
  * notification after each TC dispatch to trigger an immediate TM drain.
  *
- * Wire protocol v3 uplink frame:
+ * Wire protocol v4 uplink frame:
  *   [0x01][uint16 BE len][TC frame bytes]
  *
- * Wire protocol v3 downlink frame:
+ * Wire protocol v4 downlink frame:
  *   [0x04][uint16 BE len][TM packet bytes]
  *   [0xFF]                                  end-of-tick
  */
@@ -80,7 +80,7 @@ static void uart_write(const uint8_t *buf, uint16_t len)
 #ifdef OBSW_UART_ASCII_DEBUG
 /* Emit "# TM(svc,subsvc)\r\n" after each binary frame so picocom users
  * see a human-readable label.  Only in OBSW_UART_ASCII_DEBUG builds: the
- * text shares USART3 with wire protocol v3 and a strict parser would see it
+ * text shares USART3 with wire protocol v4 and a strict parser would see it
  * as framing garbage, so the default build keeps the stream binary-only. */
 static void tm_uart_label(uint8_t svc, uint8_t subsvc)
 {

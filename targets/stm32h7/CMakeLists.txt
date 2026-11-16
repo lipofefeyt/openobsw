@@ -24,7 +24,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(OBSW_RENODE "Build for Renode emulation (skip PLL clock init)" OFF)
 
 # ASCII trace on USART3 (FDIR 'B'/'k'/'F' markers, "# TM(s,ss)" labels).
-# It shares the UART with binary wire protocol v3, so keep it OFF for any
+# It shares the UART with binary wire protocol v4, so keep it OFF for any
 # run with a ground tool attached.
 option(OBSW_UART_ASCII_DEBUG "Interleave ASCII debug trace on USART3" OFF)
 
