@@ -201,9 +201,11 @@ Every TC handler shall reject truncated or inconsistent user data with TM(1,2) c
 
 **OBSW-SRS-090** `[S3]` `IMPLEMENTED` `T`
 The software shall emit TM(3,25) for each enabled housekeeping set when its collection interval, counted in control ticks, elapses, and reload the interval.
+*Evidence: S3 unit tests; `test/system` on the host sim; Renode STM32H7 FreeRTOS `renode/test_hk_interval_stm32h7.py` (FDIR full tick, spacing from packet OBT; #51).*
 
 **OBSW-SRS-091** `[S3]` `IMPLEMENTED` `T`
 The software shall enable a set and set its interval on TC(3,5), and disable it on TC(3,6); an unknown set ID shall be rejected with TM(1,2).
+*Evidence: S3 unit tests; `test/system` on the host sim; Renode STM32H7 FreeRTOS `renode/test_hk_interval_stm32h7.py` (re-time while enabled, disable, unknown SID).*
 
 **OBSW-SRS-092** `[S3]` `IMPLEMENTED` `T`
 TM(3,25) shall carry the set ID followed by each parameter in definition order, big-endian, at its declared size (1, 2 or 4 bytes; 4-byte floats as IEEE 754).
