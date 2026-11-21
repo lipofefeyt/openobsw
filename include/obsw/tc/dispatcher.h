@@ -36,7 +36,7 @@ extern "C" {
 
 /**
  * A fully parsed TC command passed to handlers.
- * All pointers reference the original frame buffer — zero copy.
+ * All pointers reference the caller's packet buffer (zero copy).
  */
 typedef struct {
     uint16_t        apid;
@@ -161,7 +161,8 @@ int obsw_tc_dispatcher_set_gate(obsw_tc_dispatcher_t *d,
                                 void *gate_ctx);
 
 /**
- * Feed a raw TC frame into the dispatcher.
+ * Feed one TC space packet (CCSDS 133.0-B, PUS-C secondary header) into
+ * the dispatcher, not a TC transfer frame (see ccsds/tc_frame.h for those).
  *
  * The dispatcher parses the space packet, asks the gate (if any), looks
  * up the route, and calls the matching handler. A TC refused by the gate
@@ -170,8 +171,8 @@ int obsw_tc_dispatcher_set_gate(obsw_tc_dispatcher_t *d,
  * called. Packets that fail to parse are dropped without a response.
  *
  * @param d          Initialised dispatcher.
- * @param frame      Raw TC frame bytes.
- * @param frame_len  Length of frame in bytes.
+ * @param frame      TC space packet bytes, starting at the primary header.
+ * @param frame_len  Length of the packet in bytes.
  * @return OBSW_TC_OK, OBSW_TC_ERR_GATED, OBSW_TC_ERR_NO_ROUTE,
  *         OBSW_TC_ERR_PARSE, or OBSW_TC_ERR_HANDLER.
  */
