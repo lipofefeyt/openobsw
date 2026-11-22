@@ -32,7 +32,7 @@ FRAME_ACT    = 0x03
 FRAME_TM     = 0x04
 SYNC_EOT     = 0xFF
 
-APID_DEFAULT = 0x010
+APID_DEFAULT = 0x010  # TC destination APID (telecommands.yaml); TM comes from 0x103
 
 SENSOR_LEN = 50
 ACTUAT_LEN = 29

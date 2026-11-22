@@ -277,7 +277,7 @@ class Spacecraft(BaseModel):
     name:         str
     description:  Optional[str] = None
     scid:         int
-    apid_default: int
+    apid_default: int  # TM source APID; TC APIDs are per telecommand
 
     @field_validator("scid")
     @classmethod

@@ -121,10 +121,15 @@ Standard (PUS) implementation document.
 
 **openobsw test/sim APIDs:**
 
-| APID | Use |
-|---|---|
-| `0x010` | Default TC target (test/sim) |
-| `0xFFFF` | Wildcard — matches any APID |
+| APID | Use | Source |
+|---|---|---|
+| `0x010` | TC destination: every reference TC is sent to it | `apid` of each TC in `srdb/data/telecommands.yaml` (`SRDB_TC_<NAME>_APID`) |
+| `0x103` | TM source: every TM packet the OBC sends | `apid_default` in `srdb/data/spacecraft.yaml` (`SRDB_APID_DEFAULT`) |
+| `0xFFFF` | Route wildcard: matches any APID | `obsw_tc_route_t` |
+
+Every reference build routes TCs with the wildcard, so a TC is accepted on
+any APID today; `0x010` is the address the SRDB, the XTCE export and the
+ground tools use.
 
 ---
 
@@ -195,5 +200,6 @@ set OBT, TC(20,3) parameter get.
 | TM store slots | `32` | _to be defined_ |
 | TM max packet length | `1024` bytes | _to be defined_ |
 | TC APID (nominal) | `0x010` | _to be defined_ |
+| TM source APID | `0x103` | _to be defined_ |
 | S6 memory map | sim: 4 KB patch RAM at `0x0` | _to be defined_ |
 | SAFE TC whitelist | (17,1) (8,1) (9,128) (20,3) | _to be defined_ |
