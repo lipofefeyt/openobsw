@@ -429,3 +429,90 @@ jobs:
           name: obsw_stm32h7_bin
           path: build_stm32h7/obsw_stm32h7.bin
           retention-days: 90
+  # ------------------------------------------------------------------ #
+  # obsw_sim for aarch64 Linux, run under qemu-user                    #
+  # ------------------------------------------------------------------ #
+  aarch64-sim:
+    name: obsw_sim aarch64 (QEMU user-mode)
+    runs-on: ubuntu-latest
+
+    env:
+      # qemu-aarch64 finds the aarch64 loader and libc here (also used by
+      # ctest through CMAKE_CROSSCOMPILING_EMULATOR)
+      QEMU_LD_PREFIX: /usr/aarch64-linux-gnu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build gcc-aarch64-linux-gnu qemu-user python3-pip
+          pip install pydantic pyyaml pytest --break-system-packages
+          pip install -e srdb/ --break-system-packages
+
+      - name: Configure
+        run: |
+          cmake -B build_aarch64 \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-linux-gnu.cmake \
+            -DOBSW_BUILD_SIM=ON \
+            -DOBSW_BUILD_TESTS=ON \
+            -DOBSW_WERROR=ON \
+            -DPython3_EXECUTABLE=$(which python3)
+
+      - name: Build
+        run: cmake --build build_aarch64
+
+      - name: Unit and integration tests (under qemu-aarch64)
+        run: ctest --test-dir build_aarch64 --output-on-failure
+
+      - name: System tests (aarch64 obsw_sim over wire protocol)
+        run: |
+          printf '#!/bin/sh\nexec qemu-aarch64 "%s" "$@"\n' \
+            "$PWD/build_aarch64/sim/obsw_sim" > obsw_sim_aarch64
+          chmod +x obsw_sim_aarch64
+          OBSW_SIM=$PWD/obsw_sim_aarch64 pytest test/system -v
+
+  # ------------------------------------------------------------------ #
+  # STM32H750 FreeRTOS image (OBSW_FREERTOS=ON), the one the Renode    #
+  # tests run. The job above builds the superloop.                     #
+  # ------------------------------------------------------------------ #
+  build-stm32h7-freertos:
+    name: STM32H750 FreeRTOS binary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build python3-pip gcc-arm-none-eabi
+          pip install pydantic pyyaml --break-system-packages
+          pip install -e srdb/ --break-system-packages
+
+      - name: Configure STM32H7 FreeRTOS build
+        run: |
+          cmake -S targets/stm32h7 -B build_stm32h7_freertos \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/stm32h7-toolchain.cmake \
+            -DPython3_EXECUTABLE=$(which python3) \
+            -DOBSW_ROOT=$(pwd) \
+            -DOBSW_FREERTOS=ON
+
+      - name: Build STM32H7 FreeRTOS binary
+        run: |
+          cmake --build build_stm32h7_freertos -j$(nproc)
+          ls -lh build_stm32h7_freertos/obsw_stm32h7.bin
+          arm-none-eabi-size build_stm32h7_freertos/obsw_stm32h7.elf
+
+      - name: Upload binary artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: obsw_stm32h7_freertos_bin
+          path: build_stm32h7_freertos/obsw_stm32h7.bin
+          retention-days: 90
