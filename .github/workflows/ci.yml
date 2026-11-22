@@ -78,6 +78,40 @@ jobs:
       - name: Test
         run: pytest srdb/tests/ -v
 
+  docs:
+    name: Docs (strict build + link check)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install docs toolchain
+        run: pip install -r docs/requirements.txt --break-system-packages
+
+      - name: Build (strict)
+        env:
+          NO_MKDOCS_2_WARNING: "1"
+        run: mkdocs build --strict -d site
+
+      # Internal links and anchors are checked by the strict build; this
+      # checks the external ones. The openobsw Read the Docs project and
+      # GitHub edit links are skipped (not public yet / login only).
+      - name: Link check
+        uses: lycheeverse/lychee-action@v2.9.0
+        with:
+          lycheeVersion: v0.24.2
+          fail: true
+          args: >-
+            --no-progress
+            --root-dir ${{ github.workspace }}/site
+            --max-retries 2
+            --accept '200..=299,429'
+            --exclude '^https://github\.com/lipofefeyt/openobsw/edit/'
+            --exclude '^https://fonts\.'
+            --exclude '^https://openobsw\.readthedocs\.io'
+            'site/**/*.html'
+
   asan:
     name: ASAN / UBSAN (gcc)
     runs-on: ubuntu-latest

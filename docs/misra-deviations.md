@@ -16,7 +16,7 @@ paraphrase for orientation.
   findings. There are no Required deviations.
 - **Advisory** rules are either deviated permanently by design (section 1)
   or not enforced yet (section 2). Both are listed in
-  [`tools/cppcheck-suppressions.txt`](../tools/cppcheck-suppressions.txt),
+  [`tools/cppcheck-suppressions.txt`](https://github.com/lipofefeyt/openobsw/blob/main/tools/cppcheck-suppressions.txt),
   which is the only place the CI job suppresses anything.
 - cppcheck's own `warning`, `style`, `performance` and `portability` checks
   are also enforced at zero.
