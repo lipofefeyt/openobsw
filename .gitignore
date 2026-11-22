@@ -33,8 +33,9 @@ __pycache__/
 dist/
 *.egg
 
-# mkdocs build output
+# mkdocs build output and generated tables (tools/gen_docs.py)
 /site/
+/docs/_gen/
 
 # VS Code — ignore personal settings, keep IntelliSense config
 .vscode/*

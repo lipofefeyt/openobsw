@@ -52,35 +52,31 @@ extern "C" {
  */
 #pragma pack(push, 1)
 typedef struct {
-    /* Magnetometer — body frame [T] */
-    float mag_x;
-    float mag_y;
-    float mag_z;
-    uint8_t mag_valid;
+    float mag_x;       /**< Magnetometer X, body frame [T] */
+    float mag_y;       /**< Magnetometer Y, body frame [T] */
+    float mag_z;       /**< Magnetometer Z, body frame [T] */
+    uint8_t mag_valid; /**< 1 = magnetometer valid this tick */
 
-    /* Star tracker — body-to-inertial quaternion [w, x, y, z] */
-    float st_q_w;
-    float st_q_x;
-    float st_q_y;
-    float st_q_z;
-    uint8_t st_valid;
+    float st_q_w;     /**< Star tracker quaternion W (body to inertial) */
+    float st_q_x;     /**< Star tracker quaternion X */
+    float st_q_y;     /**< Star tracker quaternion Y */
+    float st_q_z;     /**< Star tracker quaternion Z */
+    uint8_t st_valid; /**< 1 = quaternion valid this tick */
 
-    /* Gyro — angular velocity body frame [rad/s] */
-    float gyro_x;
-    float gyro_y;
-    float gyro_z;
-    uint8_t gyro_valid;
+    float gyro_x;       /**< Angular rate X, body frame [rad/s] */
+    float gyro_y;       /**< Angular rate Y, body frame [rad/s] */
+    float gyro_z;       /**< Angular rate Z, body frame [rad/s] */
+    uint8_t gyro_valid; /**< 1 = gyro valid this tick */
 
-    /* Simulation time [s] — for derivative calculations */
-    float sim_time;
+    float sim_time; /**< Simulation time [s]; tick length is its difference */
 
     /* OBC thermal sensor (wire protocol v4). Raw counts in the SRDB
      * encoding of obc_temperature: degC = 0.1 * raw - 40 (85 degC = 1250).
      * When thermal_valid is 1 the sim writes the value into obc_temperature
      * (S20 0x0001) before the tick's monitoring and HK; when 0 the parameter
      * keeps its last value, so TC(20,1) still sets it. */
-    int16_t obc_temperature_raw;
-    uint8_t thermal_valid;
+    int16_t obc_temperature_raw; /**< OBC temperature, SRDB raw counts (degC = 0.1 * raw - 40) */
+    uint8_t thermal_valid;       /**< 1 = write obc_temperature this tick */
 } obsw_sensor_frame_t;
 #pragma pack(pop)
 
@@ -130,14 +126,14 @@ bool obsw_sim_parse_sensor(const uint8_t *buf, uint16_t len, obsw_sensor_frame_t
 
 #pragma pack(push, 1)
 typedef struct {
-    float mtq_dipole_x;   /**< MTQ dipole X [Am²] — b-dot output   */
-    float mtq_dipole_y;
-    float mtq_dipole_z;
-    float rw_torque_x;    /**< RW torque X [Nm]  — ADCS output     */
-    float rw_torque_y;
-    float rw_torque_z;
-    uint8_t controller;   /**< 0=bdot (SAFE), 1=adcs (NOMINAL)     */
-    float sim_time;       /**< Simulation time [s]                  */
+    float mtq_dipole_x; /**< Magnetorquer dipole X [A m^2], B-dot output (SAFE) */
+    float mtq_dipole_y; /**< Magnetorquer dipole Y [A m^2] */
+    float mtq_dipole_z; /**< Magnetorquer dipole Z [A m^2] */
+    float rw_torque_x;  /**< Reaction wheel torque X [N m], PD output (NOMINAL) */
+    float rw_torque_y;  /**< Reaction wheel torque Y [N m] */
+    float rw_torque_z;  /**< Reaction wheel torque Z [N m] */
+    uint8_t controller; /**< 0 = B-dot (SAFE), 1 = PD attitude control (NOMINAL) */
+    float sim_time;     /**< sim_time of the sensor frame this answers [s] */
 } obsw_actuator_frame_t;
 #pragma pack(pop)
 

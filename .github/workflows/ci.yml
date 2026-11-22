@@ -87,7 +87,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install docs toolchain
-        run: pip install -r docs/requirements.txt --break-system-packages
+        run: |
+          pip install -r docs/requirements.txt --break-system-packages
+          pip install -e srdb/ --break-system-packages
+
+      # Fails when a copy of the frame layout or docs/targets.yaml disagrees
+      # with its source; then writes the generated tables
+      - name: Check sources and generate reference tables
+        run: python3 tools/gen_docs.py
 
       - name: Build (strict)
         env:
@@ -95,8 +102,10 @@ jobs:
         run: mkdocs build --strict -d site
 
       # Internal links and anchors are checked by the strict build; this
-      # checks the external ones. The openobsw Read the Docs project and
-      # GitHub edit links are skipped (not public yet / login only).
+      # checks the external ones. Links to files of this repo on main are
+      # checked against the checkout, so a PR can link a file it adds.
+      # Skipped: GitHub edit links (login only), Google Fonts, and this
+      # site's own canonical URLs (new pages exist there only after merge).
       - name: Link check
         uses: lycheeverse/lychee-action@v2.9.0
         with:
@@ -107,6 +116,7 @@ jobs:
             --root-dir ${{ github.workspace }}/site
             --max-retries 2
             --accept '200..=299,429'
+            --remap '^https://github\.com/lipofefeyt/openobsw/(blob|tree)/main/(.*)$ file://${{ github.workspace }}/$2'
             --exclude '^https://github\.com/lipofefeyt/openobsw/edit/'
             --exclude '^https://fonts\.'
             --exclude '^https://openobsw\.readthedocs\.io'

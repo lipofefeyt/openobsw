@@ -20,7 +20,7 @@ telecommands:
   # ---- S17 — Test --------------------------------------------------------
 
   - name: are_you_alive
-    description: "TC(17,1) connection test — expects TM(17,2) response"
+    description: "TC(17,1) connection test, expects TM(17,2) response"
     apid: 0x010
     service: 17
     subservice: 1
