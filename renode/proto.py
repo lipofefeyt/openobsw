@@ -29,7 +29,7 @@ SYNC_EOT     = 0xFF
 _SENSOR_FMT = '<fffBffffBfffBfhB'  # 50 bytes LE — obsw_sensor_frame_t (v4)
 _ACTUAT_FMT = '<ffffffBf'         # 29 bytes LE — obsw_actuator_frame_t
 
-APID_DEFAULT = 0x010
+APID_DEFAULT = 0x010  # TC destination APID (telecommands.yaml); TM comes from 0x103
 
 
 def connect(host=HOST, port=PORT, timeout=TIMEOUT, banner_wait=0.5):

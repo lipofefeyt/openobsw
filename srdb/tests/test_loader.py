@@ -65,6 +65,13 @@ def test_apid_out_of_range_is_rejected(data_copy):
         SRDBLoader.load(data_copy)
 
 
+def test_reference_tc_and_tm_apids(srdb):
+    """#140: the reference mission sends every TC to 0x010; the OBC's TM
+    source APID is spacecraft.yaml apid_default (0x103), never a TC address."""
+    assert {tc.apid for tc in srdb.telecommands} == {0x010}
+    assert srdb.spacecraft.apid_default == 0x103
+
+
 def test_type_and_ptc_pfc_must_agree(data_copy):
     edit(data_copy / "parameters.yaml", lambda d: d["parameters"][0].update(type="uint8", ptc=1, pfc=16))
     with pytest.raises(pydantic.ValidationError, match="expects"):

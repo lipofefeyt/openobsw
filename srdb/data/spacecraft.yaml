@@ -8,4 +8,6 @@ spacecraft:
   name: "Demo Satellite"
   description: "openobsw reference mission configuration"
   scid: 0x001 # placeholder — mission-assigned
-  apid_default: 0x103 # OBC TM source APID (and default TC target APID)
+  # TM source APID of the OBC (SRDB_APID_DEFAULT). Not a TC address: each TC
+  # names its destination APID in telecommands.yaml (0x010 for every TC).
+  apid_default: 0x103
