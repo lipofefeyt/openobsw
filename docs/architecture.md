@@ -708,7 +708,7 @@ needed via TC(20,1).
 
 ### Reference scenario — SAFE-mode detumbling
 
-Validated by `sim/bdot_harness.py` (see [B-dot harness](#b-dot-convergence-harness----simbdot_harnesspy)):
+Validated by `sim/bdot_harness.py` (see [B-dot harness](#b-dot-convergence-harness-simbdot_harnesspy)):
 
 - Initial tumble: |ω₀| = 0.866 rad/s
 - Converges to |ω| < 0.05 rad/s at **t = 2533 s (0.44 orbital periods)**

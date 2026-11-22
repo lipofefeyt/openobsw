@@ -33,6 +33,9 @@ __pycache__/
 dist/
 *.egg
 
+# mkdocs build output
+/site/
+
 # VS Code — ignore personal settings, keep IntelliSense config
 .vscode/*
 !.vscode/c_cpp_properties.json

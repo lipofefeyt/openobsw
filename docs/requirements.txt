@@ -1,0 +1,9 @@
+# Documentation toolchain, pinned (#135). MkDocs 2.0 drops the plugin system
+# and Material does not support it, so mkdocs stays on 1.6.x. Bump these
+# together and rebuild with `mkdocs build --strict` before merging.
+mkdocs==1.6.1
+mkdocs-material==9.8.2
+mkdocs-material-extensions==1.3.1
+pymdown-extensions==13.1.2
+Markdown==3.11.3
+Pygments==2.21.0

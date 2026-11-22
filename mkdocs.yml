@@ -1,0 +1,65 @@
+site_name: OpenOBSW
+site_description: Open-source PUS-C on-board software in C11, with no dynamic allocation
+# Read the Docs sets the canonical URL per version; the fallback is for local builds.
+site_url: !ENV [READTHEDOCS_CANONICAL_URL, "https://openobsw.readthedocs.io/"]
+repo_url: https://github.com/lipofefeyt/openobsw
+repo_name: lipofefeyt/openobsw
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+
+# Kept in the repo, not published (decision Q4, 2026-11-21).
+exclude_docs: |
+  hardware.md
+  requirements.txt
+
+# Every warning fails `mkdocs build --strict`. A page that is neither in the
+# nav nor excluded above is a warning too, so no page is published by accident.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+plugins:
+  - search
+
+nav:
+  - Getting started:
+      - Overview: index.md
+      - Development environment: cheatsheet.md
+      - MSP430 build: msp430-build.md
+      - OpenSVF integration: integration-guide.md
+  - Concepts:
+      - Architecture: architecture.md
+      - FreeRTOS (STM32H7): freertos-architecture.md
+      - "B-dot high-pass filter (#70)": issue-70-opensvf-kde-handoff.md
+  - Reference:
+      - Requirements (SRS): SRS.md
+      - Mission configuration: mission-config.md
+      - MISRA deviations: misra-deviations.md
+  - Known limits: known-limits.md
+  - Releases:
+      - Changelog: changelog.md
