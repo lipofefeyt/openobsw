@@ -1,0 +1,168 @@
+# Target capability matrix (hand-kept, decision Q5 2026-11-21).
+#
+# tools/gen_docs.py renders it into the "Targets" page and fails when:
+#   - a target's `tcs` list differs from the route table in its `routes` file,
+#   - a cell cites a test file or test function that does not exist,
+#   - a cell uses an unknown status, evidence kind, target or tier.
+#
+# Cell fields:
+#   status    supported | partial | no | unknown
+#   evidence  list of: ci (runs in this repo's CI), renode (local Renode run,
+#             not in CI), bench (run by hand on the board), none (code only)
+#   ref       test that shows it: path or path::test_function (optional)
+#   note      one sentence (optional)
+
+tiers:
+  1: Supported, in CI on every PR
+  2: Builds in CI, bench-tested once
+  3: Builds in CI, emulator only
+
+targets:
+  - id: host-sim
+    short: Host sim
+    name: obsw_sim (x86_64 Linux)
+    tier: 1
+    transport: stdin/stdout pipe
+    routes: sim/main.c
+    tcs: &sim_tcs [3/1, 3/3, 3/5, 3/6, 6/2, 6/5, 6/9, 8/1, 9/128, 11/4, 11/5, 11/6, 11/17, 11/18,
+                   12/1, 12/2, 12/3, 12/4, 12/5, 17/1, 19/1, 19/2, 19/3, 19/4, 19/5, 20/1, 20/3]
+  - id: aarch64-sim
+    short: aarch64 sim
+    name: obsw_sim (aarch64 Linux, QEMU user-mode)
+    tier: 1
+    transport: stdin/stdout pipe
+    routes: sim/main.c
+    tcs: *sim_tcs
+  - id: stm32h7-freertos
+    short: STM32H7 FreeRTOS
+    name: obsw_stm32h7, FreeRTOS (STM32H750)
+    tier: 1
+    transport: USART3, 115200 baud (Renode, TCP port 3456)
+    routes: src/task/pus.c
+    tcs: *sim_tcs
+  - id: stm32h7-superloop
+    short: STM32H7 superloop
+    name: obsw_stm32h7, superloop (STM32H750)
+    tier: 2
+    transport: USART3, 115200 baud (Renode, TCP port 3456)
+    routes: src/platform/stm32h7/main.c
+    tcs: [17/1, 20/1, 20/3]
+  - id: zynqmp
+    short: ZynqMP
+    name: obsw_zynqmp (ZynqMP Cortex-A53, bare metal)
+    tier: 3
+    transport: Cadence UART (Renode socket)
+    routes: src/platform/zynqmp/main.c
+    tcs: [8/1, 17/1]
+  - id: msp430
+    short: MSP430
+    name: obsw_msp430 (MSP430FR5969)
+    tier: 2
+    transport: UCA0 UART, 9600 baud, length-prefixed packets (not wire protocol v4)
+    routes: targets/msp430-fr5969/main.c
+    tcs: [3/5, 3/6, 8/1, 17/1]
+
+features:
+  - name: TC and TM round trip (TC(17,1) ping)
+    cells:
+      host-sim: {status: supported, evidence: [ci],
+                 ref: "test/system/test_sim_wire.py::test_ping_reports_arrive_in_order_before_end_of_tick"}
+      aarch64-sim: {status: supported, evidence: [ci],
+                    ref: "test/system/test_sim_wire.py::test_ping_reports_arrive_in_order_before_end_of_tick"}
+      stm32h7-freertos: {status: supported, evidence: [renode, bench], ref: renode/test_ping_stm32h7.py}
+      stm32h7-superloop: {status: supported, evidence: [renode], ref: renode/test_ping_stm32h7.py}
+      zynqmp: {status: supported, evidence: [renode], ref: renode/test_ping_zynqmp.py,
+               note: "The script prints the result but always exits 0, so it cannot fail a run."}
+      msp430: {status: supported, evidence: [bench], note: "LaunchPad over UART; no test script."}
+
+  - name: Closed-loop AOCS from sensor frames (actuator frame out)
+    cells:
+      host-sim: {status: supported, evidence: [ci],
+                 ref: "test/system/test_sim_wire.py::test_each_sensor_frame_gives_actuator_frame_and_end_of_tick"}
+      aarch64-sim: {status: supported, evidence: [ci],
+                    ref: "test/system/test_sim_wire.py::test_each_sensor_frame_gives_actuator_frame_and_end_of_tick"}
+      stm32h7-freertos: {status: "no", evidence: [none],
+                         note: "Sensor frames are dropped and no actuator frame is sent; AOCS reads the QMC5883L magnetometer only (#54)."}
+      stm32h7-superloop: {status: "no", evidence: [none],
+                          note: "Takes only sim_time from a sensor frame; no AOCS."}
+      zynqmp: {status: partial, evidence: [renode], ref: renode/test_nominal_aocs_zynqmp.py,
+               note: "Steps 4 and 5 (actuator frame received) fail; thermal fields are ignored."}
+      msp430: {status: "no", evidence: [none], note: "No AOCS and no sensor frames."}
+
+  - name: Thermal input (obc_temperature_raw, wire protocol v4)
+    cells:
+      host-sim: {status: supported, evidence: [ci],
+                 ref: "test/system/test_sim_wire.py::test_valid_thermal_input_drives_obc_temperature"}
+      aarch64-sim: {status: supported, evidence: [ci],
+                    ref: "test/system/test_sim_wire.py::test_valid_thermal_input_drives_obc_temperature"}
+      stm32h7-freertos: {status: "no", evidence: [none]}
+      stm32h7-superloop: {status: "no", evidence: [none]}
+      zynqmp: {status: "no", evidence: [none]}
+      msp430: {status: "no", evidence: [none]}
+
+  - name: Mode machine with the SAFE/STANDBY TC whitelist
+    cells:
+      host-sim: {status: supported, evidence: [ci],
+                 ref: "test/system/test_sim_wire.py::test_safe_rejects_non_whitelisted_tc_until_nominal"}
+      aarch64-sim: {status: supported, evidence: [ci],
+                    ref: "test/system/test_sim_wire.py::test_safe_rejects_non_whitelisted_tc_until_nominal"}
+      stm32h7-freertos: {status: supported, evidence: [renode], ref: renode/test_leop_stm32h7.py,
+                         note: "Shows STANDBY to SAFE on the LEOP timer."}
+      stm32h7-superloop: {status: "no", evidence: [none], note: "No mode machine; every routed TC runs."}
+      zynqmp: {status: supported, evidence: [renode], ref: renode/test_nominal_aocs_zynqmp.py,
+               note: "Steps 2 and 3: STANDBY to SAFE to NOMINAL by TC(8,1)."}
+      msp430: {status: supported, evidence: [none]}
+
+  - name: On-board time in every TM packet (OBSW-SRS-153)
+    cells:
+      host-sim: {status: supported, evidence: [ci],
+                 ref: "test/system/test_sim_wire.py::test_every_tm_packet_carries_onboard_time"}
+      aarch64-sim: {status: supported, evidence: [ci],
+                    ref: "test/system/test_sim_wire.py::test_every_tm_packet_carries_onboard_time"}
+      stm32h7-freertos: {status: supported, evidence: [none], note: "Checked by inspection only."}
+      stm32h7-superloop: {status: "no", evidence: [none], note: "Time field is zero."}
+      zynqmp: {status: "no", evidence: [none], note: "Time field is zero."}
+      msp430: {status: "no", evidence: [none], note: "Time field is zero."}
+
+  - name: Mode transition events 0x0002, 0x0004, 0x0005 (OBSW-SRS-190)
+    cells:
+      host-sim: {status: supported, evidence: [ci],
+                 ref: "test/system/test_sim_wire.py::test_each_mode_transition_is_reported_once_with_the_tc_that_caused_it"}
+      aarch64-sim: {status: supported, evidence: [ci],
+                    ref: "test/system/test_sim_wire.py::test_each_mode_transition_is_reported_once_with_the_tc_that_caused_it"}
+      stm32h7-freertos: {status: supported, evidence: [none], note: "No target test."}
+      stm32h7-superloop: {status: "no", evidence: [none]}
+      zynqmp: {status: "no", evidence: [none]}
+      msp430: {status: "no", evidence: [none]}
+
+  - name: S12 limit violation commands SAFE
+    cells:
+      host-sim: {status: supported, evidence: [ci],
+                 ref: "test/system/test_sim_wire.py::test_s12_high_event_on_safe_trigger_list_commands_safe"}
+      aarch64-sim: {status: supported, evidence: [ci],
+                    ref: "test/system/test_sim_wire.py::test_s12_high_event_on_safe_trigger_list_commands_safe"}
+      stm32h7-freertos: {status: supported, evidence: [renode], ref: renode/test_s12_safe_stm32h7.py,
+                         note: "Monitors bdot_gain (0x20A0), not temperature."}
+      stm32h7-superloop: {status: "no", evidence: [none]}
+      zynqmp: {status: "no", evidence: [none]}
+      msp430: {status: "no", evidence: [none]}
+
+  - name: S3 housekeeping at commanded intervals
+    cells:
+      host-sim: {status: supported, evidence: [ci],
+                 ref: "test/system/test_sim_wire.py::test_defined_hk_set_reports_live_parameters_once_enabled"}
+      aarch64-sim: {status: supported, evidence: [ci],
+                    ref: "test/system/test_sim_wire.py::test_defined_hk_set_reports_live_parameters_once_enabled"}
+      stm32h7-freertos: {status: supported, evidence: [renode], ref: renode/test_hk_interval_stm32h7.py}
+      stm32h7-superloop: {status: "no", evidence: [none]}
+      zynqmp: {status: "no", evidence: [none]}
+      msp430: {status: supported, evidence: [none], note: "TC(3,5) and TC(3,6) only; no test."}
+
+  - name: Watchdog expiry event (0x0010)
+    cells:
+      host-sim: {status: "no", evidence: [none], note: "The sim kicks the watchdog every tick and never ticks it down."}
+      aarch64-sim: {status: "no", evidence: [none], note: "Same code as the host sim."}
+      stm32h7-freertos: {status: unknown, evidence: [none]}
+      stm32h7-superloop: {status: unknown, evidence: [none]}
+      zynqmp: {status: unknown, evidence: [none]}
+      msp430: {status: unknown, evidence: [none]}

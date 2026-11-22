@@ -203,7 +203,7 @@ parameters:
 
   - id: 0x20A3
     name: bdot_hpf_tau
-    description: "B-dot HPF time constant τ [s] — first-order high-pass filter that rejects orbital-rate dB/dt while passing attitude-rate dB/dt. Set to 0 to disable. Typical: 15 s (bench-validated for 550 km SSO, issue #70)."
+    description: "B-dot HPF time constant τ [s]: first-order high-pass filter that rejects orbital-rate dB/dt while passing attitude-rate dB/dt. Set to 0 to disable. Typical: 15 s (bench-validated for 550 km SSO, issue #70)."
     type: float32
     ptc: 5
     pfc: 1
@@ -358,7 +358,7 @@ parameters:
 
   - id: 0x20C0
     name: bdot_mag_x
-    description: "Magnetometer reading X — body frame, raw QMC5883L output"
+    description: "Magnetometer reading X, body frame, raw QMC5883L output"
     type: float32
     ptc: 5
     pfc: 1
@@ -367,7 +367,7 @@ parameters:
 
   - id: 0x20C1
     name: bdot_mag_y
-    description: "Magnetometer reading Y — body frame, raw QMC5883L output"
+    description: "Magnetometer reading Y, body frame, raw QMC5883L output"
     type: float32
     ptc: 5
     pfc: 1
@@ -376,7 +376,7 @@ parameters:
 
   - id: 0x20C2
     name: bdot_mag_z
-    description: "Magnetometer reading Z — body frame, raw QMC5883L output"
+    description: "Magnetometer reading Z, body frame, raw QMC5883L output"
     type: float32
     ptc: 5
     pfc: 1
@@ -412,7 +412,7 @@ parameters:
 
   - id: 0x20C6
     name: bdot_mag_valid
-    description: "Magnetometer validity flag — 1 if QMC5883L init succeeded and last read returned data"
+    description: "Magnetometer validity flag: 1 if QMC5883L init succeeded and last read returned data"
     type: uint8
     ptc: 1
     pfc: 8

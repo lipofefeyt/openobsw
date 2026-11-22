@@ -12,13 +12,17 @@ theme:
     - navigation.tabs
     - navigation.sections
     - navigation.top
+    - navigation.indexes
     - content.code.copy
     - search.highlight
 
-# Kept in the repo, not published (decision Q4, 2026-11-21).
+# Not published: hardware.md (decision Q4, 2026-11-21), source files of the
+# docs, and docs/_gen/ (tables from tools/gen_docs.py, included by snippets).
 exclude_docs: |
   hardware.md
   requirements.txt
+  targets.yaml
+  _gen/
 
 # Every warning fails `mkdocs build --strict`. A page that is neither in the
 # nav nor excluded above is a warning too, so no page is published by accident.
@@ -57,7 +61,16 @@ nav:
       - FreeRTOS (STM32H7): freertos-architecture.md
       - "B-dot high-pass filter (#70)": issue-70-opensvf-kde-handoff.md
   - Reference:
+      - Targets: targets.md
+      - Wire protocol (ICD): icd.md
+      - SRDB:
+          - srdb/index.md
+          - Parameters: srdb/parameters.md
+          - Events: srdb/events.md
+          - Telecommands: srdb/telecommands.md
+          - Housekeeping sets: srdb/hk-sets.md
       - Requirements (SRS): SRS.md
+      - Traceability: traceability.md
       - Mission configuration: mission-config.md
       - MISRA deviations: misra-deviations.md
   - Known limits: known-limits.md

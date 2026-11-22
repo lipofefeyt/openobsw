@@ -50,7 +50,7 @@ events:
   - id: 0x0010
     name: watchdog_expiry
     severity: HIGH
-    description: "Software watchdog expired — no kick received within timeout"
+    description: "Software watchdog expired: no kick received within timeout"
     safe_trigger: true
 
   # ---- Power faults ------------------------------------------------------
@@ -88,7 +88,7 @@ events:
   - id: 0x0040
     name: hk_store_full
     severity: LOW
-    description: "TM store full — HK packet dropped"
+    description: "TM store full: HK packet dropped"
     safe_trigger: false
 
   # ---- Thermal -----------------------------------------------------------
