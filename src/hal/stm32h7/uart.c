@@ -4,7 +4,8 @@
  *
  * WeAct STM32H750 board exposes USART3 on the USB-C debug pins.
  * Baud rate: 115200, 8N1, no flow control.
- * Clock: assumes SYSCLK = 480MHz, APB1 = 120MHz → BRR = 120000000/115200.
+ * Clock: USART3 runs from HSI 64 MHz (reset default; the 480 MHz PLL init
+ * is disabled, #72), so BRR = 64000000 / 115200 = 556.
  *
  * Register-level only — no HAL library dependency.
  *
