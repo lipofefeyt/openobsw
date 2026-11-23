@@ -4,6 +4,75 @@ All notable changes to openobsw. Versions follow the release trains in the
 README roadmap. Releases before v0.16 are described on the
 [GitHub releases page](https://github.com/lipofefeyt/openobsw/releases).
 
+## [v0.20] - Documentation
+
+The documentation release: a versioned site on Read the Docs,
+[openobsw.readthedocs.io](https://openobsw.readthedocs.io/), whose reference
+pages are generated from the sources and checked in CI. No change to the
+flight code, the wire protocol (still v4) or the SRDB content; opensvf
+needs no change to move its pin to this tag.
+
+### Added
+
+- **Documentation site** (#135): mkdocs-material on Read the Docs, one
+  version per release tag from v0.20, plus `latest` for `main`. Sections:
+  Getting started, Concepts, Reference, Known limits, Releases. Toolchain
+  pinned in `docs/requirements.txt` (mkdocs 1.6.1, Material 9.8.2), no
+  mkdocs plugins.
+- **Generated reference pages** (#136), written by `tools/gen_docs.py`
+  before each build:
+  - Wire protocol (ICD) from `sim/sensor_inject.h`, including the behaviour
+    of each target (reply order, limits, what it ignores) and the MSP430's
+    own framing;
+  - SRDB parameters, events, telecommands and HK sets from `srdb/data/`;
+  - requirements traceability from `docs/SRS.md` and the tests;
+  - Targets: support tier per target, features with the kind of evidence
+    (CI, local Renode, bench, none) and the test that shows each, and the
+    routed TCs, from the hand-kept `docs/targets.yaml`.
+- **Known limits page** (#138): what this release does not do or has not
+  shown, per target, with its issue.
+- **CI checks** (`docs` job, on every PR): strict mkdocs build, external link
+  check (lychee), and `gen_docs.py`, which fails when
+  `contrib/svf_protocol/obsw_svf_protocol.h`, `renode/proto.py` or
+  `sim/wire_proto.py` disagree with `sim/sensor_inject.h`, when a target's
+  TC list in `docs/targets.yaml` differs from its route table, or when a
+  test it cites does not exist.
+- **CI jobs** `aarch64-sim` (cross-build, ctest and `test/system` under
+  `qemu-aarch64`) and `build-stm32h7-freertos` (the FreeRTOS image; the
+  existing STM32H7 job builds the superloop).
+- Renode test `renode/test_hk_interval_stm32h7.py`: S3 housekeeping
+  intervals on the STM32H7 FreeRTOS build, measured from TM time (#51).
+- SRDB test pinning TC APID `0x010` and TM source APID `0x103` (#140).
+
+### Changed
+
+- `srdb/data/spacecraft.yaml`: `apid_default` (0x103) is documented as the
+  TM source APID, not a TC address; every TC stays on `0x010`, and routes
+  keep the `0xFFFF` wildcard (#140).
+- README, `architecture.md`, `freertos-architecture.md` and
+  `integration-guide.md`: stale facts corrected (layer model without
+  transfer frames, five FreeRTOS tasks, FDIR timing, B-dot high-pass
+  filter, STM32H7 clock, MSP430 UART, targets by tier); OpenSVF setup now
+  links OpenSVF's own docs.
+- `sim/sensor_inject.h`: per-field comments with units (comments only).
+- SRDB descriptions: em-dashes replaced (text only).
+- `cmake/aarch64-linux-gnu.cmake` also finds `aarch64-linux-gnu-gcc`.
+- Roadmap: v0.20 is Documentation; the Hardware loop train moves to v0.21.
+
+### Fixed
+
+- `renode/test_ping_stm32h7.py` parses through a leading end-of-tick byte
+  and fails when TM(1,1), TM(17,2) or TM(1,7) is missing; it passed with 0
+  packets before (#114). TCs confirmed on both STM32H7 images in Renode
+  (#106).
+- Comments in `tc/dispatcher.h` (input is a space packet) and
+  `hal/stm32h7/uart.c` (USART3 on HSI 64 MHz, BRR 556).
+
+### Known limits
+
+See the [Known limits](https://openobsw.readthedocs.io/en/v0.20/known-limits/)
+page of this release. New issues from the documentation work: #147 to #153.
+
 ## [v0.19] — Recovery evidence
 
 ### Added
