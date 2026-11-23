@@ -1,16 +1,16 @@
-# openobsw — Architecture
+# Architecture
 
 ## Overview
 
-openobsw is a C11 TT&C middleware stack for satellite on-board software.
-It implements the uplink (TC) and downlink (TM) data paths defined by the
-CCSDS and ECSS PUS-C standards, from raw frame bytes down to application
-command handlers — with no dynamic allocation, no global state, and a clean
-HAL boundary between the protocol stack and platform I/O.
+OpenOBSW is a C11 on-board software stack built on CCSDS space packets and
+ECSS PUS-C services. It has no dynamic allocation, no global state in the
+core library, and a HAL boundary between the protocol stack and platform I/O.
 
-It is designed to be the reference OBSW target for
-[OpenSVF](https://github.com/lipofefeyt/opensvf), enabling closed-loop
-system validation against equipment models.
+It is the reference OBSW for [OpenSVF](https://opensvf.readthedocs.io/),
+which validates it closed loop against equipment and dynamics models.
+
+What each target builds in is on the [Targets](targets.md) page; the bytes on
+the wire are on the [Wire protocol](icd.md) page.
 
 ---
 
@@ -19,108 +19,78 @@ system validation against equipment models.
 **Zero dynamic allocation.** All state is caller-owned. No `malloc`, no heap
 use anywhere inside the library. Routing tables, ring buffers and dispatcher
 contexts are statically allocated by the application and passed in at init.
+CI checks the built library for allocator symbols (OBSW-SRS-001).
 
 **No global state.** Every function takes an explicit context pointer.
-Multiple dispatcher instances can coexist safely; there is no shared mutable
-state between them.
+Multiple dispatcher instances can coexist; there is no shared mutable state
+between them. CI checks the built library for writable data symbols
+(OBSW-SRS-002).
 
-**Portable C11.** No compiler extensions, no POSIX dependencies in the core
-library. Compiles cleanly under `-Wall -Wextra -Wpedantic` with zero warnings.
+**Portable C11.** No POSIX dependencies in the core library. It compiles
+under `-Wall -Wextra -Wpedantic` with zero warnings, and CI builds with
+`-Werror`.
 
-**HAL-isolated.** The core stack never calls platform I/O directly.
-All I/O goes through `obsw_io_ops_t`, a vtable of function pointers.
-Platform ports implement this once; the rest of the stack is untouched.
+**HAL-isolated.** The core stack never calls platform I/O directly. All I/O
+goes through `obsw_io_ops_t`, a vtable of function pointers. Platform ports
+implement it once; the rest of the stack is untouched.
 
-**Validation-first.** Every module ships with a unit test suite.
-An integration test exercises the full uplink/downlink path end-to-end.
+**Validation-first.** Every module has a unit test suite, an integration test
+runs the uplink and downlink path end to end, and system tests drive the host
+simulator over the wire protocol.
 
 ---
 
 ## Layer model
 
-```
- ┌─────────────────────────────────────────────────────────┐
- │               Mode Manager  (task/mode.h)                │
- │    FSM owner: STANDBY → SAFE → NOMINAL transitions       │
- │    STANDBY→SAFE after N s without ground contact (LEOP)  │
- └────────────────────────┬────────────────────────────────┘
-                          │  mode transitions
- ┌────────────────────────▼────────────────────────────────┐
- │                   FDIR  (task/fdir.h)                    │
- │    Fault responder: IWDG kick · S5 HIGH → to_safe()     │
- │    LCD status bar                                        │
- └────────────────────────┬────────────────────────────────┘
-                          │  fault triggers / safe requests
- ┌────────────────────────▼────────────────────────────────┐
- │              PUS-C Services                              │
- │    S1 · S3 · S5 · S6 (memory) · S8 (functions) · S17   │
- └────────────────────────┬────────────────────────────────┘
-                          │  obsw_tc_t (parsed command)
- ┌────────────────────────▼────────────────────────────────┐
- │              TC Dispatcher  (tc/dispatcher.h)            │
- │   static routing table: APID / service / subservice      │
- │   → obsw_fsm_tc_allowed() check in SAFE mode             │
- └────────────────────────┬────────────────────────────────┘
-                          │  raw space packet bytes
- ┌────────────────────────▼────────────────────────────────┐
- │           Space Packet layer  (ccsds/space_packet.h)     │
- │   primary header encode / decode / parse                 │
- └────────────────────────┬────────────────────────────────┘
-                          │  TC frame data field
- ┌────────────────────────▼────────────────────────────────┐
- │           TC Frame layer  (ccsds/tc_frame.h)             │
- │   primary header decode, CRC-16/CCITT validation         │
- └────────────────────────┬────────────────────────────────┘
-                          │  raw bytes from uplink channel
- ┌────────────────────────▼────────────────────────────────┐
- │               HAL I/O  (hal/io.h)                        │
- │   obsw_io_ops_t vtable: read() / write() / ctx           │
- └─────────────────────────────────────────────────────────┘
-```
-
-The downlink path mirrors this in reverse:
+Every target feeds whole TC space packets to the dispatcher and sends whole
+TM space packets. The CCSDS transfer frame layers (`ccsds/tc_frame`,
+`ccsds/tm_frame`) are library code with unit tests; no target uses them yet.
 
 ```
- Application / PUS handler
-         │  enqueue TM packet
-         ▼
- TM Store  (tm/store.h)
-         │  dequeue TM packet
-         ▼
- TM Frame builder  (ccsds/tm_frame.h)
-         │  raw frame bytes
-         ▼
- HAL I/O write()
+ Raw bytes from the UART, pipe or socket
+        │  target main loop: wire protocol framing (sim/, src/task/tmtc.c, src/platform/*)
+        ▼
+ Space Packet layer   ccsds/space_packet.h   primary header decode, zero-copy
+        ▼
+ TC Dispatcher        tc/dispatcher.h        gate (mode whitelist), then route on APID/service/subservice
+        ▼
+ PUS-C services       pus/s1 s3 s5 s6 s8 s9 s11 s12 s17 s19 s20
+        │
+        ├── mode requests ──▶ Mode Manager / FSM   fdir/fsm.h, task/mode.h
+        └── TM packets   ──▶ TM store             tm/store.h ──▶ target main loop ──▶ HAL write
 ```
+
+The FreeRTOS image on STM32H7 splits this across tasks; see
+[FreeRTOS](freertos-architecture.md).
 
 ---
 
 ## Module reference
 
-### `ccsds/space_packet` — CCSDS 133.0-B
+### `ccsds/space_packet`: CCSDS 133.0-B
 
-The fundamental unit of the CCSDS stack. Every TC command and TM telemetry
-packet is a space packet.
+The unit of the stack: every TC and TM is a space packet.
 
 Key types: `obsw_sp_primary_hdr_t`, `obsw_sp_packet_t`
 
 Key functions:
-- `obsw_sp_encode_primary()` — serialise primary header to 6 bytes
-- `obsw_sp_decode_primary()` — deserialise 6 bytes into header struct
-- `obsw_sp_parse()` — decode header + set payload pointer (zero-copy)
 
----
+- `obsw_sp_encode_primary()`: serialise the primary header to 6 bytes
+- `obsw_sp_decode_primary()`: deserialise 6 bytes into the header struct
+- `obsw_sp_parse()`: decode the header and set the payload pointer (zero-copy)
 
-### `ccsds/tc_frame` — CCSDS 232.0-B
+### `ccsds/tc_frame`: CCSDS 232.0-B (library only)
 
-Decodes TC Transfer Frames received from the uplink channel.
-Validates the CRC-16/CCITT FECF before exposing the data field.
+Decodes TC transfer frames and validates the CRC-16/CCITT FECF before
+exposing the data field. No target calls it yet.
 
 Key types: `obsw_tc_frame_header_t`, `obsw_tc_frame_t`
 
 Key functions:
-- `obsw_tc_frame_decode()` — parse header, validate CRC, set data pointer
-- `obsw_crc16_ccitt()` — poly 0x1021, init 0xFFFF; also used by TM frame
+
+- `obsw_tc_frame_decode()`: parse the header, validate the CRC, set the data pointer
+- `obsw_crc16_ccitt()`: poly 0x1021, init 0xFFFF; the one CRC implementation,
+  also used by S6 memory check and the TM frame builder
 
 Primary header fields decoded:
 
@@ -129,25 +99,18 @@ Primary header fields decoded:
 | version | 2 | Always 0b00 |
 | bypass_flag | 1 | Type-A/B service |
 | ctrl_cmd_flag | 1 | Control command |
-| spacecraft_id | 10 | SCID — 10-bit value, unique per spacecraft, assigned by mission authority. Must match across TC frame decoder and TM frame builder. Mission-dependent — see [docs/mission-config.md](mission-config.md). |
+| spacecraft_id | 10 | SCID, assigned per spacecraft; must match the TM frame builder. See [Mission configuration](mission-config.md) |
 | virtual_channel_id | 6 | VCID |
-| frame_len | 10 | Total frame octets - 1 |
+| frame_len | 10 | Total frame octets minus 1 |
 | frame_seq_num | 8 | Wraps at 255 |
 
----
+### `ccsds/tm_frame`: CCSDS 132.0-B (library only)
 
-### `ccsds/tm_frame` — CCSDS 132.0-B
+Builds TM transfer frames: packs TM space packets into the data field, fills
+unused space with idle packets (CCSDS 133.0-B §4.3) and optionally appends the
+CRC-16/CCITT FECF. No target calls it yet.
 
-Builds TM Transfer Frames for downlink. Packs TM space packets into the
-data field zone; fills unused space with idle packets per CCSDS 133.0-B §4.3.
-Optionally appends CRC-16/CCITT FECF.
-
-Key types: `obsw_tm_frame_config_t`
-
-Key functions:
-- `obsw_tm_frame_build()` — encode header, embed payload, fill idle, append CRC
-
-Configuration is per virtual channel and typically constant for a mission:
+Key types: `obsw_tm_frame_config_t`; key function: `obsw_tm_frame_build()`.
 
 ```c
 obsw_tm_frame_config_t cfg = {
@@ -160,13 +123,10 @@ obsw_tm_frame_config_t cfg = {
 };
 ```
 
----
+### `pus/s6`: memory management
 
-### `pus/s6` — PUS-C S6 Memory Management
-
-Provides ground-commanded memory load, check and dump. All operations
-work on raw memory addresses encoded as 4-byte BE fields (PUS-C standard,
-correct for 32-bit targets).
+Ground-commanded memory load, check and dump. Addresses are 4-byte
+big-endian fields.
 
 Key handlers: `obsw_s6_load()`, `obsw_s6_check()`, `obsw_s6_dump()`
 
@@ -176,42 +136,37 @@ Key handlers: `obsw_s6_load()`, `obsw_s6_check()`, `obsw_s6_dump()`
 | 5 | Check memory area (CRC-16/CCITT) | TM(6,10) match / TM(6,11) mismatch |
 | 9 | Dump memory area | TM(6,6) data packet |
 
-Reuses `obsw_crc16_ccitt()` from the TC frame layer — single CRC
-implementation across the whole stack.
+Accesses outside the region table, or without the region's READ/WRITE
+right, are rejected (fails closed).
 
----
+### `pus/s8`: function management
 
-### `pus/s8` — PUS-C S8 Function Management
-
-Executes named on-board functions by ID from a static caller-owned table.
-Replaces the earlier mission-defined `TC(128,1)` recovery command with a
-standards-compliant interface.
+Runs on-board functions by ID from a static, caller-owned table.
 
 Key handler: `obsw_s8_perform()`
 
 | Function ID | Constant | Effect |
 |---|---|---|
-| 1 | `OBSW_S8_FN_RECOVER_NOMINAL` | Request SAFE → NOMINAL via Mode Manager |
-| 2 | `OBSW_S8_FN_REQUEST_SAFE`    | Request any → SAFE via Mode Manager |
-| 3 | `OBSW_S8_FN_REQUEST_STANDBY` | Request any → STANDBY via Mode Manager |
+| 1 | `OBSW_S8_FN_RECOVER_NOMINAL` | Request SAFE to NOMINAL |
+| 2 | `OBSW_S8_FN_REQUEST_SAFE` | Request any mode to SAFE |
+| 3 | `OBSW_S8_FN_REQUEST_STANDBY` | Request any mode to STANDBY |
 
-Handlers call `obsw_mode_request_*()` — they do not touch the FSM directly,
-keeping the FSM ownership in the Mode Manager task.
+On FreeRTOS the handlers call `obsw_mode_request_*()` and do not touch the
+FSM; the Mode Manager task owns it. Additional function IDs are registered
+by the application in `obsw_s8_entry_t[]`.
 
-Additional function IDs are registered by the application in `obsw_s8_entry_t[]`.
+### `tc/dispatcher`: routing and gate
 
----
-
-### `tc/dispatcher` — ECSS PUS-C
-
-Routes incoming TC space packets to registered handlers via a static lookup
-table. First match wins. APID `0xFFFF` is a wildcard that matches any APID.
+Routes TC space packets to registered handlers through a static table. First
+match wins. APID `0xFFFF` is a wildcard that matches any APID; every target
+uses it, so a target accepts a TC on any APID (the SRDB addresses all TCs to
+`0x010`).
 
 ```c
 static obsw_tc_route_t routes[] = {
     { .apid = 0xFFFF, .service = 17, .subservice = 1,
       .handler = handle_s17_ping, .ctx = NULL },
-    { .apid = 0x010,  .service =  3, .subservice = 5,
+    { .apid = 0xFFFF, .service =  3, .subservice = 5,
       .handler = handle_s3_enable_hk, .ctx = &hk_ctx },
 };
 
@@ -232,80 +187,60 @@ int handle_s17_ping(const obsw_tc_t *tc,
 }
 ```
 
-An optional gate (`obsw_tc_dispatcher_set_gate()`) is asked first; every
-target installs `obsw_fsm_tc_gate` there. A TC refused by the gate, or
-matching no route, is passed to the responder with `OBSW_TC_ACK_REJECT` and
-a reason (`OBSW_TC_REJECT_GATED`, `_SVC` or `_SUBSVC`). Targets use
-`obsw_s1_dispatch_responder`, which reports it as TM(1,2) with code
-`0x0007`, `0x0002` or `0x0003`. The gate runs before route lookup, so in
-SAFE an unknown TC is reported as mode-gated.
+An optional gate (`obsw_tc_dispatcher_set_gate()`) is asked first. Every
+target with a mode machine installs `obsw_fsm_tc_gate` there; the STM32H7
+superloop has none. A TC refused by the gate, or matching no route, is passed
+to the responder with `OBSW_TC_ACK_REJECT` and a reason
+(`OBSW_TC_REJECT_GATED`, `_SVC` or `_SUBSVC`). Targets use
+`obsw_s1_dispatch_responder`, which reports it as TM(1,2) with code `0x0007`,
+`0x0002` or `0x0003`. The gate runs before route lookup, so in SAFE an
+unknown TC is reported as mode-gated.
 
----
+### `tm/store`: TM ring buffer
 
-### `tm/store` — TM ring buffer
+Fixed-size power-of-two ring buffer for outgoing TM packets. PUS services
+enqueue; the target main loop (or the FreeRTOS TMTC task) dequeues and sends.
+Sized at compile time with `OBSW_TM_STORE_SLOTS` (default 32) and
+`OBSW_TM_MAX_PACKET_LEN` (default 1024 bytes). It is not safe for concurrent
+writers; see [Known limits](known-limits.md#stm32h7-freertos).
 
-Fixed-size power-of-two ring buffer for outgoing TM packets.
-Telemetry sources enqueue; the TM frame builder dequeues.
-Size configured at compile time via `OBSW_TM_STORE_SLOTS` (default 32)
-and `OBSW_TM_MAX_PACKET_LEN` (default 1024 bytes).
-
----
-
-### `hal/io` — Platform I/O vtable
+### `hal/io`: platform I/O vtable
 
 ```c
 typedef struct {
-    int (*write)(const uint8_t *buf, size_t len, void *ctx);
-    int (*read) (uint8_t *buf, size_t len, void *ctx);
+    int (*write)(const uint8_t *buf, uint16_t len, void *ctx);
+    int (*read)(uint8_t *buf, uint16_t len, void *ctx);
     void *ctx;
 } obsw_io_ops_t;
 ```
 
+Lengths are `uint16_t`, not `size_t`, for 16-bit targets such as the MSP430.
+
 | Platform | Implementation |
 |---|---|
-| Host sim (current) | stdin / stdout |
-| Renode (v0.5) | Memory-mapped sentinel peripheral |
-| Bare metal | UART / SpaceWire driver |
+| Host sim | stdin / stdout |
+| STM32H7 | USART3 (`src/hal/stm32h7/uart.c`) |
+| ZynqMP | Cadence UART (`src/hal/zynqmp/uart.c`) |
+| MSP430 | eUSCI_A0 UART (`src/hal/msp430/uart.c`) |
 
----
-
-## Full data flow
-
-```mermaid
-flowchart TD
-    subgraph UPLINK ["Uplink  (ground → satellite)"]
-        A([CLTU / raw bytes]) --> B["HAL io.read()"]
-        B --> C["TC Transfer Frame\nobsw_tc_frame_decode()\nparse header · validate CRC-16"]
-        C --> D["Space Packet\nobsw_sp_parse()\ndecode primary header"]
-        D --> E["TC Dispatcher\nobsw_tc_dispatcher_feed()\nextract PUS svc/subsvc · route lookup"]
-        E --> F["Handler\nhandler(tc, responder, ctx)"]
-        F --> G["responder()\nACCEPT | COMPLETE or REJECT"]
-    end
-
-    subgraph DOWNLINK ["Downlink  (satellite → ground)"]
-        G --> H["TM Store\nobsw_tm_store_enqueue()"]
-        H --> I["TM Store\nobsw_tm_store_dequeue()"]
-        I --> J["TM Transfer Frame\nobsw_tm_frame_build()\npack packets · idle fill · FECF"]
-        J --> K["HAL io.write()"]
-        K --> L([downlink channel])
-    end
-```
+Under Renode the same UART drivers run against the emulated UART, which
+Renode exposes as a TCP socket.
 
 ---
 
 ## Mode Manager and FDIR
 
-### Three-state FSM — `fdir/fsm.h` + `task/mode.h`
+### Three-state FSM: `fdir/fsm.h` and `task/mode.h`
 
-The mode FSM has three states. All state is caller-owned; no globals.
-The Mode Manager task (`task/mode.h`) is the sole owner of the FSM instance.
+The mode FSM has three states. All state is caller-owned. On FreeRTOS the
+Mode Manager task (`task/mode.h`) is the only owner of the FSM instance.
 
 ```mermaid
 stateDiagram-v2
     [*] --> STANDBY : obsw_fsm_init()
     STANDBY --> SAFE : no ground contact for standby_safe_timeout (default 300 s)
     SAFE --> NOMINAL : obsw_mode_request_nominal() [TC(8,1) fid=1]
-    NOMINAL --> SAFE : obsw_mode_request_safe() [TC(8,1) fid=2 or S5 HIGH]
+    NOMINAL --> SAFE : obsw_mode_request_safe() [TC(8,1) fid=2, or a safe-trigger event]
     SAFE --> STANDBY : obsw_mode_request_standby() [TC(8,1) fid=3]
     NOMINAL --> STANDBY : obsw_mode_request_standby() [TC(8,1) fid=3]
 ```
@@ -314,32 +249,31 @@ stateDiagram-v2
 accepted, as in SAFE. LEOP autonomy (`fdir/standby_timer.h`,
 OBSW-SRS-187..189): if no ground contact arrives within
 `standby_safe_timeout` seconds (SRDB `0x0008`, default 300, `0` = at once)
-the Mode Manager commands SAFE so detumbling starts even when the first pass
-is missed. Any well-formed TC, accepted or rejected, restarts the
-countdown. On the STM32H7 the value is an S20 parameter read every second
-(TC(20,1) applies immediately, from SAFE/NOMINAL since STANDBY only allows
+the Mode Manager commands SAFE, so detumbling starts even when the first pass
+is missed. Any well-formed TC, accepted or rejected, restarts the countdown.
+On the STM32H7 the value is an S20 parameter read every second (TC(20,1)
+applies immediately, from SAFE or NOMINAL, since STANDBY only allows
 TC(20,3)); its initial value is the build option
-`OBSW_STANDBY_SAFE_TIMEOUT_S`, e.g. `-DOBSW_STANDBY_SAFE_TIMEOUT_S=30` for a
-bench demo. The host sim starts in SAFE and skips STANDBY.
+`OBSW_STANDBY_SAFE_TIMEOUT_S`, for example `-DOBSW_STANDBY_SAFE_TIMEOUT_S=30`
+for a bench demo. The host sim starts in SAFE and skips STANDBY.
 
-**SAFE** is the fault-containment mode. Only B-dot AOCS runs (magnetometer +
-magnetorquers). A subset of TCs is accepted per the dispatcher TC whitelist.
+**SAFE** is the fault-containment mode. Only B-dot runs (magnetometer and
+magnetorquers). Only whitelisted TCs are accepted.
 
-**NOMINAL** is the full-operations mode. PD quaternion AOCS runs with reaction
-wheels and star tracker.
+**NOMINAL** is the full-operations mode. PD quaternion control runs with the
+star tracker, gyro and reaction wheels.
 
-**Entry/exit hooks** are mission-defined function pointers registered in
-`obsw_fsm_config_t`. On entry to SAFE: switch to safe beacon. On exit to
-NOMINAL: re-enable nominal operations. Neither hook is mandatory.
+**Entry and exit hooks** are mission-defined function pointers in
+`obsw_fsm_config_t`, for example a safe beacon on entry to SAFE. Neither
+hook is mandatory.
 
-**TC whitelist** controls which commands are accepted in SAFE and STANDBY.
-All others are rejected with TM(1,2) code `0x0007`. The dispatcher gate
-(`obsw_fsm_tc_gate` → `obsw_fsm_tc_allowed()`) runs before routing on every
-target. The whitelist is `SRDB_SAFE_TC_WHITELIST`, generated from
-`safe_allowed: true` in `srdb/data/telecommands.yaml`: TC(17,1), (8,1),
-(9,128) and (20,3).
+**TC whitelist.** In SAFE and STANDBY every other TC is rejected with TM(1,2)
+code `0x0007`. The gate (`obsw_fsm_tc_gate`, then `obsw_fsm_tc_allowed()`)
+runs before routing. The whitelist is `SRDB_SAFE_TC_WHITELIST`, generated
+from `safe_allowed: true` in `srdb/data/telecommands.yaml`; see the
+[Telecommands](srdb/telecommands.md) page.
 
-**Mode Manager public API** (`include/obsw/task/mode.h`):
+**Mode Manager API** (`include/obsw/task/mode.h`, FreeRTOS):
 
 ```c
 void obsw_mode_task_init(obsw_tm_store_t *tm_store);
@@ -349,38 +283,39 @@ void obsw_mode_request_safe(void);      /* called by S8 fid=2 handler */
 void obsw_mode_request_standby(void);   /* called by S8 fid=3 handler */
 ```
 
-Request flags are `volatile bool` — single-byte atomic on single-core ARM,
-safe to set from any task or interrupt context. The Mode Manager task polls
-and acts on them each tick.
+Requests are `volatile bool` flags that the Mode Manager polls every second.
+Since #128 it applies them inside a critical section and reads the mode
+inside it, because FDIR (higher priority) can command SAFE directly through
+S12 monitoring.
 
-### FDIR task — `task/fdir.h`
+### FDIR task: `task/fdir.h` (FreeRTOS)
 
-FDIR is a **pure fault responder**. It does not own the FSM; it calls
-`obsw_mode_get_fsm()` to obtain a pointer to the Mode Manager's FSM when it
-needs to request SAFE mode in response to a fault.
+FDIR is a fault responder. It does not own the FSM; it reaches the Mode
+Manager's FSM through the S5 context when an event on the safe-trigger list
+is raised.
 
-Responsibilities:
-- IWDG hardware watchdog kick each tick (hardware deadline)
-- S5 HIGH event emission for temperature and power faults, which automatically
-  calls `obsw_fsm_to_safe()` via the `s5_ctx.fsm` coupling
-- LCD status bar update (STANDBY=yellow, SAFE=red, NOMINAL=green)
+- **200 ms sub-tick:** kicks the hardware IWDG.
+- **1 s full tick:** advances on-board time, runs the S12 limit checks
+  (`obsw_pus_s12_check()`, which raises the limit events and, for events on
+  the safe-trigger list, commands SAFE), ticks S3 housekeeping and redraws
+  the LCD dashboard.
 
-Only public API: `void obsw_fdir_task_init(obsw_tm_store_t *tm_store);`
+API: `obsw_fdir_task_init()`, `obsw_fdir_get_s3_ctx()` (the PUS task routes
+TC(3,x) to this context) and `obsw_fdir_set_reset_cause()` (reset cause for
+the dashboard).
 
----
+### Watchdog: `fdir/watchdog.h`
 
-### Watchdog — `fdir/watchdog.h`
-
-Software countdown watchdog. Zero dependencies on OS timers.
+Software countdown watchdog, with no dependency on OS timers.
 
 ```
 Control cycle:
-  obsw_wd_kick(&wd)    ← called by monitored task
-  obsw_wd_tick(&wd)    ← called once per cycle after all kicks
+  obsw_wd_kick(&wd)    called by the monitored task
+  obsw_wd_tick(&wd)    called once per cycle after all kicks
 
   If kicked:  countdown reloaded to timeout_ticks
   If not:     countdown decrements
-  At zero:    expire_cb() fired once (latched — no repeat)
+  At zero:    expire_cb() fired once (latched, no repeat)
 ```
 
 Typical wiring to the FSM:
@@ -395,13 +330,14 @@ static void on_wd_expiry(void *ctx)
 obsw_wd_init(&wd, 10, on_wd_expiry, &fsm);
 ```
 
----
+The host sim kicks the watchdog every tick and never ticks it down, so it
+cannot raise `watchdog_expiry`; the MSP430 loop ticks it.
 
 ### S5 safe-trigger coupling
 
 `obsw_s5_ctx_t` carries an optional FSM pointer and a static list of
 `safe_trigger_ids`. If an `OBSW_S5_HIGH` report is emitted with a matching
-event ID, `obsw_fsm_to_safe()` is called automatically:
+event ID, `obsw_fsm_to_safe()` is called:
 
 ```c
 static const uint16_t ids[] = SRDB_SAFE_TRIGGER_IDS;   /* generated from events.yaml */
@@ -409,19 +345,19 @@ s5.fsm = (struct obsw_fsm_ctx *)&fsm;
 (void)obsw_s5_set_safe_triggers(&s5, ids, SRDB_SAFE_TRIGGER_COUNT);
 ```
 
-The host sim, the MSP430 target and the FreeRTOS FDIR task all load the
-generated list this way, so the events that command SAFE are the SRDB's
-`safe_trigger: true` events on every target. Each site also has a
-`_Static_assert` that the list fits `OBSW_S5_MAX_SAFE_TRIGGERS` (the MSP430
-build sets it to 4, exactly the current SRDB count).
+The host sim, the MSP430 target and the FreeRTOS tasks load the generated
+list this way, so the events that command SAFE are the SRDB's
+`safe_trigger: true` events (see [Events](srdb/events.md)). Each site has a
+`_Static_assert` that the list fits `OBSW_S5_MAX_SAFE_TRIGGERS`; the MSP430
+build sets it to 4, exactly the current SRDB count.
 
-If `fsm` is NULL, S5 behaves exactly as in v0.3 — no breaking change.
+With `fsm` NULL, S5 only reports.
 
 ### Event auxiliary data
 
 TM(5,x) application data is the event ID (2 bytes) followed by the event's
-auxiliary data, declared per event in `srdb/data/events.yaml`. The SRDB's
-limit events (`power_fault_3v3`, `power_fault_5v`, `temperature_soft_limit`,
+auxiliary data, declared per event in `srdb/data/events.yaml`. The limit
+events (`power_fault_3v3`, `power_fault_5v`, `temperature_soft_limit`,
 `temperature_hard_limit`) are raised by S12 monitoring, and S12 always sends
 the monitored value as one big-endian IEEE 754 float32, whatever the
 parameter's own type: `obc_temperature` raw 1300 arrives as `1300.0`. Their
@@ -431,299 +367,166 @@ task fail to compile if one of these differs from `OBSW_S12_EVENT_AUX_LEN`.
 An event ID bound through TC(12,3) that the SRDB defines with another layout
 is still sent with the float32 value.
 
----
-
-### FDIR event flow
+### FDIR event flow (FreeRTOS)
 
 ```mermaid
 flowchart TD
-    WD["IWDG kick (FDIR task)"]
-    S5HIGH["S5 HIGH event\n(temp / power fault)"]
-    TC81_1["TC(8,1) fid=2\nGround command → SAFE"]
-    TC81_2["TC(8,1) fid=1\nGround command → NOMINAL"]
+    WD["IWDG kick (FDIR, every 200 ms)"]
+    S12["S12 limit event on the safe-trigger list\n(FDIR full tick)"]
+    TC81_1["TC(8,1) fid=2\nground command to SAFE"]
+    TC81_2["TC(8,1) fid=1\nground command to NOMINAL"]
 
-    S5HIGH --> SAFERQ["obsw_mode_request_safe()\nor obsw_fsm_to_safe() via s5.fsm"]
-    TC81_1 --> SAFERQ
-    SAFERQ --> MM["Mode Manager task\napplies transition"]
+    S12 --> SAFE["obsw_fsm_to_safe() via s5.fsm"]
+    TC81_1 --> SAFERQ["obsw_mode_request_safe()"]
+    SAFERQ --> MM["Mode Manager task\napplies the transition"]
+    SAFE --> MM
     MM --> HOOK["on_enter_safe / on_exit_safe hook"]
-    MM --> TM["S5 event report TM(5,x)"]
+    MM --> TM["mode event TM(5,x)"]
 
     TC81_2 --> NOMRQ["obsw_mode_request_nominal()"]
     NOMRQ --> MM
 
-    WD --> IWDG["Hardware IWDG reloaded\n(prevents MCU reset)"]
+    WD --> IWDG["hardware IWDG reloaded\n(prevents MCU reset)"]
 ```
-
----
 
 ### Trap table stubs
 
-Platform-specific fault handlers live in `src/hal/arm/` and
-`src/hal/msp430/`. They are declared `__attribute__((weak))` — the
-application overrides them with strong definitions.
+Platform fault handlers are in `src/hal/arm/`. They are declared
+`__attribute__((weak))`; the application overrides them with strong
+definitions.
 
 Each handler must:
-1. Emit an `OBSW_S5_HIGH` event (if S5 context is available).
-2. Call `obsw_fsm_to_safe()`.
-3. Halt (`while(1)`) or trigger a hardware reset — mission policy.
 
-| Platform | File | Vectors covered |
+1. Emit an `OBSW_S5_HIGH` event (if an S5 context is available).
+2. Call `obsw_fsm_to_safe()`.
+3. Halt (`while(1)`) or trigger a hardware reset, as mission policy says.
+
+| Platform | File | Handlers |
 |---|---|---|
-| ARM Cortex-A (ZynqMP) | `src/hal/arm/trap_table.c` | Undefined instruction, data abort, prefetch abort, stack overflow |
-| MSP430 | `src/hal/msp430/trap_table.c` | WDT expiry, vacant vector, system NMI |
+| ARM Cortex-A (ZynqMP) | `src/hal/arm/trap_table_arm.c` | Undefined instruction, data abort, prefetch abort, stack overflow |
+| MSP430 | `src/hal/arm/trap_table_msp430.c` | WDT expiry, vacant vector, system NMI |
 
 ---
 
-## AOCS subsystem
+## AOCS
 
-Two control laws are implemented. The active law is determined by the Mode
-Manager FSM state; the host sim (`sim/main.c`) and bare-metal targets gate
-actuator output accordingly.
+The active control law follows the FSM mode. The host sim (`sim/main.c`),
+the ZynqMP loop and the FreeRTOS AOCS task gate it the same way.
 
-| FSM state | Control law | Sensors required | Actuators |
+| FSM mode | Control law | Sensors | Actuators |
 |---|---|---|---|
-| STANDBY | Off — zero actuator output | — | — |
+| STANDBY | off, zero output | | |
 | SAFE | B-dot (`aocs/bdot.c`) | Magnetometer | Magnetorquers |
-| NOMINAL | PD quaternion (`aocs/adcs.c`) | Star tracker + gyroscope | Reaction wheels |
-
-### B-dot controller — `aocs/bdot.h`
-
-Implements the classic B-dot detumbling law:
-
-```
-m_cmd = −k · dB/dt
-```
-
-`dB/dt` is estimated via first-order finite difference across successive
-magnetometer readings. On the first call the controller has no prior sample
-and outputs zero. Dipole commands are saturated at `config.max_dipole`.
-
-```c
-obsw_bdot_config_t cfg = { .gain = 1.0e4f, .max_dipole = 10.0f };
-obsw_bdot_init(&ctx, &cfg);
-obsw_bdot_step(&ctx, b_body, dt, &out);   /* out.m_cmd [Am²] */
-```
-
-The gain `k` is runtime-tunable via `SRDB_PARAM_BDOT_GAIN` (0x20A0).
-
-### PD ADCS controller — `aocs/adcs.h`
-
-Quaternion-error PD controller:
-
-```
-τ_cmd = −Kp · q_err_vec − Kd · ω
-```
-
-where `q_err_vec` is the vector part of the attitude error quaternion (body
-to reference frame) and `ω` is the angular velocity from the gyroscope.
-Torque commands are saturated at `config.max_torque`.
-
-```c
-obsw_adcs_config_t cfg = { .kp = 0.5f, .kd = 0.1f, .max_torque = 0.01f };
-obsw_adcs_init(&ctx, &cfg);
-obsw_adcs_step(&ctx, &q_meas, omega, &out);   /* out.torque_cmd [N·m] */
-```
-
-Gains `Kp` and `Kd` are runtime-tunable via `SRDB_PARAM_ADCS_KP` (0x20A1)
-and `SRDB_PARAM_ADCS_KD` (0x20A2).
-
-### Mode gating in the host sim
-
-The mode gate in `sim/main.c` uses `obsw_fsm_mode()` (three-state–aware):
+| NOMINAL | PD quaternion (`aocs/adcs.c`) | Star tracker and gyro | Reaction wheels |
 
 ```c
 obsw_fsm_mode_t mode = obsw_fsm_mode(&fsm_ctx);
 
 if (mode == OBSW_FSM_NOMINAL && sensor.st_valid && sensor.gyro_valid)
-    /* PD ADCS → reaction wheel torques */
+    /* PD control: reaction wheel torques */
 else if (mode == OBSW_FSM_SAFE && sensor.mag_valid)
-    /* B-dot → magnetorquer dipoles */
-/* else: STANDBY or no valid sensors → zero actuator output */
+    /* B-dot: magnetorquer dipoles */
+/* else: STANDBY or no valid sensors: zero actuator output */
 ```
+
+On the STM32H7 FreeRTOS image the AOCS task reads the QMC5883L
+magnetometer, not sensor frames; it has no star tracker or gyro, so NOMINAL
+never runs PD control there.
+
+### B-dot controller: `aocs/bdot.h`
+
+Detumbling law, magnetometer only:
+
+```
+m_cmd = -k * dB/dt
+```
+
+`dB/dt` is the finite difference of successive magnetometer readings, passed
+through a first-order washout high-pass filter that rejects the slow,
+orbit-induced change of the field (#70):
+
+```
+y[k] = a * (y[k-1] + x[k] - x[k-1]),   a = tau / (tau + dt)
+```
+
+`tau` is SRDB parameter `bdot_hpf_tau` (`0x20A3`, default 15 s, `0`
+disables the filter). The first step outputs zero (no prior sample), dipole
+commands are saturated at `config.max_dipole`, and `obsw_bdot_reset()`
+clears the state on mode re-entry. `obsw_bdot_step()` also returns the raw
+and the filtered dB/dt for diagnostics.
+
+```c
+obsw_bdot_config_t cfg = { .gain = 1.0e4f, .max_dipole = 10.0f, .hpf_tau = 15.0f };
+obsw_bdot_init(&ctx, &cfg);
+obsw_bdot_step(&ctx, b_body, dt, &out);   /* out.m_cmd [A m^2] */
+```
+
+### PD attitude controller: `aocs/adcs.h`
+
+Quaternion-error PD controller:
+
+```
+q_err = q_cmd ⊗ q_meas*            (multiplicative error)
+tau_cmd = -Kp * q_err_vec - Kd * w (PD law)
+```
+
+`q_err_vec` is the vector part of the error quaternion and `w` the gyro
+angular rate. The sign of `q_err` is flipped when its scalar part is negative
+(short path), torque is saturated at `config.max_torque`, and the step
+returns `false` if the measured quaternion has near-zero norm.
+
+### S20-tunable gains
+
+| SRDB parameter | ID | Default | Unit | Controller |
+|---|---|---|---|---|
+| `bdot_gain` | 0x20A0 | 1.0e4 | A m^2 s/T | B-dot |
+| `adcs_kp` | 0x20A1 | 0.5 | N m/rad | PD |
+| `adcs_kd` | 0x20A2 | 0.1 | N m s/rad | PD |
+| `bdot_hpf_tau` | 0x20A3 | 15 | s | B-dot filter |
+
+Ground updates them with TC(20,1). The host sim reads them from its S20 table
+before every control step; the FreeRTOS AOCS task reads them with
+`obsw_pus_s20_get_float()`. HK set 4 (`aocs_hk`) reports the gains; see
+[Housekeeping sets](srdb/hk-sets.md).
+
+Do not retune `bdot_gain` until the filter is validated on the opensvf-kde
+orbital environment ([Known limits](known-limits.md#aocs)).
 
 ---
 
-## Wire protocol v4 — host sim and opensvf-kde boundary
+## B-dot convergence harness: `sim/bdot_harness.py`
 
-The host sim speaks a simple length-prefixed frame protocol over stdin/stdout.
-The same protocol is used by any external harness (`sim/bdot_harness.py`,
-opensvf-kde) connecting to the sim as a co-process.
-
-### Frame format
-
-```
-→ OBSW  0x01 [uint16 BE len] [TC space packet bytes]    TC uplink
-→ OBSW  0x02 [uint16 BE len] [obsw_sensor_frame_t]      Sensor injection
-← OBSW  0x03 [uint16 BE len] [obsw_actuator_frame_t]    Actuator output
-← OBSW  0x04 [uint16 BE len] [TM space packet bytes]    TM downlink
-← OBSW  0xFF                                             End-of-tick
-```
-
-After each TC frame (0x01), the sim emits any resulting TM packets (0x04)
-then an EOT byte (0xFF). After each sensor frame (0x02), the sim emits any
-TM packets generated during the tick, the actuator frame (0x03), then EOT.
-
-### Sensor frame — `obsw_sensor_frame_t`
-
-50 bytes, packed little-endian. Python struct format: `<fffBffffBfffBfhB`.
-The host sim exits with status 2 on a sensor frame of any other length (v3
-senders send 47 bytes); the ZynqMP and STM32H7 superloop targets ignore it.
-
-| Field | Type | Unit | Notes |
-|---|---|---|---|
-| `mag_x / y / z` | float32 | T | Magnetometer, body frame |
-| `mag_valid` | uint8 | — | 1 = valid measurement |
-| `st_q_w / x / y / z` | float32 | — | Star tracker quaternion, body→ECI |
-| `st_valid` | uint8 | — | 1 = valid |
-| `gyro_x / y / z` | float32 | rad/s | Gyroscope, body frame |
-| `gyro_valid` | uint8 | — | 1 = valid |
-| `sim_time` | float32 | s | Simulation clock; used to compute dt |
-| `obc_temperature_raw` | int16 | raw | OBC temperature, SRDB encoding: degC = 0.1 * raw − 40 (v4) |
-| `thermal_valid` | uint8 | — | 1 = write `obc_temperature` (S20 0x0001) this tick, before S12 and HK; 0 = keep the last value (TC(20,1) still sets it) |
-
-### Actuator frame — `obsw_actuator_frame_t`
-
-29 bytes, packed little-endian. Python struct format: `<ffffffBf`.
-
-| Field | Type | Unit | Notes |
-|---|---|---|---|
-| `mtq_dipole_x / y / z` | float32 | Am² | Magnetorquer dipole commands |
-| `rw_torque_x / y / z` | float32 | N·m | Reaction wheel torque commands |
-| `controller` | uint8 | — | 0 = B-dot, 1 = PD ADCS |
-| `sim_time` | float32 | s | Echo of sensor frame sim_time |
-
----
-
-## B-dot convergence harness — `sim/bdot_harness.py`
-
-A closed-loop convergence test that exercises the full SAFE-mode control path
-without Renode. It drives `obsw_sim` as a subprocess via wire protocol v4.
+A closed-loop convergence test of the SAFE-mode control path that needs no
+Renode. It drives `obsw_sim` as a subprocess over the wire protocol.
 
 **Physics model:**
+
 - Circular SSO orbit at 550 km, inclination 97.4°
-- Geocentric dipole B-field: `B = (B₀Rₑ³/r³)(3(m̂·r̂)r̂ − m̂)`, m̂ = −ẑ
-- Rigid-body spacecraft dynamics: Euler equations `I·ω̇ = τ − ω × (I·ω)`
+- Geocentric dipole field: `B = (B0 Re^3 / r^3)(3 (m̂·r̂) r̂ - m̂)`, m̂ = -ẑ
+- Rigid-body dynamics: `I ω̇ = τ - ω × (I ω)`
 - Quaternion kinematics: `q̇ = ½ q ⊗ [0, ω]`, first-order integration
 
-**Convergence criterion:** |ω| < 0.05 rad/s within 3 orbital periods (~17 190 s)
+**Convergence criterion:** |ω| < 0.05 rad/s within 3 orbital periods.
 
-**Reference result:** detumbles from |ω|=0.866 rad/s in **2533 s (0.44 periods)**
+**Result on `main` at `6b45b46` (2026-11-23):** detumbles from |ω| = 0.866
+rad/s in 2774.6 s (0.48 orbital periods), with the default `bdot_hpf_tau`.
 
 ```bash
 source scripts/activate.sh
-python3 sim/bdot_harness.py               # default: 550km SSO, ω₀=[0.5,0.5,0.5] rad/s
+python3 sim/bdot_harness.py               # default: 550 km SSO, ω0 = [0.5, 0.5, 0.5] rad/s
 python3 sim/bdot_harness.py --max-periods 5 --omega0 1 1 1   # higher tumble
-bdot-harness                              # alias in activate.sh
 ```
-
-This harness is also the reference integration prototype for opensvf-kde
-(see [OpenSVF integration](#opensvf-integration-v012) below).
 
 ---
 
-## SRDB parameter map
+## OpenSVF boundary
 
-Parameters are addressed by a 16-bit ID. Ranges in use:
-
-| Range | Subsystem | Examples |
-|---|---|---|
-| `0x0001–0x000F` | OBC thermal & power | `obc_temperature`, `obc_voltage_3v3` |
-| `0x0004–0x0007` | OBC uptime & FDIR | `obc_uptime`, `watchdog_kick_count` |
-| `0x20A0–0x20A2` | AOCS gains (S20-tunable) | `bdot_gain`, `adcs_kp`, `adcs_kd` |
-| `0x3001–0x3032` | Orbit / dynamics config | `orbit_altitude_km`, `sc_inertia_xx`, `sc_omega_x0` |
-| `0x4001–0x400A` | DHS OBC HK (opensvf) | `obc_mode`, `obc_obt`, `obc_health` |
-
-S20 holds every parameter as a 32-bit slot. How a slot is read numerically
-(S12 limit checks) follows the parameter's SRDB type: `uint8/16/32` unsigned,
-`int8/16/32` signed, `float32` IEEE 754. The generated header carries this as
-`SRDB_PARAM_<NAME>_S20_TYPE`, and every S20 table takes its `.type` from that
-macro. `obc_temperature` (`0x0001`) is the one signed parameter: `int16` raw
-counts with `degC = 0.1 * raw - 40`, so 85 degC is raw 1250 and -45 degC is
-raw -50. TC(20,1) sets it as a big-endian `int32`; S12 limits on it are given
-in raw counts.
-
-HK sets in use:
-
-| id | Name | SPID | Contents |
-|---|---|---|---|
-| 1 | `nominal_hk` | 1001 | OBC thermal, power, uptime |
-| 2 | `fdir_hk` | 1002 | Safe-mode count, watchdog stats |
-| 3 | `dhs_obc_hk` | 1003 | Mode, OBT, watchdog, health (opensvf) |
-| 4 | `aocs_hk` | 1004 | B-dot / ADCS gains |
-| 5 | `aocs_orbit_hk` | 1005 | Orbit config, inertia, MTQ limits |
-
----
-
-## OpenSVF integration (v0.12)
-
-openobsw is the reference OBSW target for
-[OpenSVF](https://github.com/lipofefeyt/opensvf) and the companion
-**opensvf-kde** plant simulator.
-
-### Responsibilities
-
-| Component | Owns |
-|---|---|
-| openobsw | Control laws (B-dot, PD ADCS), PUS command interface, mode FSM |
-| opensvf-kde | Plant model (orbital mechanics, IGRF field, rigid-body dynamics) |
-
-The boundary is **wire protocol v4** — the sensor/actuator frame pair
-described in the section above. opensvf-kde runs as a co-process, injects
-sensor frames (0x02) each tick, and reads back actuator commands (0x03).
-
-### Integration diagram
-
-```mermaid
-flowchart LR
-    subgraph "opensvf-kde (Python)"
-        ORB[Orbital propagator\nSSO / J2] --> IGRF[IGRF B-field]
-        IGRF --> SF[Sensor frame\ntype 0x02]
-        AF[Actuator frame\ntype 0x03] --> DYN[Rigid-body dynamics\nEuler + quaternion]
-        DYN --> ORB
-    end
-    subgraph "openobsw (host sim)"
-        SF -->|stdin| SIM[obsw_sim\nwire protocol v4]
-        SIM -->|stdout| AF
-        SIM --> MODE[Mode Manager\nFSM gate]
-        MODE --> BDOT[B-dot / PD ADCS]
-        BDOT --> AF
-    end
-```
-
-### Spacecraft configuration contract
-
-opensvf-kde reads spacecraft parameters from the OBSW S20 store via TC(20,3)
-at startup. The OBSW holds authoritative defaults; the harness overrides if
-needed via TC(20,1).
-
-| SRDB ID | Parameter | Default |
-|---|---|---|
-| 0x3001 | `orbit_altitude_km` | 550.0 km |
-| 0x3002 | `orbit_inclination_deg` | 97.4° |
-| 0x3010 | `sc_inertia_xx` | 2.0×10⁻³ kg·m² |
-| 0x3011 | `sc_inertia_yy` | 2.5×10⁻³ kg·m² |
-| 0x3012 | `sc_inertia_zz` | 1.5×10⁻³ kg·m² |
-| 0x3020 | `mtq_max_dipole` | 10.0 Am² |
-| 0x3030–32 | `sc_omega_{x,y,z}0` | [0.5, 0.5, 0.5] rad/s |
-
-### Reference scenario — SAFE-mode detumbling
-
-Validated by `sim/bdot_harness.py` (see [B-dot harness](#b-dot-convergence-harness-simbdot_harnesspy)):
-
-- Initial tumble: |ω₀| = 0.866 rad/s
-- Converges to |ω| < 0.05 rad/s at **t = 2533 s (0.44 orbital periods)**
-- Limit: 3 orbital periods (17 190 s)
-
-### Roadmap to full opensvf-kde integration
-
-1. **Done (v0.12):** Wire protocol contract, SRDB spacecraft config params,
-   reference B-dot harness with SSO / dipole B-field
-2. **Next:** Read config from OBSW via TC(20,3) at harness startup rather
-   than CLI defaults
-3. **Then:** NOMINAL mode scenario — PD ADCS pointing convergence test
-   (inject star tracker + gyro, measure quaternion error)
-4. **Later:** J2 perturbation, eclipse model (B = 0 in umbra), Monte-Carlo
-   runs over initial tumble distribution
+OpenOBSW owns the control laws, the PUS interface and the mode machine.
+[OpenSVF](https://opensvf.readthedocs.io/) (Python) runs the validation
+campaigns and the equipment models; opensvf-kde (C++, FMI 2.0, not public
+yet) is the dynamics engine it can use. They meet at the
+[wire protocol](icd.md): OpenSVF sends a sensor frame each tick and reads
+back the actuator frame and TM.
 
 ---
 
@@ -741,24 +544,21 @@ Validated by `sim/bdot_harness.py` (see [B-dot harness](#b-dot-convergence-harne
 
 ## MSP430FR5969 target
 
-### Overview
-
-The MSP430FR5969 is the reference hardware target for openobsw. It serves
-as the **safe-mode OBC** in a dual-OBC topology — small enough to validate
-the complete stack on real hardware, constrained enough to prove the
-zero-allocation design holds under genuine memory pressure.
+The smallest target: it shows that the stack fits 2 KB of SRAM. It builds in
+CI on every PR and has been bench-tested once on a LaunchPad (TC/TM ping).
+The dual-OBC role once planned for it is parked (#29 to #31).
 
 | Resource | Value |
 |---|---|
 | Architecture | 16-bit RISC, MSP430 |
-| SRAM | 2 KB (0x2000–0x27FF) |
-| FRAM | 47 KB (0x4400–0xFF7F) |
+| SRAM | 2 KB (0x2000 to 0x27FF) |
+| FRAM | 47 KB (0x4400 to 0xFF7F) |
 | Toolchain | TI msp430-elf-gcc 9.3.1.11 |
 
-### MSP430 build profile
+### Build profile
 
-The standard build uses default sizing macros. The MSP430 profile overrides
-them at compile time to fit within 2KB SRAM:
+The MSP430 build overrides the default sizes to fit 2 KB of SRAM
+(`targets/msp430-fr5969/CMakeLists.txt`):
 
 | Parameter | Default | MSP430 profile |
 |---|---|---|
@@ -767,28 +567,23 @@ them at compile time to fit within 2KB SRAM:
 | `OBSW_TC_FRAME_MAX_LEN` | 1024 B | 128 B |
 | `OBSW_S5_MAX_SAFE_TRIGGERS` | 8 | 4 |
 
-TM store total: 4 × 64 = **256 bytes**.
+TM store total: 4 × 64 = 256 bytes.
 
-### HAL UART (USCI_A1)
+### UART
 
-`src/hal/msp430/uart.c` implements `obsw_io_ops_t` using USCI_A1 on
-P2.0/P2.1 — the backchannel UART on the FR5969 LaunchPad. The same
-interface is used by Renode's emulated UART peripheral, so no code changes
-are needed when switching between emulation and hardware.
+`src/hal/msp430/uart.c` implements `obsw_io_ops_t` on eUSCI_A0 (P2.0/P2.1),
+the LaunchPad backchannel UART, at 9600 baud. The MSP430 uses its own
+length-prefixed framing, not wire protocol v4; see
+[MSP430 framing](icd.md#msp430-framing).
 
-Note: `obsw_io_ops_t` uses `uint16_t` for buffer lengths (not `size_t`)
-for portability across 16-bit targets where `size_t` is `__int20 unsigned`.
-
-### Build outputs
+### Build outputs and cross-compilation
 
 ```
 build-msp430/
-  openobsw-msp430.elf   — ELF image for Renode and GDB debugging
-  openobsw-msp430.hex   — Intel HEX for mspdebug / UniFlash flashing
-  openobsw-msp430.map   — linker symbol map
+  openobsw-msp430.elf   ELF image for Renode and GDB
+  openobsw-msp430.hex   Intel HEX for mspdebug / UniFlash / MSPFlasher
+  openobsw-msp430.map   linker map
 ```
-
-### Cross-compilation
 
 ```bash
 cmake -B build-msp430 \
@@ -798,85 +593,72 @@ cmake -B build-msp430 \
 cmake --build build-msp430
 ```
 
-See [msp430-build.md](msp430-build.md) for toolchain installation.
-
-### VS Code IntelliSense
-
-The MSP430 build generates `build-msp430/compile_commands.json`. Point
-`c_cpp_properties.json` at it so IntelliSense resolves `srdb_generated.h`
-and MSP430 register names correctly. See the README for the configuration.
+See [MSP430 build](msp430-build.md) for the toolchain. The build writes
+`build-msp430/compile_commands.json`; `.vscode/c_cpp_properties.json` uses it
+for IntelliSense.
 
 ---
 
 ## STM32H750VBT6 target
 
-### Overview
+The WeAct STM32H750 board, Cortex-M7. Two images build from
+`targets/stm32h7`:
 
-The STM32H750VBT6 (WeAct board) is the **high-performance OBC** target —
-Cortex-M7 at 480 MHz, 128 KB internal flash, 512 KB AXI SRAM. It runs the
-same wire protocol v4 stack as the host sim and ZynqMP target.
+- **FreeRTOS** (`-DOBSW_FREERTOS=ON`): the full image, five tasks, LCD
+  dashboard, QMC5883L magnetometer. See [FreeRTOS](freertos-architecture.md).
+- **Superloop** (default, `OBSW_FREERTOS` OFF): a Renode smoke-test build
+  that routes TC(17,1), TC(20,1) and TC(20,3) only and runs no AOCS.
+
+Neither image is a closed-loop SIL target yet (#54).
 
 | Resource | Value |
 |---|---|
 | Architecture | ARM Cortex-M7, FPU |
-| SYSCLK | 480 MHz (HSE 25 MHz → PLL1) |
-| APB1 | 120 MHz |
+| SYSCLK | 64 MHz HSI (reset default; the 480 MHz PLL setup is disabled, #72) |
 | Flash | 128 KB @ 0x08000000 |
 | RAM | 512 KB AXI SRAM @ 0x20000000 |
 | Toolchain | arm-none-eabi-gcc 13.2 |
 
-### Clock configuration
+`system_clock_init()` only sets the flash latency for 64 MHz; it is compiled
+out with `OBSW_RENODE=ON`.
 
-`src/platform/stm32h7/main.c` configures the full PLL1 chain at boot:
-HSE 25 MHz → `/5` ref → PLL1 VCO 960 MHz → `/2` SYSCLK 480 MHz, APB1 120 MHz.
-`system_clock_init()` is compiled out when `OBSW_RENODE=ON` because the
-stub RCC peripheral in the Renode platform model cannot satisfy the HSERDY/PLLRDY
-spin-waits.
+### UART
 
-### HAL UART (USART3)
+`src/hal/stm32h7/uart.c` implements `obsw_io_ops_t` on USART3, PD8 (TX) and
+PD9 (RX), 115200 baud. BRR = 64 000 000 / 115 200 = 556.
 
-`src/hal/stm32h7/uart.c` implements `obsw_io_ops_t` using USART3 on PD8 (TX) /
-PD9 (RX), 115200 baud. BRR = 120 000 000 / 115 200 = **1041**.
-
-### Build outputs
-
-```
-build_stm32h7/          — real hardware (OBSW_RENODE=OFF, default)
-  obsw_stm32h7.elf      — ELF for GDB / OpenOCD
-  obsw_stm32h7.bin      — flat binary for OpenOCD program command
-
-build_stm32h7_renode/   — Renode emulation (OBSW_RENODE=ON)
-  obsw_stm32h7.elf      — ELF loaded by stm32h750_obsw.resc
-```
-
-### Cross-compilation
+### Build
 
 ```bash
-# Real hardware
+# FreeRTOS image for the board (alias: stm32h7-build)
 cmake -S targets/stm32h7 -B build_stm32h7 \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/stm32h7-toolchain.cmake \
-    -DOBSW_ROOT=$(pwd)
+    -DOBSW_ROOT=$(pwd) -DOBSW_FREERTOS=ON
 cmake --build build_stm32h7 -j$(nproc)
 
-# Renode emulation (skips PLL spin-waits)
+# Renode image: a separate build directory, which stm32h750_obsw.resc loads.
+# Add -DOBSW_FREERTOS=ON for the FreeRTOS image, leave it out for the superloop.
 cmake -S targets/stm32h7 -B build_stm32h7_renode \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/stm32h7-toolchain.cmake \
-    -DOBSW_ROOT=$(pwd) -DOBSW_RENODE=ON
+    -DOBSW_ROOT=$(pwd) -DOBSW_RENODE=ON -DOBSW_FREERTOS=ON
 cmake --build build_stm32h7_renode -j$(nproc)
 ```
+
+Outputs: `obsw_stm32h7.elf` (GDB, OpenOCD, Renode) and `obsw_stm32h7.bin`
+(OpenOCD `program`).
 
 ### Flashing
 
 ```bash
-# Via OpenOCD + ST-Link V2 (run from WSL2 if USB not passed through to container)
+# OpenOCD + ST-Link V2 (from WSL2 if USB is not passed through to the container)
 openocd -f interface/stlink.cfg -f target/stm32h7x.cfg \
     -c "program /absolute/path/to/build_stm32h7/obsw_stm32h7.bin 0x08000000 verify reset exit"
 ```
 
-Note: tilde (`~`) is not expanded inside the OpenOCD `-c` string — use the
-absolute path. The `stm32h7-flash` alias in `scripts/activate.sh` handles this.
+The tilde (`~`) is not expanded inside the OpenOCD `-c` string: use the
+absolute path. The `stm32h7-flash` alias in `scripts/activate.sh` does this.
 
 ### Renode emulation
 
@@ -886,118 +668,7 @@ python3 renode/test_ping_stm32h7.py # alias: renode-ping-stm32h7
 ```
 
 The platform model (`renode/stm32h750.repl`) wires USART3 to a TCP socket
-terminal on port 3456. UART output and wire-protocol v4 frames are exchanged
-over that socket. RCC and GPIOD are stub memories that absorb `obsw_uart_init()`
-register writes without faulting.
-
----
-
-## AOCS — Attitude and Orbit Control
-
-### Overview
-
-openobsw implements a three-mode-gated AOCS control law. The AOCS task reads
-the current FSM mode each tick from the Mode Manager and selects the
-appropriate algorithm — or idles if in STANDBY.
-
-```
-FSM mode    AOCS action       Sensors used          Actuators
-──────────────────────────────────────────────────────────────
-STANDBY     off (no-op)       —                     —
-SAFE        B-dot             Magnetometer          Magnetorquers
-NOMINAL     PD quaternion     Star tracker + Gyro   Reaction wheels
-```
-
-### B-dot controller (`aocs/bdot.c`)
-
-Classical detumbling algorithm for safe mode. Requires only a magnetometer
-— appropriate when the spacecraft may be tumbling and the star tracker is
-unavailable.
-
-```
-m_cmd = -k * dB/dt
-
-where:
-  m_cmd  = magnetorquer dipole command [A·m²]
-  k      = controller gain [A·m²·s/T]
-  dB/dt  ≈ (B_now - B_prev) / dt   (finite difference)
-```
-
-Key properties:
-- Zero-allocation, no trigonometry, suitable for MSP430
-- First step always outputs zero (no derivative available)
-- Dipole commands saturated at configurable `max_dipole`
-- `obsw_bdot_reset()` clears state on mode re-entry
-- Gain `k` is S20-tunable at runtime via SRDB parameter `bdot_gain` (ID `0x20A0`)
-
-### PD attitude controller (`aocs/adcs.c`)
-
-Quaternion-based PD controller for nominal mode. Uses multiplicative
-quaternion error to avoid gimbal lock and singularities.
-
-```
-q_err = q_cmd ⊗ q_meas*           (multiplicative error)
-τ_cmd = -Kp * q_err_vec - Kd * ω  (PD law)
-
-where:
-  q_err_vec = vector part of q_err (x, y, z components)
-  ω         = angular velocity from gyro [rad/s]
-```
-
-Key properties:
-- Short-path enforcement: flips q_err sign if w < 0
-- Torque saturated at configurable `max_torque`
-- Quaternion utilities: normalise, conjugate, multiply
-- Returns `false` if measured quaternion has near-zero norm
-- Gains `Kp` and `Kd` are S20-tunable at runtime via SRDB parameters
-  `adcs_kp` (ID `0x20A1`) and `adcs_kd` (ID `0x20A2`)
-
-### S20-tunable AOCS gains
-
-Both AOCS controllers read their gains from the PUS S20 parameter table each
-tick via `obsw_pus_s20_get_float()`. Ground operators can update gains
-in-flight using `TC(20,1)` without reloading firmware.
-
-| SRDB parameter | ID     | Default | Unit       | Controller |
-|---|---|---|---|---|
-| `bdot_gain`    | 0x20A0 | 1.0e4   | A·m²·s/T   | B-dot      |
-| `adcs_kp`      | 0x20A1 | 0.5     | N·m/rad    | PD         |
-| `adcs_kd`      | 0x20A2 | 0.1     | N·m·s/rad  | PD         |
-
-The AOCS HK set (`aocs_hk`, SPID 1004, S3 set ID 4) reports all three gains
-at 5-tick intervals so ground can confirm the update took effect.
-
-### Sensor injection protocol (simulation only)
-
-The host sim extends the pipe protocol with a type-prefixed framing layer.
-This is **simulation-only** — it does not exist in flight software.
-
-```
-Type 0x01 — TC uplink (unchanged):
-  [0x01][uint16 BE length][TC frame bytes]
-
-Type 0x02 — Sensor injection:
-  [0x02][uint16 BE length][obsw_sensor_frame_t bytes]
-```
-
-`obsw_sensor_frame_t` carries magnetometer (Tesla), star tracker
-(quaternion), gyro (rad/s) and OBC temperature (SRDB raw counts) data with
-per-sensor validity flags.
-This matches OpenSVF equipment model output units directly.
-
-The `OBCEmulatorAdapter` in OpenSVF reads sensor values from
-`ParameterStore` each tick and packages them as type-0x02 frames
-before sending the heartbeat TC. Sensor frames are parsed in
-`sim/sensor_inject.c` and fed directly to the AOCS algorithms.
-
-### AOCS telemetry
-
-The control loop emits observability TM each cycle:
-
-| Packet | Contents |
-|---|---|
-| TM(8,128) | B-dot report: `dB/dt[3]`, `m_cmd[3]` |
-| TM(8,129) | PD report: `torque_cmd[3]`, `angle_err_rad`, `q_err[4]` |
-
-These are parsed by `OBCEmulatorAdapter._parse_tm()` and written to
-`ParameterStore` so OpenSVF scenarios can assert on AOCS behaviour.
+terminal on port 3456. RCC and GPIOD are stub memories that absorb the
+register writes of `obsw_uart_init()`. Renode runs this board at about 0.4
+times real time; the other Renode tests and what each shows are on the
+[Targets](targets.md) page.

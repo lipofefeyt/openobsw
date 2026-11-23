@@ -1,36 +1,46 @@
 # OpenOBSW
 
-**Open-source, flight-oriented spacecraft on-board software — C11, PUS-C, no dynamic allocation**
+**Open-source, flight-oriented spacecraft on-board software: C11, PUS-C, no dynamic allocation**
 
 [![CI](https://github.com/lipofefeyt/openobsw/actions/workflows/ci.yml/badge.svg)](https://github.com/lipofefeyt/openobsw/actions/workflows/ci.yml)
+[![Docs](https://readthedocs.org/projects/openobsw/badge/?version=latest)](https://openobsw.readthedocs.io/)
+
+**Documentation: [openobsw.readthedocs.io](https://openobsw.readthedocs.io/)**: targets,
+wire protocol (ICD), SRDB, requirements and known limits, one version per release.
 
 OpenOBSW is a small, permissively licensed PUS-C flight-software stack that
 runs unchanged from 16-bit microcontrollers to 64-bit SoCs, and comes with an
 open validation facility, [OpenSVF](https://github.com/lipofefeyt/opensvf).
 
-It implements CCSDS TC/TM framing, the PUS-C services listed below, a
+It implements CCSDS space packets (and TC/TM transfer frames as library
+code that no target uses yet), the PUS-C services listed below, a
 STANDBY/SAFE/NOMINAL mode machine with FDIR, B-dot detumbling and PD attitude
 control, in portable C11 with no `malloc` and no global state in the core.
 OpenSVF runs it closed loop (SIL) against a 6-DOF physics engine.
 
-> **Status:** flight-oriented, not flight-proven. It has not flown, and there
-> is no requirements baseline, static analysis or coverage gate yet; those are
-> the [v0.17 train](#roadmap). Hardware evidence is listed per target below.
+> **Status:** flight-oriented, not flight-proven. It has not flown. It has a
+> requirements baseline with test traceability, MISRA C:2012 static analysis
+> and a coverage gate in CI. What each target supports, and what shows it, is
+> on the [Targets](https://openobsw.readthedocs.io/en/latest/targets/) page;
+> what it does not do is on [Known limits](https://openobsw.readthedocs.io/en/latest/known-limits/).
 
 ---
 
 ## Targets
 
-| Target | Architecture | Transport | Evidence | In CI |
-|---|---|---|---|---|
-| `obsw_sim` | x86_64 host | stdin/stdout pipe | Unit + integration tests; OpenSVF closed-loop SIL | build, tests, ASAN/UBSAN |
-| `obsw_sim` (aarch64) | aarch64 Linux | pipe via QEMU user-mode | Runs under `qemu-aarch64` | — |
-| `obsw_zynqmp` | aarch64 bare metal | Cadence UART | Renode: TC(17,1) ping, S8 mode changes, NOMINAL AOCS test | binary |
-| `obsw_stm32h7` | Cortex-M7 (STM32H750), FreeRTOS | USART3 115200 | WeAct board: TC/TM ping over UART, LCD status dashboard, STANDBY→SAFE LEOP timeout; Renode ping | binary |
-| `obsw_msp430` | MSP430FR5969, 2 KB SRAM | UCA0 UART 9600 | LaunchPad: TC/TM ping over UART | binary + memory report, every PR |
+| Target | Architecture | Transport | Tier |
+|---|---|---|---|
+| `obsw_sim` | x86_64 Linux | stdin/stdout pipe | 1: supported, in CI on every PR (build, tests, ASAN/UBSAN, coverage) |
+| `obsw_sim` (aarch64) | aarch64 Linux | pipe via QEMU user-mode | 1: supported, in CI on every PR (build, tests under QEMU) |
+| `obsw_stm32h7`, FreeRTOS | Cortex-M7 (STM32H750) | USART3 115200 | 1: supported, built in CI on every PR; tested in Renode and on a WeAct board, locally |
+| `obsw_stm32h7`, superloop | Cortex-M7 (STM32H750) | USART3 115200 | 2: builds in CI, bench-tested once |
+| `obsw_msp430` | MSP430FR5969, 2 KB SRAM | UCA0 UART 9600, own framing | 2: builds in CI on every PR, bench-tested once |
+| `obsw_zynqmp` | aarch64 bare metal | Cadence UART | 3: builds in CI, emulator only |
 
-Not yet shown: the B-dot loop closed on real hardware (#52); the STM32H750 runs
-on the 64 MHz HSI, with PLL init to 480 MHz written but disabled (#72).
+Per-feature support and its evidence: [Targets](https://openobsw.readthedocs.io/en/latest/targets/).
+Not yet shown: the B-dot loop closed on real hardware (#52); STM32H7 as a
+closed-loop SIL target (#54). The STM32H750 runs on the 64 MHz HSI, with PLL
+init to 480 MHz written but disabled (#72).
 
 ---
 
@@ -42,22 +52,22 @@ per target:
 | Service | Host sim | STM32H7 FreeRTOS | ZynqMP | STM32H7 superloop | MSP430 |
 |---|---|---|---|---|---|
 | S1 TC verification | every TC; rejections as TM(1,2) | same | same | same | same |
-| S3 housekeeping | 3,1 3,3 3,5 3,6 | 3,1 3,3 3,5 3,6 | — | — | 3,5 3,6 |
-| S5 event reporting | TM only | TM only | — | — | TM only |
-| S6 memory management | 6,2 6,5 6,9 | 6,2 6,5 6,9 | — | — | — |
-| S8 function management | 8,1 | 8,1 | 8,1 | — | 8,1 |
-| S9 time management | 9,128 | 9,128 | — | — | — |
-| S11 time-based scheduling | 11,4–11,6 11,17 11,18 | 11,4–11,6 11,17 11,18 | — | — | — |
-| S12 on-board monitoring | 12,1–12,5 | 12,1–12,5 | — | — | — |
-| S19 event-action | 19,1–19,5 | 19,1–19,5 | — | — | — |
+| S3 housekeeping | 3,1 3,3 3,5 3,6 | 3,1 3,3 3,5 3,6 |  |  | 3,5 3,6 |
+| S5 event reporting | TM only | TM only |  |  | TM only |
+| S6 memory management | 6,2 6,5 6,9 | 6,2 6,5 6,9 |  |  |  |
+| S8 function management | 8,1 | 8,1 | 8,1 |  | 8,1 |
+| S9 time management | 9,128 | 9,128 |  |  |  |
+| S11 time-based scheduling | 11,4–11,6 11,17 11,18 | 11,4–11,6 11,17 11,18 |  |  |  |
+| S12 on-board monitoring | 12,1–12,5 | 12,1–12,5 |  |  |  |
+| S19 event-action | 19,1–19,5 | 19,1–19,5 |  |  |  |
 | S17 are-you-alive | 17,1 | 17,1 | 17,1 | 17,1 | 17,1 |
-| S20 parameter management | 20,1 20,3 | 20,1 20,3 | — | 20,1 20,3 | — |
+| S20 parameter management | 20,1 20,3 | 20,1 20,3 |  | 20,1 20,3 |  |
 
 | Service | Subservices | Notes |
 |---|---|---|
 | S1 | TM(1,1) accept, TM(1,2) fail, TM(1,7) complete, TM(1,8) fail | TM(1,2) codes: `0x0002` unknown service, `0x0003` unknown subservice, `0x0005` bad data, `0x0006` S6 address, `0x0007` not allowed in this mode |
 | S3 | TC(3,1) define, TC(3,3) delete, TC(3,5/6) enable/disable, TM(3,25) report | Parameters big-endian; TC(3,1) builds sets from S20 parameter IDs, TC(3,3) removes them |
-| S5 | TM(5,1–4) info/low/medium/high | High-severity events drive the FSM to SAFE |
+| S5 | TM(5,1–4) info/low/medium/high | Events on the SRDB safe-trigger list command SAFE |
 | S6 | TC(6,2) load, TC(6,5) check, TC(6,9) dump | Region table with READ/WRITE access; fails closed |
 | S8 | TC(8,1) perform | Function 1 recover NOMINAL, 2 SAFE, 3 STANDBY |
 | S9 | TC(9,128) set OBT | Mission-specific subservice, CUC-4,2 |
@@ -106,12 +116,12 @@ pytest srdb/tests
 
 ### Tests and traceability
 
-- 25 ctest suites (24 unit, 1 integration).
+- C unit and integration tests under ctest (Unity).
 - System tests: `pytest test/system` drives the built `obsw_sim` over wire protocol v4 (set `OBSW_SIM` to another binary).
 - SRDB Python tests: `pytest srdb/tests`.
-- Requirements: [docs/SRS.md](docs/SRS.md). Every test names the requirements it verifies (`/* @verifies OBSW-SRS-NNN */` in C, `@pytest.mark.requirement` in Python). `python3 tools/trace.py --lib build/src/libobsw.a --out build/traceability.md` checks that every implemented requirement is tested and writes the matrix; CI runs it on every PR.
+- Requirements: [docs/SRS.md](docs/SRS.md), with the matrix on the [Traceability](https://openobsw.readthedocs.io/en/latest/traceability/) page. Every test names the requirements it verifies (`/* @verifies OBSW-SRS-NNN */` in C, `@pytest.mark.requirement` in Python). `python3 tools/trace.py --lib build/src/libobsw.a --out build/traceability.md` checks that every implemented requirement is tested and writes the matrix; CI runs it on every PR.
 - Static analysis: CI runs cppcheck with the MISRA C:2012 addon on the core library and fails on any finding outside the documented Advisory deviations ([docs/misra-deviations.md](docs/misra-deviations.md)).
-- Coverage: CI fails if unit, integration and system tests together cover less than 90% of core library lines (now 94.0% lines, 81.1% branches). Locally: configure with `-DOBSW_ENABLE_COVERAGE=ON` (GCC), run the tests, then `gcovr -r . --object-directory build --filter 'src/(ccsds|tc|tm|pus|fdir|aocs|time)/'`.
+- Coverage: CI fails if unit, integration and system tests together cover less than 90% of core library lines (the CI job prints the figures). Locally: configure with `-DOBSW_ENABLE_COVERAGE=ON` (GCC), run the tests, then `gcovr -r . --object-directory build --filter 'src/(ccsds|tc|tm|pus|fdir|aocs|time)/'`.
 
 ---
 
@@ -120,10 +130,10 @@ pytest srdb/tests
 ```
 openobsw/
 ├── src/
-│   ├── ccsds/       TC transfer frame (CRC-16), space packet, TM transfer frame
+│   ├── ccsds/       space packet; TC/TM transfer frames (library only, unused by targets)
 │   ├── tc/          TC dispatcher: static routes, acceptance gate
 │   ├── tm/          TM store: fixed ring buffer
-│   ├── pus/         S1 S3 S5 S6 S8 S9 S17 S20
+│   ├── pus/         S1 S3 S5 S6 S8 S9 S11 S12 S17 S19 S20
 │   ├── fdir/        mode FSM (STANDBY/SAFE/NOMINAL), watchdog
 │   ├── aocs/        B-dot with dB/dt high-pass filter; PD quaternion control
 │   ├── time/        CUC-4,2 on-board time
@@ -132,29 +142,34 @@ openobsw/
 │   └── platform/    STM32H7 and ZynqMP entry points, startup, linker scripts
 ├── targets/msp430-fr5969/   MSP430 build
 ├── sim/             host sim: wire protocol v4 over stdin/stdout
-├── renode/          ZynqMP and STM32H7 Renode platforms and ping tests
-└── srdb/            Spacecraft Resource Database: YAML → C header + XTCE
+├── renode/          ZynqMP and STM32H7 Renode platforms and tests (run locally)
+├── srdb/            Spacecraft Resource Database: YAML → C header + XTCE
+├── docs/            documentation site sources (mkdocs, Read the Docs)
+└── tools/           traceability check, docs generator
 ```
 
-See [docs/architecture.md](docs/architecture.md),
-[docs/freertos-architecture.md](docs/freertos-architecture.md) and
-[docs/mission-config.md](docs/mission-config.md) (values to set before flight).
+See [Architecture](https://openobsw.readthedocs.io/en/latest/architecture/),
+[FreeRTOS](https://openobsw.readthedocs.io/en/latest/freertos-architecture/) and
+[Mission configuration](https://openobsw.readthedocs.io/en/latest/mission-config/)
+(values to set before flight).
 
 ---
 
 ## Wire protocol v4
 
 The same framing runs over stdin/stdout (host sim), the QEMU pipe and the
-Renode socket:
+target UARTs (Renode exposes them as a socket). MSP430 uses its own framing.
+The full ICD, generated from `sim/sensor_inject.h`, is the
+[Wire protocol](https://openobsw.readthedocs.io/en/latest/icd/) page.
 
 ```
 Host/SVF → OBSW:
-  [0x01][uint16 BE len][PUS TC bytes]       TC uplink
+  [0x01][uint16 BE len][TC space packet]    TC uplink
   [0x02][uint16 BE len][sensor_frame_t]     MAG/GYRO/ST + OBC thermal injection
 
 OBSW → Host/SVF:
   [0x03][uint16 BE len][actuator_frame_t]   MTQ dipoles + RW torques
-  [0x04][uint16 BE len][PUS TM bytes]       TM downlink
+  [0x04][uint16 BE len][TM space packet]    TM downlink
   [0xFF]                                    End of tick (sync byte)
 ```
 
@@ -179,7 +194,8 @@ renode renode/zynqmp_obsw.resc        # terminal 1
 python3 renode/test_ping_zynqmp.py    # terminal 2: TM(1,1) + TM(17,2) + TM(1,7)
 ```
 
-OpenSVF connects to the same Renode socket for closed-loop campaigns.
+OpenSVF can connect to the same socket. Closed-loop AOCS on ZynqMP does not
+work yet: the target stops answering in NOMINAL (#147).
 
 ### STM32H750 (WeAct board, ST-Link V2)
 
@@ -188,7 +204,7 @@ OpenSVF connects to the same Renode socket for closed-loop campaigns.
 usbipd bind --busid <busid>
 usbipd attach --wsl --busid <busid>
 
-# Build and flash (dev container)
+# Build the FreeRTOS image and flash (dev container)
 stm32h7-build
 openocd -f interface/stlink.cfg -f target/stm32h7x.cfg \
     -c "program build_stm32h7/obsw_stm32h7.bin 0x08000000 verify reset exit"
@@ -201,7 +217,7 @@ USART3 on PD8/PD9 at 115200 baud.
 UCA0 UART at 9600 baud, 1 MHz MCLK. See [docs/msp430-build.md](docs/msp430-build.md).
 
 ```bash
-MSPFlasher -i USB -w build_msp430/obsw_msp430.hex -v -z [VCC]
+MSPFlasher -i USB -w build-msp430/openobsw-msp430.hex -v -z [VCC]
 ```
 
 ---
@@ -229,7 +245,8 @@ on creation.
 | v0.17 | Qualification baseline | SRS (78 requirements) with test traceability in CI; `obsw_sim` system tests; coverage gate ≥ 90% core lines; cppcheck + MISRA C:2012, Required rules at zero (#74); MSP430 build in CI | ✅ Done |
 | v0.18 | Service parity with OpenSVF | S11 scheduling, S12 monitoring, S19 event-action (#79; S15 deferred, S23 out of scope); TC(3,3) delete (#91); repeated TC arguments in the SRDB (#92); HK layouts taken from the SRDB; MISRA 12.1 and 13.3 enforced | ✅ Done |
 | v0.19 | Recovery evidence | Wire protocol v4 with an OBC thermal input (#122); every TM packet stamped with on-board time; S12 monitoring commands SAFE on STM32H7 FreeRTOS; SRDB safe-trigger list on every target; host sim mode-transition events; S12 event aux as float32; LEOP autonomy timer (#111); STM32H750 LCD dashboard | ✅ Done |
-| v0.20 | Hardware loop | Renode STM32H750 TC path (#106); B-dot HPF validation on opensvf-kde (#70); STM32H750 PLL at 480 MHz (#72); B-dot HIL and ICM-42688 gyro (#52, #53); STM32H750 Renode transport and SIL (#54, #55); convergence harness (#67, #68); YAMCS-encodable XTCE commands (#108) | Next |
+| v0.20 | Documentation | Documentation site on Read the Docs: generated ICD, SRDB, traceability and target capability pages, known limits (#134 to #139); aarch64 sim and STM32H7 FreeRTOS in CI; Renode STM32H750 TC path (#106) and S3 interval test (#51) | In progress |
+| v0.21 | Hardware loop | B-dot HPF validation on opensvf-kde (#70); STM32H750 PLL at 480 MHz (#72); B-dot HIL and ICM-42688 gyro (#52, #53); STM32H750 Renode SIL (#54, #55); convergence harness (#67, #68); YAMCS-encodable XTCE commands (#108) | Next |
 | v1.0 | QUBIK | STM32L476 HAL target; link-layer decision (OSDLP or proven interoperability); separate GPL mission build; HIL on a QUBIK COMMS board | Proposed |
 
 Parked: dual-OBC (#29–#31), USB CDC (#27), INA219 (#39), ground CLI (#50),
@@ -242,7 +259,7 @@ AOCS step refactor (#40), BOM docs (#41). See [CHANGELOG.md](CHANGELOG.md).
 | Project | Role |
 |---|---|
 | [opensvf](https://github.com/lipofefeyt/opensvf) | Python SVF: validates openobsw in closed-loop SIL |
-| [opensvf-kde](https://github.com/lipofefeyt/opensvf-kde) | C++ 6-DOF kinematics and dynamics engine (FMI 2.0) |
+| opensvf-kde (not public yet) | C++ 6-DOF kinematics and dynamics engine (FMI 2.0) |
 
 ---
 

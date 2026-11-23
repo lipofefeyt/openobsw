@@ -1,105 +1,94 @@
-# SVF Integration Guide for Validation Engineers
+# OpenSVF integration
 
-> **Audience:** Spacecraft software validation engineers  
-> **Time to first campaign:** ~4 hours  
-> **Prerequisites:** Python 3.10+, your OBSW binary or source
+This page covers the OpenOBSW side of a validation setup: driving the host
+simulator yourself, adding the wire protocol to another OBSW, and running a
+target under Renode. Setting up OpenSVF itself (spacecraft YAML, equipment
+models, procedures, campaigns, reports) is documented by OpenSVF:
+[opensvf.readthedocs.io](https://opensvf.readthedocs.io/).
 
----
-
-## Overview
-
-OpenSVF validates your flight software against a 6-DOF physics engine and a real ground station. This guide takes you from zero to running a test campaign against your OBSW.
+The bytes on the wire are specified on the [Wire protocol](icd.md) page.
 
 ---
 
-## Standalone use (without OpenSVF)
+## Driving the host sim without OpenSVF
 
-You can run and test openobsw without OpenSVF using the host simulation binary directly. The host sim speaks a simple framed protocol over stdin/stdout — you can drive it from any language.
+The host sim, `obsw_sim`, speaks the wire protocol on stdin and stdout, so
+any language can drive it.
 
-### Quick sanity check
+### Quick check
 
 ```bash
 # Build the host sim
 cmake -S . -B build -DOBSW_BUILD_SIM=ON -DOBSW_BUILD_TESTS=ON -G Ninja
 cmake --build build -j$(nproc)
 
-# Send a TC(17,1) ping and inspect raw output
+# Send a TC(17,1) ping, close stdin so the sim exits, print what came back
 python3 - <<'EOF'
 import subprocess, struct
 
-def make_tc_frame(apid, svc, subsvc):
-    # Space packet: version=0, type=TC, sec_hdr=1, seq_flags=3
+def tc_frame(apid, svc, subsvc):
     sp  = struct.pack(">HHH",
-        0x1800 | (apid & 0x7FF),   # packet ID
-        0xC000,                     # standalone, seq=0
-        4)                          # data_len = sec_hdr (5) - 1 = 4
-    sp += bytes([0x11, svc, subsvc, 0x00, 0x00])  # PUS-C TC sec hdr
-    return struct.pack(">BH", 0x01, len(sp)) + sp  # wire frame type=0x01
+        0x1800 | (apid & 0x7FF),   # packet ID: TC, secondary header
+        0xC000,                     # standalone, sequence count 0
+        4)                          # data length: 5-byte secondary header - 1
+    sp += bytes([0x11, svc, subsvc, 0x00, 0x00])  # PUS-C TC secondary header
+    return struct.pack(">BH", 0x01, len(sp)) + sp  # wire frame type 0x01
 
-proc = subprocess.Popen(
-    ["./build/sim/obsw_sim"],
-    stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-proc.stdin.write(make_tc_frame(0x010, 17, 1))
-proc.stdin.flush()
-data = proc.stdout.read(256)
-print("Raw response:", data.hex())
-proc.terminate()
+out = subprocess.run(["./build/sim/obsw_sim"], input=tc_frame(0x010, 17, 1),
+                     capture_output=True).stdout
+print("Raw response:", out.hex())
 EOF
 ```
 
-### Writing a minimal test harness
+The response is TM(1,1), TM(17,2) and TM(1,7), each as a `0x04` frame, then
+`0xFF`.
+
+### A minimal reader
+
+Every frame the sim sends is `[type][uint16 BE length][body]`, except the
+end-of-tick byte `0xFF`:
 
 ```python
-import subprocess, struct, sys
+import struct
 
-SYNC = 0xFF
-TM_FRAME = 0x04
+END_OF_TICK = 0xFF
+FRAME_ACTUATOR, FRAME_TM = 0x03, 0x04
 
-def read_tm_packets(proc):
-    """Drain TM packets until the sync byte (end-of-tick)."""
-    packets = []
+def read_tick(stream):
+    """Read the frames of one tick, up to and including 0xFF."""
+    tms, actuator = [], None
     while True:
-        hdr = proc.stdout.read(1)
-        if not hdr or hdr[0] == SYNC:
-            break
-        if hdr[0] == TM_FRAME:
-            length = struct.unpack(">H", proc.stdout.read(2))[0]
-            packets.append(proc.stdout.read(length))
-    return packets
-
-proc = subprocess.Popen(
-    ["./build/sim/obsw_sim"],
-    stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-
-# ... send TCs and call read_tm_packets() to collect responses
+        t = stream.read(1)
+        if not t or t[0] == END_OF_TICK:
+            return tms, actuator
+        length = struct.unpack(">H", stream.read(2))[0]
+        body = stream.read(length)
+        if t[0] == FRAME_TM:
+            tms.append(body)
+        elif t[0] == FRAME_ACTUATOR:
+            actuator = body
 ```
 
-Transport options are described in the [OBSW Transport Options](#obsw-transport-options) table below.
+Send one frame (a TC or a sensor frame), then call `read_tick()`: the host
+sim answers every frame with exactly one `0xFF`. `sim/wire_proto.py` and
+`test/system/conftest.py` are complete examples.
 
 ---
 
-## Step 1: Installation (OpenSVF)
+## Adding the wire protocol to another OBSW
 
-```bash
-git clone https://github.com/lipofefeyt/opensvf
-cd opensvf
-source scripts/setup-workspace.sh
-testosvf   # should show ~400 tests passing
-```
+`contrib/svf_protocol/` is a drop-in reference implementation of the wire
+protocol for an OBSW other than OpenOBSW: `obsw_svf_protocol.h` and `.c`,
+plus platform glue for Linux stdio and the ZynqMP UART. `tools/gen_docs.py`
+checks in CI that its frame layout matches `sim/sensor_inject.h`.
 
----
-
-## Step 2: Adapt Your OBSW
-
-SVF communicates with your OBSW via a simple pipe protocol. Copy `contrib/svf_protocol/` from the openobsw repository into your project.
-
-Implement your main loop:
+A main loop has this shape:
 
 ```c
 #include "obsw_svf_protocol.h"
 
 int main(void) {
-    svf_init("1.0.0");  // prints startup banner
+    svf_init("0.1.0");  /* start-up banner, with your SRDB version */
 
     uint8_t frame[256];
     uint16_t frame_len;
@@ -108,266 +97,89 @@ int main(void) {
         uint8_t type = svf_read_frame(frame, sizeof(frame), &frame_len);
 
         if (type == SVF_FRAME_TC) {
-            // Dispatch PUS telecommand
+            /* Dispatch the PUS telecommand (a space packet) */
             obsw_tc_dispatcher_feed(&dispatcher, frame, frame_len);
         }
         else if (type == SVF_FRAME_SENSOR) {
-            // Unpack sensor data and run your control algorithm
+            /* Unpack the sensor frame and run the control step */
             svf_sensor_frame_t *s = (svf_sensor_frame_t *)frame;
             run_aocs(s);
 
-            // Send actuator commands back to SVF
+            /* Send actuator commands back */
             svf_actuator_frame_t act = {0};
             act.mtq_dipole_x = my_mtq_cmd.x;
             act.sim_time     = s->sim_time;
             svf_write_actuator(&act);
         }
 
-        // Drain TM packets, then send end-of-tick
+        /* Send this tick's TM, then the end-of-tick byte */
         drain_tm_store();
         svf_write_sync();
     }
 }
 ```
 
-### Sensor frame layout (SVF → OBSW, type 0x02)
-
-```c
-typedef struct {
-    float   mag_x, mag_y, mag_z;              // Magnetometer [T]
-    uint8_t mag_valid;
-    float   st_q_w, st_q_x, st_q_y, st_q_z;  // Quaternion
-    uint8_t st_valid;
-    float   gyro_x, gyro_y, gyro_z;           // Gyroscope [rad/s]
-    uint8_t gyro_valid;
-    float   sim_time;                          // Simulation time [s]
-    int16_t obc_temperature_raw;               // SRDB raw counts (v4)
-    uint8_t thermal_valid;                     // 1 = drive obc_temperature
-} svf_sensor_frame_t;  // 50 bytes, little-endian (wire protocol v4)
-```
-
-### Actuator frame layout (OBSW → SVF, type 0x03)
-
-```c
-typedef struct {
-    float   mtq_dipole_x, mtq_dipole_y, mtq_dipole_z;  // [Am²]
-    float   rw_torque_x,  rw_torque_y,  rw_torque_z;   // [Nm]
-    uint8_t controller;   // 0 = b-dot, 1 = ADCS PD
-    float   sim_time;
-} svf_actuator_frame_t;  // 29 bytes, little-endian
-```
-
-### Build your host simulation binary
-
-```bash
-gcc -std=c11 -o obsw_sim \
-    src/main.c \
-    src/svf_protocol/obsw_svf_protocol.c \
-    src/svf_protocol/platform/linux_stdio.c \
-    src/aocs/bdot.c src/pus/*.c \
-    -I include/
-
-# Test it starts correctly
-echo "" | ./obsw_sim
-# [OBSW] Host sim started (wire protocol v4).
-# [OBSW] SRDB version: 1.0.0
-```
+The frame layouts are in the ICD:
+[sensor frame](icd.md#sensor-frame-0x02) and
+[actuator frame](icd.md#actuator-frame-0x03). OpenSVF checks the start-up
+banner and the wire protocol version when it starts the binary.
 
 ---
 
-## Step 3: Configure Your Spacecraft
+## Renode socket mode
 
-Create `spacecraft.yaml` in your project root:
+Under Renode, a target's UART is a TCP socket on port 3456, which OpenSVF
+(or a test script) connects to. What works depends on the target:
 
-```yaml
-spacecraft: MySat-1
+| Target | Telecommands and TM | Housekeeping | Closed-loop AOCS |
+|---|---|---|---|
+| STM32H7 FreeRTOS | yes | yes | no: sensor frames are dropped (#54) |
+| STM32H7 superloop | yes (S17, S20 only) | no | no |
+| ZynqMP | yes (S8, S17) | no | no: stops answering in NOMINAL (#147) |
 
-obsw:
-  type: pipe
-  binary: ./obsw_sim
+The full matrix, with the evidence for each cell, is on the
+[Targets](targets.md) page.
 
-equipment:
-  - id: kde
-    model: dynamics
+**ZynqMP (aarch64 bare metal):**
 
-  - id: mag1
-    model: magnetometer
-    hardware_profile: mag_default
-
-  - id: gyro1
-    model: gyroscope
-    hardware_profile: gyro_default
-
-  - id: mtq1
-    model: magnetorquer
-
-  - id: rw1
-    model: reaction_wheel
-    hardware_profile: rw_default
-
-wiring:
-  auto: true    # auto-connects matching port names
-
-simulation:
-  dt: 0.1
-  stop_time: 300.0
-  seed: 42      # deterministic replay
-```
-
-Available models: `dynamics`, `magnetometer`, `magnetorquer`, `gyroscope`,
-`star_tracker`, `css`, `reaction_wheel`, `thruster`, `gps`, `thermal`,
-`pcdu`, `sbt`.
-
-Hardware profiles available in `srdb/data/hardware/`.
-
----
-
-## Step 4: Write Test Procedures
-
-Create `tests/procedures/test_aocs.py`:
-
-```python
-from svf.procedure import Procedure, ProcedureContext
-
-
-class BdotConvergence(Procedure):
-    id          = "TC-AOCS-001"
-    title       = "B-dot detumbling convergence"
-    requirement = "MIS-AOCS-042"
-
-    def run(self, ctx: ProcedureContext) -> None:
-        self.step("Power on AOCS sensors")
-        ctx.inject("aocs.mag.power_enable", 1.0)
-        ctx.inject("aocs.gyro.power_enable", 1.0)
-
-        self.step("Wait for detumbling")
-        ctx.wait(60.0)
-
-        self.step("Verify angular rate converged")
-        ctx.assert_parameter(
-            "aocs.truth.rate_x",
-            less_than=0.1,
-            requirement="MIS-AOCS-042",
-        )
-
-
-class PingPong(Procedure):
-    id          = "TC-COM-001"
-    title       = "OBC are-you-alive ping/pong"
-    requirement = "MIS-COM-001"
-
-    def run(self, ctx: ProcedureContext) -> None:
-        self.step("Send TC(17,1) ping")
-        ctx.tc(17, 1)
-
-        self.step("Expect TM(17,2) pong within 5s")
-        ctx.expect_tm(17, 2, timeout=5.0)
-```
-
----
-
-## Step 5: Create a Campaign
-
-Create `campaign.yaml`:
-
-```yaml
-campaign: MySat-1 AOCS Validation
-spacecraft: spacecraft.yaml
-procedures:
-  - tests/procedures/test_aocs.py
-```
-
----
-
-## Step 6: Run the Campaign
-
-```python
-from svf.campaign_runner import CampaignRunner
-from svf.report import generate_html_report
-from pathlib import Path
-
-runner = CampaignRunner.from_yaml("campaign.yaml")
-report = runner.run()
-generate_html_report(report, Path("results/report.html"))
-print(f"Pass rate: {report.pass_rate*100:.1f}%")
-```
-
-Open `results/report.html` in your browser — it is fully self-contained,
-no internet connection required.
-
----
-
-## OBSW Transport Options
-
-| Transport | When to use |
-|---|---|
-| `pipe` (stdin/stdout) | Development, CI, fast iteration |
-| `socket` (Renode TCP) | Peripheral-level SIL with Cadence UART emulation |
-| `stub` (no binary) | Unit testing, campaign scaffolding |
-
-### Renode socket mode
-
-Two targets are supported. Both expose UART as a TCP socket on port 3456.
-
-**ZynqMP (aarch64 bare-metal):**
 ```bash
 cmake -S . -B build_zynqmp_baremetal \
     -DCMAKE_TOOLCHAIN_FILE=cmake/aarch64-none-elf.cmake \
     -DOBSW_BUILD_ZYNQMP=ON -DOBSW_BUILD_TESTS=OFF -DOBSW_BUILD_SIM=OFF
 cmake --build build_zynqmp_baremetal
-renode renode/zynqmp_obsw.resc &
-sleep 5
+aarch64-none-elf-objcopy -O binary build_zynqmp_baremetal/obsw_zynqmp \
+    build_zynqmp_baremetal/obsw_zynqmp.bin
+renode renode/zynqmp_obsw.resc
 ```
 
-**STM32H750 (Cortex-M7 bare-metal):**
+**STM32H750 (Cortex-M7):**
+
 ```bash
+# -DOBSW_FREERTOS=ON for the FreeRTOS image; leave it out for the superloop
 cmake -S targets/stm32h7 -B build_stm32h7_renode \
     -DCMAKE_TOOLCHAIN_FILE=$(pwd)/cmake/stm32h7-toolchain.cmake \
-    -DOBSW_ROOT=$(pwd) -DOBSW_RENODE=ON
+    -DOBSW_ROOT=$(pwd) -DOBSW_RENODE=ON -DOBSW_FREERTOS=ON
 cmake --build build_stm32h7_renode -j$(nproc)
-renode renode/stm32h750_obsw.resc &
-sleep 5
+renode renode/stm32h750_obsw.resc
 ```
 
-Both targets use the same SVF socket config:
-```yaml
-obsw:
-  type: socket
-  host: localhost
-  port: 3456
-```
+For a headless run, use `renode --disable-xwt --plain <resc>` and keep its
+stdin open; the socket is ready once Renode prints "GDB server with all CPUs
+started". Do not probe the port with `echo > /dev/tcp/localhost/3456`: the
+newline reaches the UART and is read as the start of a frame.
+
+Renode runs the STM32H750 at about 0.4 times real time, and the FreeRTOS
+image sends the TM of a TC after its end-of-tick byte. Both matter to a
+harness with wall-clock timeouts; see [Known limits](known-limits.md).
 
 ---
 
 ## Troubleshooting
 
-**"obsw_sim not found"**  
-Check the `binary:` path in `spacecraft.yaml`. Use an absolute path or
-run from the directory containing the binary.
+**No TM(17,2) in reply to a ping.** Check that the dispatcher is
+initialised, that the TC is a space packet (not a transfer frame), and, on a
+target UART, that your reader skips the start-up banner text before the
+first frame. On STM32H7 FreeRTOS, read on past the first `0xFF`.
 
-**"SRDB version mismatch"**  
-Rebuild your OBSW with the current SRDB, or update the SVF SRDB to match
-your OBSW version.
-
-**"Timeout waiting for TM(17,2)"**  
-Check that: (1) your TC dispatcher is initialised, (2) `svf_write_sync()`
-is called at the end of every tick, (3) the APID is `0x010`.
-
-**"Parameter not found in ParameterStore"**  
-Check canonical parameter names in `docs/equipment-library.md`. After a
-run, call `store.snapshot()` to print all available parameters.
-
-**"Auto-wiring inferred 0 connections"**  
-Your equipment port names do not match SVF canonical names. Use
-`wiring.overrides` to map your names explicitly.
-
----
-
-## Reference Documentation
-
-| Document | Contents |
-|---|---|
-| `docs/equipment-library.md` | All equipment port names and physics |
-| `docs/architecture.md` | System architecture and wire protocol |
-| `docs/design-philosophy.md` | What SVF is and is not |
-| `contrib/svf_protocol/obsw_svf_protocol.h` | C protocol reference |
+**The host sim exits with status 2.** It received a sensor frame that is not
+50 bytes, typically from a wire protocol v3 sender (47 bytes).
