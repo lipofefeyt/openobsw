@@ -1,6 +1,6 @@
 # openobsw Software Requirements Specification
 
-> **Ref:** OBSW-SRS-001  **Issue:** 1.0  **Baseline:** v0.17
+> **Ref:** OBSW-SRS-001  **Issue:** 1.0  **Baseline:** v0.20
 > **Author:** lipofefeyt
 
 ---

@@ -234,7 +234,7 @@ cells of 6×8 px, 5×7 font). FDIR shows a fixed-layout dashboard, refreshed
 once per second. The title shows the release version (`OBSW_VERSION_STRING`):
 
 ```
-openobsw v0.19.0 STM32H750     title bar (cyan)
+openobsw v0.20.0 STM32H750     title bar (cyan)
 OBT 00001234  RST POR          on-board time, last reset cause
 TC rx 000012  rej 000001       TC frames received, TM(1,2)+TM(1,8) sent
 TM tx 000042  last 17,2        TM packets sent, last TM (svc,subsvc)
