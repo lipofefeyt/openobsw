@@ -86,7 +86,7 @@ features:
       stm32h7-superloop: {status: "no", evidence: [none],
                           note: "Takes only sim_time from a sensor frame; no AOCS."}
       zynqmp: {status: partial, evidence: [renode], ref: renode/test_nominal_aocs_zynqmp.py,
-               note: "Steps 4 and 5 (actuator frame received) fail; thermal fields are ignored."}
+               note: "An actuator frame comes back in STANDBY; in NOMINAL with valid attitude sensors none does and the target stops answering (steps 4 and 5 fail). B-dot in SAFE is not tested. Thermal fields are ignored."}
       msp430: {status: "no", evidence: [none], note: "No AOCS and no sensor frames."}
 
   - name: Thermal input (obc_temperature_raw, wire protocol v4)
