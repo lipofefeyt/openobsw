@@ -23,7 +23,7 @@ target has run on flight hardware.
   `renode/test_nominal_aocs_zynqmp.py` passes steps 1 to 3 (STANDBY, then
   SAFE, then NOMINAL by TC(8,1)), then gets no actuator frame in steps 4 and
   5. A ping sent after that gets no reply. Seen on 2026-11-16 and again on
-  2026-11-22.
+  2026-11-22 ([#147](https://github.com/lipofefeyt/openobsw/issues/147)).
 - **MSP430 does not speak wire protocol v4.** It reads and writes
   length-prefixed packets with no type bytes and no end-of-tick marker; see
   [MSP430 framing](icd.md#msp430-framing). Its evidence is one bench run on a
@@ -31,10 +31,10 @@ target has run on flight hardware.
 - **Frames that are too long desynchronise the stream** on the targets:
   a body over 512 B on STM32H7, over 256 B on ZynqMP. The target does not read
   the body, so it parses the body bytes as new frames. The host sim stops on a
-  body over 1024 B.
+  body over 1024 B ([#152](https://github.com/lipofefeyt/openobsw/issues/152)).
 - **ZynqMP cannot send a TM packet over 128 B.** Such a packet would stay at
   the head of the TM store and block all later TM. None of the services
-  ZynqMP routes produces one.
+  ZynqMP routes produces one ([#152](https://github.com/lipofefeyt/openobsw/issues/152)).
 - **The host sim cannot raise `watchdog_expiry` (0x0010).** It kicks the
   watchdog every tick and never counts it down, so a campaign that waits for
   this event will not see it.
@@ -62,14 +62,16 @@ target has run on flight hardware.
   `0xFF` gets that TM with the next tick. See
   [Behaviour per target](icd.md#behaviour-per-target).
 - **A telecommand is dropped without a report when the TC queue is full.** The
-  queue holds 4.
+  queue holds 4 ([#152](https://github.com/lipofefeyt/openobsw/issues/152)).
 - **The TM store has no lock between its writers.** The Mode Manager
   (priority 2) writes its mode events outside a critical section, and FDIR
   (priority 3) writes housekeeping without one, so a priority-3 write can
-  interrupt a priority-2 write in the middle. No test has provoked it.
+  interrupt a priority-2 write in the middle. No test has provoked it
+  ([#150](https://github.com/lipofefeyt/openobsw/issues/150)).
 - **S5 message counters are kept per context.** The PUS task (for S12
   events), FDIR and the Mode Manager each have their own S5 context, so
-  TM(5,x) from different tasks can repeat a message count on the same APID.
+  TM(5,x) from different tasks can repeat a message count on the same APID
+  ([#151](https://github.com/lipofefeyt/openobsw/issues/151)).
 - **The S12-to-SAFE locking (#128) is argued, not tested.** The races it closes
   have not been provoked by a test, and it has run in Renode only, not on a
   board.
@@ -90,9 +92,9 @@ target has run on flight hardware.
 ## SRDB and tools
 
 - **CSV export drops the descriptions of event auxiliary data.** An export and
-  re-import loses them, short of OBSW-SRS-224 ("without loss").
+  re-import loses them, short of OBSW-SRS-224 ("without loss") ([#149](https://github.com/lipofefeyt/openobsw/issues/149)).
 - **`pytest test/system srdb/tests` in one run fails at collection**, on a
-  conftest name clash. Run the two directories separately.
+  conftest name clash. Run the two directories separately ([#153](https://github.com/lipofefeyt/openobsw/issues/153)).
 
 ## Testing and evidence
 
@@ -103,7 +105,7 @@ target has run on flight hardware.
   development machine. Tests that wait a fixed wall-clock time undercount;
   `renode/test_hk_interval_stm32h7.py` measures from TM time instead.
 - **`renode/test_ping_zynqmp.py` cannot fail.** It prints the result and
-  always exits 0, also when nothing answers.
+  always exits 0, also when nothing answers ([#148](https://github.com/lipofefeyt/openobsw/issues/148)).
 - **OpenSVF's "Renode ZynqMP system test" CI job can pass without testing
   anything.** It skips its steps when it does not find the openobsw ZynqMP
   binary artifact ([#144](https://github.com/lipofefeyt/openobsw/issues/144)).
