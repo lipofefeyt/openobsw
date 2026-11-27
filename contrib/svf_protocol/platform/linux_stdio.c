@@ -1,6 +1,6 @@
 /**
  * @file linux_stdio.c
- * @brief SVF I/O implementation for Linux host (stdin/stdout).
+ * @brief SVF I/O implementation for Linux host (stdin/stdout, banner on stderr).
  *
  * Use this when building obsw_sim on x86_64 or aarch64 Linux.
  * SVF connects via subprocess stdin/stdout pipes.
@@ -24,4 +24,11 @@ int svf_io_write(const uint8_t *buf, uint16_t len)
 void svf_io_flush(void)
 {
     fflush(stdout);
+}
+
+void svf_io_debug(const char *s)
+{
+    /* stderr, so the banner never mixes with frames on stdout */
+    fputs(s, stderr);
+    fflush(stderr);
 }

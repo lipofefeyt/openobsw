@@ -4,6 +4,16 @@ All notable changes to openobsw. Versions follow the release trains in the
 README roadmap. Releases before v0.16 are described on the
 [GitHub releases page](https://github.com/lipofefeyt/openobsw/releases).
 
+## [Unreleased]
+
+### Fixed
+
+- **`contrib/svf_protocol`: `svf_init()` prints the start-up banner.** It
+  had a TODO body, so OpenSVF logged "no obsw_sim start-up banner" and did
+  not check the wire protocol version. The banner goes through a new
+  platform hook, `svf_io_debug()`: stderr in `platform/linux_stdio.c`, the
+  UART in `platform/zynqmp_uart.c`.
+
 ## [v0.20] - Documentation
 
 The documentation release: a versioned site on Read the Docs,

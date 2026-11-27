@@ -39,21 +39,30 @@ static void write_frame(uint8_t type, const uint8_t *data, uint16_t len)
 
 void svf_init(const char *srdb_version)
 {
-    /* Platform-specific: route to stderr or UART debug output.
-     * For Linux host: use fprintf(stderr, ...).
-     * For bare-metal: use your UART debug port.
-     * The SVF OBCEmulatorAdapter reads these lines from stderr. */
-    const char *banner     = "[OBSW] Host sim started (wire protocol v4).\n";
-    const char *ver_prefix = "[OBSW] SRDB version: ";
-    const char *newline    = "\n";
+    /* OpenSVF reads these lines before the first frame and checks the
+     * wire protocol version on the "Host sim started" line. */
+    char ver[4];
+    uint8_t n = 0;
+    unsigned v = SVF_PROTOCOL_VERSION;
 
-    /* Write to stderr (host) or debug UART (bare-metal).
-     * Adapt svf_io_write_debug() for your platform. */
-    (void)banner;
-    (void)ver_prefix;
-    (void)srdb_version;
-    (void)newline;
-    /* TODO: implement svf_debug_print() for your platform */
+    do {
+        ver[n++] = (char)('0' + (v % 10U));
+        v /= 10U;
+    } while (v != 0U && n < 3U);
+    /* Digits were written least significant first */
+    for (uint8_t i = 0; i < n / 2U; i++) {
+        char t = ver[i];
+        ver[i] = ver[n - 1U - i];
+        ver[n - 1U - i] = t;
+    }
+    ver[n] = '\0';
+
+    svf_io_debug("[OBSW] Host sim started (wire protocol v");
+    svf_io_debug(ver);
+    svf_io_debug(").\n");
+    svf_io_debug("[OBSW] SRDB version: ");
+    svf_io_debug(srdb_version != NULL ? srdb_version : "unknown");
+    svf_io_debug("\n");
 }
 
 uint8_t svf_read_frame(uint8_t *buf, uint16_t bufsize, uint16_t *out_len)

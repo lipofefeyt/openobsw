@@ -50,3 +50,17 @@ void svf_io_flush(void)
 {
     /* Cadence UART has no explicit flush — TX FIFO drains automatically */
 }
+
+void svf_io_debug(const char *s)
+{
+    /* One UART carries text and frames; OpenSVF skips the text before the
+     * first frame, so the banner must be written before the main loop. */
+    while (*s != '\0') {
+        if (*s == '\n') {
+            const uint8_t cr = '\r';
+            (void)svf_io_write(&cr, 1);
+        }
+        (void)svf_io_write((const uint8_t *)s, 1);
+        s++;
+    }
+}
