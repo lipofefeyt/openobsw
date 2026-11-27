@@ -82,6 +82,10 @@ protocol for an OBSW other than OpenOBSW: `obsw_svf_protocol.h` and `.c`,
 plus platform glue for Linux stdio and the ZynqMP UART. `tools/gen_docs.py`
 checks in CI that its frame layout matches `sim/sensor_inject.h`.
 
+A port implements four functions: `svf_io_read()`, `svf_io_write()`,
+`svf_io_flush()`, and `svf_io_debug()`, which carries the start-up banner
+(stderr on a host process, the same UART on a target).
+
 A main loop has this shape:
 
 ```c

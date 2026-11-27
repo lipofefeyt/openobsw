@@ -17,8 +17,9 @@
  *     [0xFF]                                  End of tick
  *
  * Porting:
- *   1. Implement svf_io_read() and svf_io_write() for your platform
- *      (stdin/stdout for host sim, UART for Renode/hardware)
+ *   1. Implement svf_io_read(), svf_io_write(), svf_io_flush() and
+ *      svf_io_debug() for your platform (stdin/stdout/stderr for host
+ *      sim, UART for Renode/hardware); see platform/
  *   2. Call svf_init() at startup
  *   3. In your main loop: call svf_read_frame() and svf_write_*()
  *
@@ -122,13 +123,26 @@ extern int svf_io_write(const uint8_t *buf, uint16_t len);
  */
 extern void svf_io_flush(void);
 
+/**
+ * Write a NUL-terminated text line fragment to the debug channel that
+ * OpenSVF reads the start-up banner from: stderr on a host process, the
+ * same UART on a target (OpenSVF skips text before the first frame).
+ * Used by svf_init() only.
+ */
+extern void svf_io_debug(const char *s);
+
 /* ------------------------------------------------------------------ */
 /* Protocol API                                                        */
 /* ------------------------------------------------------------------ */
 
 /**
- * Print startup banner to stderr/UART.
- * Call once at OBSW startup before the main loop.
+ * Print the start-up banner through svf_io_debug():
+ *
+ *   [OBSW] Host sim started (wire protocol v4).
+ *   [OBSW] SRDB version: <srdb_version>
+ *
+ * OpenSVF checks the protocol version on the first line and warns when
+ * no banner arrives. Call once at OBSW startup, before the main loop.
  *
  * @param srdb_version  Your SRDB version string (e.g. "0.1.0")
  */
